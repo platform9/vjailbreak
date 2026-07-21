@@ -1,9 +1,9 @@
 import { useState, useCallback, useMemo } from 'react'
 import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
-import { fetchPodDebugLogs } from 'src/api/kubernetes/pods'
-import { fetchMigrationResourceBundle } from 'src/api/kubernetes/migrationResourceBundle'
+import { downloadDebugBundle } from 'src/api/migrations/debugBundle'
 import { Phase } from '../api/migrations'
 import BaseLogsDrawer from './BaseLogsDrawer'
+import AIAnalysisTab from './AIAnalysisTab'
 
 const STREAM_END_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed]
 
@@ -14,6 +14,7 @@ interface LogsDrawerProps {
   namespace: string
   migrationName?: string
   migrationPhase?: Phase
+  vmName?: string
 }
 
 export default function PodLogsDrawer({
@@ -22,7 +23,8 @@ export default function PodLogsDrawer({
   podName,
   namespace,
   migrationName,
-  migrationPhase
+  migrationPhase,
+  vmName
 }: LogsDrawerProps) {
   const [isPaused, setIsPaused] = useState(false)
   const [sessionKey, setSessionKey] = useState(0)
@@ -49,6 +51,12 @@ export default function PodLogsDrawer({
   }, [onClose])
 
   const vmDisplayName = useMemo(() => {
+    // Prefer the migration's spec.vmName — the same name shown in the Migration
+    // Details drawer header — so both views stay consistent. Fall back to deriving
+    // a name from the migration/pod object names only when vmName is unavailable.
+    const trimmedVmName = vmName?.trim()
+    if (trimmedVmName) return trimmedVmName
+
     const fromMigration = (() => {
       if (!migrationName) return null
       const withoutPrefix = migrationName.replace(/^migration-/, '')
@@ -63,73 +71,19 @@ export default function PodLogsDrawer({
     if (parts.length >= 4) return parts.slice(0, -3).join('-') || withoutPrefix
     if (parts.length >= 3) return parts.slice(0, -2).join('-') || withoutPrefix
     return withoutPrefix
-  }, [migrationName, podName])
+  }, [vmName, migrationName, podName])
 
-  const handleDownload = useCallback(
-    async (filteredLogs: string[]) => {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const fileName = `${vmDisplayName || podName || 'logs'}-pod-${timestamp}.txt`
+  // The backend assembles the entire bundle (pod logs + related resource
+  // YAMLs + /var/log/pf9 debug logs); the drawer's filtered view does not
+  // affect the downloaded file.
+  const handleDownload = useCallback(async () => {
+    await downloadDebugBundle(migrationName, namespace, podName)
+  }, [migrationName, namespace, podName])
 
-      let combinedLogs = '='.repeat(80) + '\n'
-      combinedLogs += 'STDOUT/STDERR LOGS (pod)\n'
-      combinedLogs += '='.repeat(80) + '\n\n'
-      combinedLogs += filteredLogs.join('\n')
-
-      if (namespace && migrationName) {
-        try {
-          const resourceBundle = await fetchMigrationResourceBundle({
-            namespace,
-            migrationName,
-            podName
-          })
-
-          if (resourceBundle && resourceBundle.trim()) {
-            combinedLogs += '\n\n'
-            combinedLogs += '='.repeat(80) + '\n'
-            combinedLogs += 'RELATED KUBERNETES RESOURCES\n'
-            combinedLogs += '='.repeat(80) + '\n\n'
-            combinedLogs += resourceBundle
-          }
-        } catch {
-          combinedLogs += '\n\n'
-          combinedLogs += '='.repeat(80) + '\n'
-          combinedLogs += 'RELATED KUBERNETES RESOURCES\n'
-          combinedLogs += '='.repeat(80) + '\n\n'
-          combinedLogs += '[Failed to fetch related Kubernetes resources]\n'
-        }
-      }
-
-      if (namespace && migrationName) {
-        try {
-          const debugLogs = await fetchPodDebugLogs(namespace, podName, migrationName)
-          if (debugLogs && debugLogs.trim()) {
-            combinedLogs += '\n\n'
-            combinedLogs += '='.repeat(80) + '\n'
-            combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
-            combinedLogs += '='.repeat(80) + '\n\n'
-            combinedLogs += debugLogs
-          }
-        } catch {
-          combinedLogs += '\n\n'
-          combinedLogs += '='.repeat(80) + '\n'
-          combinedLogs += 'DEBUG LOGS FROM /var/log/pf9\n'
-          combinedLogs += '='.repeat(80) + '\n\n'
-          combinedLogs += '[Failed to fetch debug logs from pod filesystem]\n'
-        }
-      }
-
-      const blob = new Blob([combinedLogs], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-    },
-    [vmDisplayName, podName, namespace, migrationName]
-  )
+  const aiTabContent =
+    migrationPhase === Phase.Failed && migrationName && namespace ? (
+      <AIAnalysisTab migrationName={migrationName} namespace={namespace} />
+    ) : undefined
 
   return (
     <BaseLogsDrawer
@@ -145,6 +99,7 @@ export default function PodLogsDrawer({
       onPausedChange={setIsPaused}
       onReconnect={handleReconnect}
       onDownload={handleDownload}
+      aiTabContent={aiTabContent}
     />
   )
 }

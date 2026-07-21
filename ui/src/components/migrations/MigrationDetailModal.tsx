@@ -150,7 +150,6 @@ export default function MigrationDetailModal({
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
   const templateSpec = (data?.migrationTemplate?.spec as any) || {}
-  const useFlavorless = templateSpec?.useFlavorless === true
   const useGPUFlavor = templateSpec?.useGPUFlavor === true
   const storageCopyMethod = (templateSpec?.storageCopyMethod as string) || 'normal'
   const isStorageAcceleratedCopy = storageCopyMethod === 'StorageAcceleratedCopy'
@@ -222,14 +221,15 @@ export default function MigrationDetailModal({
     (vmMeta?.annotations?.['vjailbreak.k8s.pf9.io/datacenter'] as string) ||
     (templateSpec?.source?.datacenter as string) ||
     'N/A'
-  const sourceCluster =
-    (vmSpec?.clusterName as string) ||
-    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
-    'N/A'
   const esxiHost =
     (vmSpec?.esxiName as string) ||
     (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/esxi-name'] as string) ||
     'N/A'
+  const rawSourceCluster =
+    (vmSpec?.clusterName as string) ||
+    (vmMeta?.labels?.['vjailbreak.k8s.pf9.io/vmware-cluster'] as string) ||
+    ''
+  const sourceCluster = rawSourceCluster && rawSourceCluster !== esxiHost ? rawSourceCluster : 'No cluster'
 
   const guestOS = (vmSpec?.osFamily as string) || 'N/A'
   const cpu = typeof vmSpec?.cpu === 'number' ? String(vmSpec.cpu) : 'N/A'
@@ -550,8 +550,7 @@ export default function MigrationDetailModal({
       fallbackToDhcp,
       networkPersistence,
       removeVMwareTools,
-      useGPUFlavor: enabledOrNA(useGPUFlavor),
-      useFlavorless: enabledOrNA(useFlavorless)
+      useGPUFlavor: enabledOrNA(useGPUFlavor)
     }),
     [
       cutoverPolicy,
@@ -564,7 +563,6 @@ export default function MigrationDetailModal({
       scheduleDataCopy,
       securityGroups,
       serverGroup,
-      useFlavorless,
       useGPUFlavor
     ]
   )

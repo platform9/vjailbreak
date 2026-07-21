@@ -11,7 +11,6 @@ export const createMigrationTemplateJson = (params) => {
     vmwareRef,
     openstackRef,
     targetPCDClusterName,
-    useFlavorless = false,
     useGPUFlavor = false
   } = params || {}
   return {
@@ -35,7 +34,6 @@ export const createMigrationTemplateJson = (params) => {
       ...(targetPCDClusterName && {
         targetPCDClusterName: targetPCDClusterName
       }),
-      useFlavorless: useFlavorless,
       useGPUFlavor: useGPUFlavor
     }
   }

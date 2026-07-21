@@ -496,6 +496,22 @@ export const MOCK_IP_VALIDATION_CONFLICT = {
   conflicts: ['192.168.1.101'],
 }
 
+// ─── Subnet compatibility responses (vpwned check_network_subnet_compatibility) ─
+
+export const MOCK_SUBNET_COMPATIBILITY_INCOMPATIBLE = {
+  results: [
+    { ip: '192.168.1.101', is_compatible: false, reason: 'IP not within subnet CIDR' },
+  ],
+  subnet_cidrs: ['10.20.0.0/24'],
+  all_compatible: false,
+}
+
+export const MOCK_SUBNET_COMPATIBILITY_COMPATIBLE = {
+  results: [{ ip: '192.168.1.101', is_compatible: true, reason: '' }],
+  subnet_cidrs: ['192.168.1.0/24'],
+  all_compatible: true,
+}
+
 // ─── VMware clusters (for cluster selection dropdown) ─────────────────────────
 
 export const MOCK_VMWARE_CLUSTER_1 = {
@@ -644,6 +660,8 @@ export const MOCK_VMWARE_MACHINE_1 = {
       vmState: 'poweredOn', ipAddress: '192.168.1.101', osFamily: 'Linux',
       networks: ['VM Network'], datastores: ['datastore1'], disks: [],
       networkInterfaces: [{ mac: '00:50:56:aa:01:01', network: 'VM Network', ipAddress: ['192.168.1.101'] }],
+      tags: { env: 'production' },
+      customAttributes: { Owner: 'alice@corp.com' },
     },
   },
   status: { migrated: false, powerState: 'running' },
@@ -818,4 +836,315 @@ export const MOCK_ROLLING_MIGRATION_PLAN_CREATED = {
     ],
   },
   status: { migrationStatus: 'Pending', migrationMessage: '' },
+}
+
+// ─── Edit & Retry fixtures ─────────────────────────────────────────────────────
+// Resource names follow the controller's conventions: the Migration is named
+// "migration-<vm-k8s-name>" and the VMwareMachine is "<vm-k8s-name>".
+
+export const MOCK_RETRY_VM_K8S_NAME = 'vcenter-cred-1-test-vm-retry'
+export const MOCK_RETRY_MIGRATION_NAME = `migration-${MOCK_RETRY_VM_K8S_NAME}`
+export const MOCK_RETRY_PLAN_NAME = 'retry-plan-1'
+export const MOCK_RETRY_TEMPLATE_NAME = 'retry-template-1'
+export const MOCK_RETRY_VM_KEY = 'test-vm-retry-2001'
+
+export const MOCK_MIGRATION_FAILED_RETRYABLE = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: {
+    ...baseMeta(MOCK_RETRY_MIGRATION_NAME),
+    labels: { migrationplan: MOCK_RETRY_PLAN_NAME },
+    annotations: { 'vjailbreak.k8s.pf9.io/original-vm-name': MOCK_RETRY_VM_KEY },
+  },
+  spec: {
+    migrationPlan: MOCK_RETRY_PLAN_NAME,
+    podRef: 'v2v-helper-retry-1',
+    vmName: 'test-vm-retry',
+    migrationType: 'cold',
+  },
+  status: {
+    phase: 'Failed',
+    retryable: true,
+    conditions: [
+      {
+        lastTransitionTime: '2026-06-10T10:30:00Z',
+        message: 'No suitable flavor found',
+        reason: 'Migration',
+        status: 'False',
+        type: 'Failed',
+      },
+    ],
+  },
+}
+
+export const MOCK_RETRY_MIGRATION_PLAN = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: baseMeta(MOCK_RETRY_PLAN_NAME),
+  spec: {
+    migrationStrategy: { type: 'cold', adminInitiatedCutOver: false },
+    migrationTemplate: MOCK_RETRY_TEMPLATE_NAME,
+    retry: false,
+    virtualMachines: [[MOCK_RETRY_VM_KEY]],
+    securityGroups: ['default-sg'],
+    fallbackToDHCP: false,
+  },
+  status: { migrationStatus: 'Failed', migrationMessage: 'Migration failed for test-vm-retry' },
+}
+
+export const MOCK_RETRY_MIGRATION_TEMPLATE = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationTemplate',
+  metadata: { ...baseMeta(MOCK_RETRY_TEMPLATE_NAME), labels: { refresh: 'false' } },
+  spec: {
+    source: { vmwareRef: 'vcenter-cred-1', datacenter: 'DC1' },
+    destination: { openstackRef: 'pcd-cred-1' },
+    networkMapping: 'retry-netmap-1',
+    storageMapping: 'retry-stormap-1',
+    targetPCDClusterName: 'pcd-cluster-1',
+    storageCopyMethod: 'normal',
+  },
+  status: {
+    openstack: {
+      networks: ['pcd-network-1', 'pcd-network-2', 'external-network'],
+      volumeTypes: ['standard', 'high-performance', 'ceph-ssd'],
+    },
+    vmware: [],
+  },
+}
+
+export const MOCK_RETRY_NETWORK_MAPPING = {
+  apiVersion: API_VERSION,
+  kind: 'NetworkMapping',
+  metadata: baseMeta('retry-netmap-1'),
+  spec: { networks: [{ source: 'VM Network', target: 'pcd-network-1' }] },
+  status: { networkmappingValidationStatus: 'Succeeded' },
+}
+
+export const MOCK_RETRY_STORAGE_MAPPING = {
+  apiVersion: API_VERSION,
+  kind: 'StorageMapping',
+  metadata: baseMeta('retry-stormap-1'),
+  spec: { storages: [{ source: 'datastore1', target: 'standard' }] },
+  status: { storagemappingValidationStatus: 'Succeeded' },
+}
+
+export const MOCK_RETRY_VMWARE_MACHINE = {
+  apiVersion: API_VERSION,
+  kind: 'VMwareMachine',
+  metadata: {
+    name: MOCK_RETRY_VM_K8S_NAME,
+    namespace: NS,
+    creationTimestamp: '2026-06-10T10:00:00Z',
+    labels: {
+      'vjailbreak.k8s.pf9.io/vmwarecreds': 'vcenter-cred-1',
+    },
+  },
+  spec: {
+    targetFlavorId: '',
+    vms: {
+      name: 'test-vm-retry',
+      vmid: 'vm-2001',
+      cpu: 2,
+      memory: 4096,
+      vmState: 'poweredOn',
+      ipAddress: '192.168.1.150',
+      osFamily: 'Linux',
+      clusterName: 'cluster-1',
+      networks: ['VM Network'],
+      datastores: ['datastore1'],
+      disks: [],
+      networkInterfaces: [
+        { mac: '00:50:56:aa:02:01', network: 'VM Network', ipAddress: ['192.168.1.150'] },
+      ],
+    },
+  },
+  status: { migrated: false, powerState: 'running' },
+}
+
+// OpenStack creds with flavors so the retry flavor dropdown has options.
+export const MOCK_OPENSTACK_CRED_WITH_FLAVORS = {
+  ...MOCK_OPENSTACK_CRED_1,
+  spec: {
+    ...MOCK_OPENSTACK_CRED_1.spec,
+    flavors: [
+      { id: 'flavor-small', name: 'm1.small', vcpus: 2, ram: 4096, disk: 20 },
+      { id: 'flavor-large', name: 'm1.large', vcpus: 8, ram: 16384, disk: 80 },
+    ],
+  },
+}
+
+export const MOCK_MIGRATIONS_LIST_WITH_RETRYABLE = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationList',
+  metadata: listMeta(),
+  items: [MOCK_MIGRATION_FAILED_RETRYABLE],
+}
+
+export const MOCK_RETRY_NETWORK_MAPPING_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'NetworkMapping',
+  metadata: baseMeta('new-netmap-uuid-1'),
+  spec: { networks: [{ source: 'VM Network', target: 'pcd-network-2' }] },
+}
+
+export const MOCK_RETRY_STORAGE_MAPPING_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'StorageMapping',
+  metadata: baseMeta('new-stormap-uuid-1'),
+  spec: { storages: [{ source: 'datastore1', target: 'standard' }] },
+}
+
+// Plan variant that carries existing per-VM IP override (preserveIP=false, UserAssignedIP).
+// Used by RET-005 to verify that existing overrides are round-tripped through the retry form.
+export const MOCK_RETRY_MIGRATION_PLAN_WITH_IP_OVERRIDE = {
+  ...MOCK_RETRY_MIGRATION_PLAN,
+  spec: {
+    ...MOCK_RETRY_MIGRATION_PLAN.spec,
+    networkOverridesPerVM: {
+      [MOCK_RETRY_VM_KEY]: [
+        {
+          interfaceIndex: 0,
+          preserveIP: false,
+          preserveMAC: true,
+          UserAssignedIP: '10.0.0.50',
+        },
+      ],
+    },
+  },
+}
+
+// Plan variant with two VMs (same batch). Used by RET-006 to verify the multi-VM warning
+// banner appears when the plan's total VM count > 1.
+export const MOCK_RETRY_MIGRATION_PLAN_MULTIVM = {
+  ...MOCK_RETRY_MIGRATION_PLAN,
+  spec: {
+    ...MOCK_RETRY_MIGRATION_PLAN.spec,
+    virtualMachines: [[MOCK_RETRY_VM_KEY, 'other-vm-9999']],
+  },
+}
+
+// VMwareMachine with the datacenter annotation — mirrors how the controller stamps it.
+// Used to verify the datacenter annotation path in useRetryPrefill.
+export const MOCK_RETRY_VMWARE_MACHINE_WITH_DC_ANNOTATION = {
+  ...MOCK_RETRY_VMWARE_MACHINE,
+  metadata: {
+    ...MOCK_RETRY_VMWARE_MACHINE.metadata,
+    annotations: {
+      'vjailbreak.k8s.pf9.io/datacenter': 'DC1',
+    },
+  },
+}
+
+// ─── New-plan fixtures (RET-003, RET-007) ─────────────────────────────────────
+// Retry now creates new resources with crypto.randomUUID() names (no -r suffix).
+// These fixtures use stable UUID-shaped names so tests can match API responses.
+
+export const MOCK_RETRY_CLONE_TEMPLATE_NAME = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+export const MOCK_RETRY_CLONE_PLAN_NAME = 'ffffffff-0000-1111-2222-333333333333'
+
+export const MOCK_RETRY_CLONE_TEMPLATE_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationTemplate',
+  metadata: { ...baseMeta(MOCK_RETRY_CLONE_TEMPLATE_NAME), labels: { refresh: 'false' } },
+  spec: {
+    source: { vmwareRef: 'vcenter-cred-1', datacenter: 'DC1' },
+    destination: { openstackRef: 'pcd-cred-1' },
+    networkMapping: 'new-netmap-uuid-1',
+    storageMapping: 'new-stormap-uuid-1',
+    targetPCDClusterName: 'pcd-cluster-1',
+    storageCopyMethod: 'normal',
+  },
+  status: {
+    openstack: { networks: [], volumeTypes: [] },
+    vmware: [],
+  },
+}
+
+export const MOCK_RETRY_CLONE_PLAN_CREATED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationPlan',
+  metadata: baseMeta(MOCK_RETRY_CLONE_PLAN_NAME),
+  spec: {
+    migrationStrategy: { type: 'cold', adminInitiatedCutOver: false },
+    migrationTemplate: MOCK_RETRY_CLONE_TEMPLATE_NAME,
+    retry: false,
+    virtualMachines: [[MOCK_RETRY_VM_KEY]],
+  },
+  status: { migrationStatus: 'Pending', migrationMessage: '' },
+}
+
+// ─── Bulk-retry fixtures (RET-008) ────────────────────────────────────────────
+
+export const MOCK_RETRY_MIGRATION_NAME_2 = 'migration-vcenter-cred-1-test-vm-retry-2'
+
+export const MOCK_MIGRATION_FAILED_RETRYABLE_2 = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: {
+    ...baseMeta(MOCK_RETRY_MIGRATION_NAME_2),
+    labels: { migrationplan: 'retry-plan-2' },
+    annotations: { 'vjailbreak.k8s.pf9.io/original-vm-name': 'test-vm-retry-2-9002' },
+  },
+  spec: {
+    migrationPlan: 'retry-plan-2',
+    podRef: 'v2v-helper-retry-2',
+    vmName: 'test-vm-retry-2',
+    migrationType: 'cold',
+  },
+  status: {
+    phase: 'Failed',
+    retryable: true,
+    conditions: [],
+  },
+}
+
+export const MOCK_MIGRATIONS_LIST_MULTI_FAILED = {
+  apiVersion: API_VERSION,
+  kind: 'MigrationList',
+  metadata: listMeta(),
+  items: [MOCK_MIGRATION_FAILED_RETRYABLE, MOCK_MIGRATION_FAILED_RETRYABLE_2],
+}
+
+// ─── vjailbreak-settings ConfigMap fixtures (MIG-039/040/041) ────────────────
+
+const baseSettingsData = {
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: '20',
+  PERIODIC_SYNC_INTERVAL: '1h',
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: '20',
+  VM_ACTIVE_WAIT_RETRY_LIMIT: '15',
+  DEFAULT_MIGRATION_METHOD: 'cold',
+  VCENTER_SCAN_CONCURRENCY_LIMIT: '10',
+  CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: 'false',
+  CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: 'false',
+  POPULATE_VMWARE_MACHINE_FLAVORS: 'true',
+  VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: '10',
+  VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: '15',
+  VCENTER_LOGIN_RETRY_LIMIT: '5',
+  OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: '60',
+  VMWARE_CREDS_REQUEUE_AFTER_MINUTES: '60',
+  VALIDATE_RDM_OWNER_VMS: 'true',
+  DEPLOYMENT_NAME: 'vJailbreak',
+  TIMEZONE: '',
+  PERIODIC_SYNC_MAX_RETRIES: '3',
+  AUTO_FSTAB_UPDATE: 'true',
+  HTTP_TIMEOUT_SECONDS: '30',
+}
+
+export const MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON = {
+  apiVersion: 'v1',
+  kind: 'ConfigMap',
+  metadata: {
+    name: 'vjailbreak-settings',
+    namespace: NS,
+    uid: 'uid-vjailbreak-settings',
+    resourceVersion: '1000',
+    creationTimestamp: '2026-05-20T10:00:00Z',
+  },
+  data: { ...baseSettingsData, DEFAULT_NETWORK_PERSISTENCE: 'true' },
+}
+
+export const MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF = {
+  ...MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_ON,
+  data: { ...baseSettingsData, DEFAULT_NETWORK_PERSISTENCE: 'false' },
 }

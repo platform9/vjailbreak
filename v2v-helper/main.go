@@ -161,7 +161,6 @@ func main() {
 		SecurityGroups:         utils.RemoveEmptyStrings(strings.Split(migrationparams.SecurityGroups, ",")),
 		ServerGroup:            migrationparams.ServerGroup,
 		RDMDisks:               utils.RemoveEmptyStrings(strings.Split(migrationparams.RDMDisks, ",")),
-		UseFlavorless:          os.Getenv("USE_FLAVORLESS") == "true",
 		TenantName:             openstackProjectName,
 		Reporter:               eventReporter,
 		FallbackToDHCP:         migrationparams.FallbackToDHCP,
@@ -179,6 +178,7 @@ func main() {
 		NetAppFlexVol:          migrationparams.NetAppFlexVol,
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
+		TargetMetadata:         utils.BuildTargetMetadata(migrationparams.SourceTagsMetadata, migrationparams.CustomMetadata),
 	}
 
 	if migrationobj.ServerGroup != "" {
@@ -218,24 +218,24 @@ func main() {
 func logMigrationParams(migrationparams *utils.MigrationParams) {
 	utils.PrintLog(fmt.Sprintf(
 		`Received migration parameters:
-SOURCE_VM_NAME=%s
-OS_FAMILY=%s
-TYPE=%s
-TARGET_FLAVOR_ID=%s
-TARGET_AVAILABILITY_ZONE=%s
-DISCONNECT_SOURCE_NETWORK=%s
-SECURITY_GROUPS=%s
-SERVER_GROUP=%s
-RDM_DISKS=%s
-FALLBACK_TO_DHCP=%s
-PERIODIC_SYNC_INTERVAL=%s
-PERIODIC_SYNC_ENABLED=%s
-NETWORK_PERSISTENCE=%s
-REMOVE_VMWARE_TOOLS=%s
-STORAGE_COPY_METHOD=%s
-VENDOR_TYPE=%s
-ARRAY_CREDS_MAPPING=%s
-ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%s`,
+SOURCE_VM_NAME=%v
+OS_FAMILY=%v
+TYPE=%v
+TARGET_FLAVOR_ID=%v
+TARGET_AVAILABILITY_ZONE=%v
+DISCONNECT_SOURCE_NETWORK=%v
+SECURITY_GROUPS=%v
+SERVER_GROUP=%v
+RDM_DISKS=%v
+FALLBACK_TO_DHCP=%v
+PERIODIC_SYNC_INTERVAL=%v
+PERIODIC_SYNC_ENABLED=%v
+NETWORK_PERSISTENCE=%v
+REMOVE_VMWARE_TOOLS=%v
+STORAGE_COPY_METHOD=%v
+VENDOR_TYPE=%v
+ARRAY_CREDS_MAPPING=%v
+ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%v`,
 		migrationparams.SourceVMName,
 		migrationparams.OpenstackOSType,
 		migrationparams.MigrationType,

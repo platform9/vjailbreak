@@ -15,7 +15,10 @@ export type SettingsForm = {
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: number
   VALIDATE_RDM_OWNER_VMS: boolean
   AUTO_FSTAB_UPDATE: boolean
+  DEFAULT_NETWORK_PERSISTENCE: boolean
   DEPLOYMENT_NAME: string
+  TIMEZONE: string
+  NTP_SERVERS: string
   HTTP_TIMEOUT_SECONDS: number
   // JSON string: array of {ip, hostnames[]} entries for agent node /etc/hosts injection
   AGENT_HOST_ENTRIES: string
@@ -179,7 +182,10 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     VMWARE_CREDS_REQUEUE_AFTER_MINUTES: String(f.VMWARE_CREDS_REQUEUE_AFTER_MINUTES),
     VALIDATE_RDM_OWNER_VMS: String(f.VALIDATE_RDM_OWNER_VMS),
     AUTO_FSTAB_UPDATE: String(f.AUTO_FSTAB_UPDATE),
+    DEFAULT_NETWORK_PERSISTENCE: String(f.DEFAULT_NETWORK_PERSISTENCE),
     DEPLOYMENT_NAME: f.DEPLOYMENT_NAME,
+    TIMEZONE: f.TIMEZONE,
+    NTP_SERVERS: f.NTP_SERVERS,
     HTTP_TIMEOUT_SECONDS: String(f.HTTP_TIMEOUT_SECONDS),
     AGENT_HOST_ENTRIES: f.AGENT_HOST_ENTRIES ?? ''
   })
@@ -247,8 +253,15 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
       defaults.VALIDATE_RDM_OWNER_VMS
     ),
     AUTO_FSTAB_UPDATE: parseBool(data?.AUTO_FSTAB_UPDATE, defaults.AUTO_FSTAB_UPDATE),
+    DEFAULT_NETWORK_PERSISTENCE: parseBool(
+      data?.DEFAULT_NETWORK_PERSISTENCE,
+      defaults.DEFAULT_NETWORK_PERSISTENCE
+    ),
     DEPLOYMENT_NAME:
       typeof data?.DEPLOYMENT_NAME === 'string' ? data.DEPLOYMENT_NAME : defaults.DEPLOYMENT_NAME,
+    TIMEZONE: typeof data?.TIMEZONE === 'string' ? data.TIMEZONE : defaults.TIMEZONE,
+    NTP_SERVERS:
+      typeof data?.NTP_SERVERS === 'string' ? data.NTP_SERVERS : defaults.NTP_SERVERS,
     HTTP_TIMEOUT_SECONDS: parseNum(data?.HTTP_TIMEOUT_SECONDS, defaults.HTTP_TIMEOUT_SECONDS),
     AGENT_HOST_ENTRIES:
       typeof data?.AGENT_HOST_ENTRIES === 'string' ? data.AGENT_HOST_ENTRIES : '',

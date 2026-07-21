@@ -4,9 +4,9 @@
 **API path**: `src/api/proxyvms/`  
 **Query hook**: `src/hooks/api/useProxyVMsQuery.ts`  
 **Generated**: 2026-05-27  
-**Last updated**: 2026-05-29  
-**GitHub Issue**: [#1971](https://github.com/platform9/vjailbreak/issues/1971)  
-**Related feature**: See `docs/specs/migration/migration-feature.md` — HotAdd storage copy method extension
+**Last updated**: 2026-07-07  
+**GitHub Issue**: [#1971](https://github.com/platform9/vjailbreak/issues/1971) (base feature), [#2067](https://github.com/platform9/vjailbreak/issues/2067) (dup-registration guard), [#2088](https://github.com/platform9/vjailbreak/issues/2088) (Windows VM block)  
+**Related feature**: See `docs/specs/migration/migration-feature.md` — HotAdd storage copy method extension (UI label: "vJailbreak Accelerated Copy")
 
 ---
 
@@ -20,10 +20,12 @@ ProxyVM is a Kubernetes CRD that represents a vCenter VM pre-configured to act a
 
 ### Key User Journeys
 
-1. **Add Proxy VM** → select VMware credentials → pick existing vCenter VM from searchable dropdown → paste SSH private key (or upload key file) → submit → controller verifies prerequisites → VM becomes `Ready`
-2. **Monitor Proxy VM status** → page polls every 5s while any VM is `Pending` or `Verifying`; status filter + search available in table toolbar
-3. **Delete Proxy VM** → confirmation dialog → delete CRD + SSH key Secret
-4. **Use in migration** → Step 3 of migration form: select `HotAdd via Proxy VM` (Beta) → choose a `Ready` proxy VM from dropdown
+1. **Deploy new Proxy VM** → select method "Deploy a new vJailbreak Proxy VM" → enter VM name + pick VMware creds → pick datacenter/datastore/network → submit → controller deploys OVA, injects SSH keys, registers ProxyVM automatically → drawer shows progress and auto-closes once the VM appears in the list
+2. **Register existing VM** → select method "Register an existing VM" → pick VMware creds → pick VM from searchable dropdown (shows IP + vCPU; Windows VMs and already-registered VMs are greyed out/disabled) → generate key pair (copy public key to VM's `authorized_keys`) OR upload existing private key → submit → controller verifies prerequisites → VM becomes `Ready`
+3. **Monitor Proxy VM status** → table's `useProxyVMsQuery()` polls every 5s while any VM is `Pending` or `Verifying` (a `Deploying` VM is tracked separately by the Add drawer's own deploy-poll, see §6); status filter + search available in table toolbar
+4. **Retry failed verification** → row in `VerificationFailed` status shows a retry icon → patches a `force-reconcile` annotation → controller re-verifies
+5. **Delete Proxy VM(s)** → single-row delete or multi-select "Delete Selected (n)" bulk delete → confirmation dialog → delete CRD(s) + SSH key Secret(s)
+6. **Use in migration** → Step 3 of migration form: select `vJailbreak Accelerated Copy` (Beta) → choose a `Ready` proxy VM from dropdown
 
 ---
 
@@ -33,22 +35,28 @@ ProxyVM is a Kubernetes CRD that represents a vCenter VM pre-configured to act a
 
 ```
 src/api/proxyvms/
-├── model.ts        — ProxyVM TypeScript interfaces (includes sshKeySecretRef)
-├── proxyVMs.ts     — CRUD API calls (list/get/post/delete)
+├── model.ts        — ProxyVM TypeScript interfaces
+├── proxyVMs.ts     — CRUD + OVA deploy + vCenter resources API calls
 └── index.ts        — barrel export
 
 src/hooks/api/
-└── useProxyVMsQuery.ts  — React Query hook, auto-polls while Pending/Verifying
+└── useProxyVMsQuery.ts  — React Query hook, auto-polls while any item is Pending/Verifying
 
 src/features/proxyvms/
 ├── pages/
 │   └── ProxyVMsPage.tsx         — Thin page wrapper, renders ProxyVMsTable
 └── components/
-    ├── ProxyVMsTable.tsx         — Self-contained: DataGrid + toolbar + drawer management
-    └── AddProxyVMDrawer.tsx      — Add drawer: VMware creds → VM select → SSH key
+    ├── types.ts                 — Shared types (FormMode, SSHKeySource, VMOption, SelectFormData incl. authorizedKeysConfirmed, CreateFormData, GeneratedKey)
+    ├── MethodCard.tsx           — Radio-style method selection card component
+    ├── VMAutocomplete.tsx       — Searchable VM dropdown with IP/vCPU display + selected VM chip
+    ├── SSHAccessSection.tsx     — SSH key section (generate key pair / upload private key toggle)
+    ├── RegisterVMForm.tsx       — Form for "Register existing VM" mode (uses form context)
+    ├── DeployVMForm.tsx         — Form for "Deploy new VM from OVA" mode (uses form context)
+    ├── AddProxyVMDrawer.tsx     — Main drawer: state, queries, handlers, method card rendering
+    ├── ProxyVMsTable.tsx        — Self-contained: DataGrid + toolbar + drawer management
+    └── ProxyVMDetailDrawer.tsx  — Detail view drawer
 ```
 
-> `AddProxyVMDialog.tsx` is a dead file (orphaned). It is not imported anywhere and can be deleted.
 
 ### Component Hierarchy
 
@@ -57,7 +65,12 @@ ProxyVMsPage
 └── ProxyVMsTable (self-contained)
     ├── CommonDataGrid
     ├── ConfirmationDialog (delete)
-    └── AddProxyVMDrawer (managed internally)
+    └── AddProxyVMDrawer
+        ├── MethodCard × 2          (Deploy / Register)
+        ├── RegisterVMForm          (select mode)
+        │   ├── VMAutocomplete
+        │   └── SSHAccessSection
+        └── DeployVMForm            (create mode)
 ```
 
 ### Navigation
@@ -77,23 +90,20 @@ Route: `/dashboard/proxy-vms` registered in `src/App.tsx`.
 ```typescript
 // spec (user-provided)
 interface ProxyVMSpec {
-  vmName: string // vCenter VM display name (selected from VMware machines list)
-  vmwareCredsRef: {
-    name: string // VMwareCreds CR name (must be Succeeded)
-  }
-  sshKeySecretRef?: {
-    name: string // Kubernetes Secret name holding the SSH private key
-  }
+  vmName: string               // vCenter VM display name
+  vmwareCredsRef: { name: string }  // VMwareCreds CR name (must be Succeeded)
+  sshKeySecretRef?: { name: string }   // Secret holding SSH private key (manual upload path)
+  sshKeyPairRef?: { name: string }     // Secret holding generated key pair (generate path)
 }
 
 // status (controller-managed)
 interface ProxyVMStatus {
-  validationStatus: 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'
+  validationStatus: 'Deploying' | 'DeployFailed' | 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'
   validationMessage?: string
   ipAddress?: string
   attachedDiskCount?: number
-  componentsVerified?: string[] // lsblk, nbdkit, qemu-nbd, sshd, disk.EnableUUID
-  lastValidationTime?: string // RFC3339
+  componentsVerified?: { name: string; present: boolean; message?: string }[]
+  lastValidationTime?: string    // RFC3339
 }
 ```
 
@@ -118,39 +128,49 @@ interface ProxyVMStatus {
 
 - `useProxyVMsQuery()` — data + loading + refetch
 - `addDrawerOpen` — controls `AddProxyVMDrawer`
-- `deleteTarget` — ProxyVM selected for deletion
-- `statusFilter` — active status filter (`'All' | 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'`)
+- `deleteTarget` — single ProxyVM selected for row delete
+- `rowSelectionModel` / `bulkDeleteDialogOpen` — multi-select bulk delete
+- `retryingNames` — set of names currently retrying (spinner on retry icon)
+- `detailVM` / `detailOpen` — controls `ProxyVMDetailDrawer` (opened by clicking the Name cell)
+- `statusFilter` — active status filter (`'All' | 'Deploying' | 'DeployFailed' | 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'`)
 
-**Toolbar**: `ListingToolbar` + `CustomSearchToolbar` (search by name/VM name, status filter dropdown, refresh) + "Add Proxy VM" button.
+**Toolbar**: `ListingToolbar` + `CustomSearchToolbar` (search by name/VM name, status filter dropdown, refresh) + "Add vJailbreak Proxy VM" button. When rows are selected, a "Delete Selected (n)" button appears next to the search bar.
 
 **Columns**:
 
-| Column         | Field                                     | Notes                                                         |
-| -------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| Name           | `metadata.name`                           | Kubernetes resource name                                      |
-| VM Name        | `spec.vmName`                             | vCenter display name                                          |
-| Status         | `status.validationStatus`                 | Color-coded chip (`borderRadius: 4px`)                        |
-| Message        | `status.validationMessage`                | Truncated + tooltip; red on `VerificationFailed`              |
-| IP Address     | `status.ipAddress`                        | `-` if absent                                                 |
-| Attached Disks | `status.attachedDiskCount`                | `-` if absent                                                 |
-| Age            | derived from `metadata.creationTimestamp` | humanized (5m, 3h, 2d)                                        |
-| Last Validated | `status.lastValidationTime`               | `toLocaleString()`                                            |
-| Actions        | delete `IconButton`                       | `DeleteOutlined`, `stopPropagation`, opens ConfirmationDialog |
+| Column         | Field                                     | Notes                                                                 |
+| -------------- | ----------------------------------------- | ---------------------------------------------------------------------|
+| Name           | `metadata.name`                           | Kubernetes resource name; clickable, opens `ProxyVMDetailDrawer`     |
+| VM Name        | `spec.vmName`                             | vCenter display name                                                  |
+| Status         | `status.validationStatus`                 | Color-coded chip (`borderRadius: 4px`)                                |
+| IP Address     | `status.ipAddress`                        | `-` if absent                                                          |
+| Attached Disks | `status.attachedDiskCount`                | `-` if absent                                                          |
+| Age            | derived from `metadata.creationTimestamp` | humanized (5m, 3h, 2d)                                                 |
+| Last Validated | `status.lastValidationTime`               | `toLocaleString()`                                                     |
+| Actions        | retry (conditional) + delete `IconButton` | retry only on `VerificationFailed` rows; both `stopPropagation`        |
+
+> `checkboxSelection` is enabled on the grid for bulk delete; there is no separate "Message" column — `status.validationMessage` is only shown in the detail drawer's Status card.
 
 **Status chip colors**:
 
+- `Deploying` → blue (`info`)
+- `DeployFailed` → red (`error`)
 - `Pending` → grey (`default`)
 - `Verifying` → yellow (`warning`)
 - `Ready` → green (`success`)
 - `VerificationFailed` → red (`error`)
 
-**Delete flow**: ConfirmationDialog (`WarningIcon`, `actionVariant="outlined"`) → `deleteProxyVM(name)` + `deleteSecret(name)` (fire-and-forget) → invalidate `['proxyvms']` query cache.
+**Retry flow** (`VerificationFailed` rows only): retry `IconButton` (`Refresh`, spinner while in-flight) → `retryProxyVMVerification(name)` → 1s delay → invalidate `['proxyvms']` query cache.
+
+**Delete flow**: ConfirmationDialog (`WarningIcon`, `actionVariant="outlined"`) → `deleteProxyVM(name)`, tolerating 404 (already gone) → `deleteSecret(spec.sshKeySecretRef.name)` (fire-and-forget, manual-upload path only) → invalidate `['proxyvms']` query cache + `refetch()`.
+
+**Bulk delete flow**: select rows via checkboxes → "Delete Selected (n)" → ConfirmationDialog listing selected names → deletes all in parallel (`Promise.all`, tolerating 404 per item) → same secret cleanup + cache invalidation.
 
 ---
 
 ### AddProxyVMDrawer (`components/AddProxyVMDrawer.tsx`)
 
-Implemented as `DrawerShell` following the design system pattern (same as `VMwareCredentialsDrawer`, `AddArrayCredentialsDrawer`).
+Implemented as `DrawerShell` following the design system pattern.
 
 **Props**:
 
@@ -159,56 +179,205 @@ Implemented as `DrawerShell` following the design system pattern (same as `VMwar
 | `open`    | `boolean`    | Yes      |
 | `onClose` | `() => void` | Yes      |
 
-**Form**: `useForm` with `mode: 'onChange'`. Submit button disabled until `isValid`.
+**Form modes** (`FormMode = 'select' | 'create'`):
+
+Both forms use `useForm` with `mode: 'onChange'`. Submit button disabled until form `isValid`.
 
 **Layout**:
 
 ```
-DrawerHeader (title + subtitle + close)
-  SurfaceCard
-    Section "Proxy VM"
-      SectionHeader (title + subtitle)
-      VMware Credentials  [RHFSelect]
-        helperText: "Only validated credentials are shown"
-      VM Name             [RHFSelect, searchable, disabled until cred selected]
-        helperText: "Search or select the vCenter VM name of the Proxy VM"
-    Section "SSH Access"
-      SectionHeader (title + subtitle)
-      Alert info: "Add the public key … to /root/.ssh/authorized_keys before registering."
-      [Upload key file] [Paste only the OpenSSH private key content…]
-      SSH Private Key     [RHFTextField, multiline, minRows=10]
-DrawerFooter (Cancel | Add Proxy VM)
+DrawerHeader
+  title: "Add vJailbreak Proxy VM"
+  subtitle: varies by formMode
+
+SurfaceCard
+  [error Alert — dismissible]
+
+  Method (overline label)
+    MethodCard: "Deploy a new vJailbreak Proxy VM" [RECOMMENDED]
+    MethodCard: "Register an existing VM"
+
+  ─── divider ───
+
+  [formMode === 'select'] → RegisterVMForm
+  [formMode === 'create' && !deploymentStarted] → DeployVMForm
+  [formMode === 'create' && deploymentStarted] → deployment progress UI (Alert + LinearProgress)
+
+DrawerFooter
+  Cancel | Register vJailbreak Proxy VM   (select mode)
+  Done | Deploy & Register VM             (create mode, "Done" once deploymentStarted)
 ```
 
-**VM Name field behavior**:
+**Subtitle**:
 
-- Disabled until `vmwareCredsRef` selected
-- On cred change: resets `vmName` to `''`; fetches VMs via `getVMwareMachines(namespace, vmwareCredsRef)`
-- Query key: `['vmwaremachines-for-proxy', vmwareCredsRef]`, `staleTime: 30_000`
-- **Only powered-on VMs shown** — `queryFn` filters `m.status?.powerState === 'running'` before mapping options
-- Options: `{ label: vm.spec.vms.name, value: vm.spec.vms.name }`
-- Placeholder chains: `"Select VMware credentials first"` → `"Loading VMs..."` → `"No VMs found"` → `"Search and select a VM"`
-- After VM list loads, info Alert shown: "Only powered on VMs can be added as a Proxy VM. If the VM is powered on but not listed, please revalidate the credentials."
+- `select`: `"Register a powered-on VM you have already prepared as a vJailbreak Accelerated Copy proxy."`
+- `create`: `"A new vJailbreak Proxy VM is deployed from the OVA template and registered automatically."`
 
-**SSH Private Key field**:
+**Deployment progress UI** (`formMode === 'create' && deploymentStarted`): success Alert naming the VM, `LinearProgress`, body text ("...typically takes 3–5 minutes"), and an info Alert noting the panel can be closed — the drawer auto-closes itself once the deployed VM name appears in the polled ProxyVM list (see §6).
 
-- Upload key file: reads file as text → `setValue('sshPrivateKey', text)` with `shouldValidate: true`; max file size 1 MB
-- Validation: must contain `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`
-- `sx={{ '& textarea': { wordBreak: 'break-all', overflowWrap: 'break-word', overflowX: 'hidden' } }}` prevents horizontal scroll on long keys
+---
 
-**Error handling**:
+### MethodCard (`components/MethodCard.tsx`)
 
-- HTTP 409 Conflict → `"A Proxy VM with the name '{name}' already exists."`
-- Other errors → inline dismissible error Alert
+Outlined `Paper` with radio button + icon + title + optional RECOMMENDED chip + description. Blue border + tinted background when selected.
 
-**Submit flow**:
+---
 
-1. `createSecret(proxyVmName, { 'ssh-privatekey': sshPrivateKey }, 'migration-system')`
-2. `postProxyVM({ ..., spec: { vmName, vmwareCredsRef, sshKeySecretRef: { name: proxyVmName } } })`
-3. On ProxyVM POST failure: `deleteSecret(proxyVmName)` (rollback)
-4. On success: invalidate `['proxyvms']` → close drawer
+### RegisterVMForm (`components/RegisterVMForm.tsx`)
 
-**Kubernetes resource name**: derived internally — `toK8sName(data.vmName)`. Not displayed to user. Used as both ProxyVM CR name and SSH Secret name.
+Rendered inside `DesignSystemForm id="add-proxy-vm-form"`. Sections:
+
+**VMware Environment**
+- VMware Credentials `RHFSelect` — only validated creds shown
+
+**Select VM**
+- `VMAutocomplete` — searchable dropdown of powered-on VMs
+
+**SSH Access**
+- `SSHAccessSection` — toggle between generate / upload
+
+**Internal**: watches `form.watch('sshPrivateKey')` and passes `hasPrivateKey={Boolean(value.trim())}` to `SSHAccessSection`.
+
+---
+
+### VMAutocomplete (`components/VMAutocomplete.tsx`)
+
+`FieldLabel` above + MUI `Autocomplete<VMOption>` + selected VM summary card.
+
+**VMOption shape**:
+```typescript
+interface VMOption {
+  name: string
+  ipAddress?: string   // from spec.vms.ipAddress || spec.vms.assignedIp
+  cpu: number          // from spec.vms.cpu
+  powerState: string
+  osFamily?: string    // from spec.vms.osFamily; 'linuxGuest' | 'windowsGuest' | ...
+}
+```
+
+**Behavior**:
+- Disabled until VMware creds selected
+- Only powered-on VMs listed (`powerState === 'running'`)
+- Filter by name or IP
+- **Option disabling** (`getOptionDisabled`) — an option is disabled (greyed out, unselectable) when either:
+  - `registeredVMNames.has(option.name)` — already registered as a vJailbreak Proxy VM (GHI #2067; prevents secret mismatch on re-registration)
+  - `option.osFamily !== 'linuxGuest'` — non-Linux guest (GHI #2088; Windows VMs cannot be proxy VMs)
+  - Disabled options show a trailing caption instead of IP/vCPU: `"Windows not supported"` (Windows), `"Requires Linux OS"` (other non-Linux), or `"Already registered"`
+- Each enabled option shows: green/grey dot + name + IP + vCPU count
+- On creds change: clears selection and resets `vmName` form field
+- Helper text shown when no VM selected: "Only powered-on Linux VMs from the selected vCenter are listed."
+- Selected VM chip shows: green dot + name + IP + vCPU
+
+**Query**:
+```
+queryKey: ['vmwaremachines-for-proxy', credsRef]
+queryFn:  getVMwareMachines(namespace, credsRef) → filter running → map to VMOption
+staleTime: 30_000
+```
+
+---
+
+### SSHAccessSection (`components/SSHAccessSection.tsx`)
+
+Uses `useFormContext` (must render inside `DesignSystemForm`).
+
+**Props**: `sshKeySource`, `generatedKey`, `hasPrivateKey` (bool — whether manual key is pasted/uploaded), plus callbacks.
+
+**Toggle**: `ToggleButtonGroup` — `"Generate Key Pair"` | `"Upload Private Key"`
+
+**Generate Key Pair tab**:
+1. Info Alert: "Generate a key pair, then add the public key to the VM's `/root/.ssh/authorized_keys` before registering." (shown before key generated)
+2. "Generate Key Pair" `ActionButton` — disabled until VM selected. Calls `generateSSHKeyPair(secretName)`.
+3. On success: shows Warning Alert ("Copy the public key below and add it to `/root/.ssh/authorized_keys`…"), public key in read-only `TextField` with copy button, "Regenerate" button, then `<AuthorizedKeysConfirmation />`.
+4. Regenerate: calls `deleteSSHKeyPair(secretName)` then clears state (also unregisters confirmation checkbox via `shouldUnregister`).
+5. Cleanup: on SSH source change or VM deselect, deletes the generated key secret.
+
+**Upload Private Key tab**:
+1. Info Alert ("Upload or paste your SSH private key…") when no key present. Warning Alert ("Before clicking Register, ensure public key is added to `authorized_keys`…") once key present (`hasPrivateKey`).
+2. "Upload key file" button — reads file text → `setValue('sshPrivateKey', text)`.
+3. Paste textarea `RHFTextField name="sshPrivateKey"` — validated via shared `validateSshPrivateKey` util (accepts OpenSSH, RSA, EC, PKCS#8 headers, not just OpenSSH).
+4. `{hasPrivateKey && <AuthorizedKeysConfirmation />}` — shown after key pasted/uploaded.
+
+**`AuthorizedKeysConfirmation`** (internal sub-component):
+- `Controller name="authorizedKeysConfirmed"` with `shouldUnregister` + `rules={{ validate: v => v === true || 'Required' }}`
+- Renders bordered Box containing `FormControlLabel` + `Checkbox`, with bold red `FormHelperText` on error
+- Label: "I've added this public key to the proxy VM's `authorized_keys`."
+- Unregisters (and resets validation) when unmounted (key cleared or tab switched)
+
+**SSH key secret naming**: `${toK8sName(vmName)}-keypair` (generated), `${toK8sName(vmName)}-hot-add-ssh-key` (manual).
+
+---
+
+### DeployVMForm (`components/DeployVMForm.tsx`)
+
+Rendered inside `DesignSystemForm id="create-proxy-vm-form"`. Sections:
+
+**Info Alert** (`severity="info"`, always visible at top): "The OVA is deployed, powered on, and registered automatically. SSH keys are injected at boot — nothing else to configure."
+
+**VMware Environment**
+- VMware Credentials `RHFSelect`
+
+**New VM**
+- VM Name `RHFTextField` — validation: required, no blank/whitespace, lowercase alphanumeric + hyphens only (`/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`), max 63 chars, no leading/trailing hyphens, must not collide with an existing vCenter VM (`vmOptions`) **or** an already-registered/deploying ProxyVM (`registeredVMNames` — same guard as the Register form's dropdown; blocks entering the name of a proxy VM that is still `Deploying`/`Pending`, not just ones already `Ready`, see GHI #2067).
+- Caption: "Becomes both the vSphere VM name and the vJailbreak Proxy VM record. Must be unique."
+
+**Deployment Target** (2-column grid)
+- Datacenter `RHFSelect` — loaded from `getVCenterResources(creds)`
+- Datastore `RHFSelect` — loaded from `getVCenterResources(creds, datacenter)`
+- Network `RHFSelect` — same scoped query
+- Cluster/Host (optional) `RHFSelect` — same scoped query
+
+**Scoped resource queries**:
+```
+queryKey: ['vcenter-datacenters', vmwareCredsRef]
+queryFn:  getVCenterResources(vmwareCredsRef)
+
+queryKey: ['vcenter-scoped-resources', vmwareCredsRef, datacenter]
+queryFn:  getVCenterResources(vmwareCredsRef, datacenter)
+staleTime: 60_000
+```
+
+**Deployment polling** (in `AddProxyVMDrawer`):
+- After `createProxyVMFromOVA` succeeds: sets `deploymentStarted = true`, records `deployedVMName`.
+- Polls `getProxyVMList()` every 5s until the new VM appears in the list, then auto-closes the drawer.
+
+---
+
+### ProxyVMDetailDrawer (`components/ProxyVMDetailDrawer.tsx`)
+
+Opens from clicking the Name cell in `ProxyVMsTable`. Width 760px, `requireCloseConfirmation={false}`.
+
+**Status card**: `StatusChip` (filled) showing `validationStatus`, tone per `statusTone()` (`Ready`→success, `Deploying`→info, `Verifying`→warning, `DeployFailed`/`VerificationFailed`→error, else default). A spinner (`CircularProgress`) shows next to the chip while `Deploying` or `Verifying`. `status.validationMessage` shown below in red for `DeployFailed`/`VerificationFailed`, muted otherwise.
+
+**General section** — `KeyValueGrid` items:
+
+| Label | Value |
+|-------|-------|
+| VM name | `spec.vmName` |
+| VMware credentials | `spec.vmwareCredsRef.name` |
+| IP address | `status.ipAddress` |
+| Attached disks | `status.attachedDiskCount` |
+| Last validated | `status.lastValidationTime` |
+| Components verified | `status.componentsVerified` mapped to `name ✓/✗` joined (always shown, `—` if absent) |
+| Created | `metadata.creationTimestamp` |
+
+> Note: `vJailbreak Proxy VM name` (K8s metadata.name) is NOT shown in the grid — it is displayed as the drawer title.
+
+**SSH Access section**:
+
+`isOVADeployed = !spec.sshKeyPairRef && !spec.sshKeySecretRef`
+
+| Condition | Content |
+|-----------|---------|
+| `isOVADeployed` | "SSH access is configured automatically during OVA deployment." |
+| `sshKeyPairRef` set, key loading | Spinner + "Loading public key…" |
+| `sshKeyPairRef` set, load error | Warning alert naming the secret |
+| `sshKeyPairRef` set, loaded | Read-only public key `TextField` with copy button |
+| `sshKeySecretRef` set (manual upload) | Info alert: manually uploaded key, no public key stored |
+| Not OVA-deployed, no key ref, `Ready` | Warning alert: "No SSH key configured for this vJailbreak Proxy VM." |
+| Not OVA-deployed, no key ref, not yet `Ready` | "SSH key will be available once the VM is ready." |
+
+Subtitle "SSH public key used by vJailbreak to access this Proxy VM." shown for all non-`isOVADeployed` cases.
 
 ---
 
@@ -222,17 +391,58 @@ DrawerFooter (Cancel | Add Proxy VM)
 | Get       | `…/proxyvms/{name}`                                                         | GET    |
 | Create    | `…/proxyvms`                                                                | POST   |
 | Delete    | `…/proxyvms/{name}`                                                         | DELETE |
+| Retry     | `…/proxyvms/{name}` PATCH                                                   | PATCH — adds `force-reconcile` annotation |
 
-All calls use the shared `axios` client from `src/api/axios.ts` with `VJAILBREAK_DEFAULT_NAMESPACE = 'migration-system'`.
+### OVA Deploy
 
-### SSH Key Secret
+| Operation        | Endpoint                              | Method | Notes                          |
+| ---------------- | ------------------------------------- | ------ | ------------------------------ |
+| Deploy VM        | `/dev-api/sdk/vpw/v1/create-proxy-vm` | POST   | Returns `{ status, message }`  |
+
+**Request body** (`CreateProxyVMFromOVARequest`):
+```typescript
+{
+  vmName: string
+  vmwareCredsRef: string
+  datacenter: string
+  datastore: string
+  network: string
+  cluster?: string
+}
+```
+
+### vCenter Resources
+
+| Operation        | Endpoint                                   | Method | Notes                                       |
+| ---------------- | ------------------------------------------ | ------ | ------------------------------------------- |
+| List DCs         | `/dev-api/sdk/vpw/v1/vcenter-resources`    | GET    | `?vmwareCredsRef=X`                         |
+| List scoped      | `/dev-api/sdk/vpw/v1/vcenter-resources`    | GET    | `?vmwareCredsRef=X&datacenter=Y`            |
+
+**Response** (`VCenterResources`):
+```typescript
+{
+  datacenters: string[]
+  clusters: string[]
+  datastores: string[]
+  networks: string[]
+}
+```
+
+### SSH Key Pairs
+
+| Operation    | API                                      | Notes                                          |
+| ------------ | ---------------------------------------- | ---------------------------------------------- |
+| Generate     | `generateSSHKeyPair(secretName)`         | Returns `{ publicKey }`; stores keypair secret |
+| Delete       | `deleteSSHKeyPair(secretName)`           | Cleanup on cancel / VM change / regenerate     |
+
+### SSH Key Secret (manual path)
 
 | Operation | API                                                        | Notes                                                         |
 | --------- | ---------------------------------------------------------- | ------------------------------------------------------------- |
-| Create    | `createSecret(name, { 'ssh-privatekey': key }, namespace)` | On drawer submit, before ProxyVM POST                         |
-| Delete    | `deleteSecret(name, namespace)`                            | On ProxyVM delete (fire-and-forget) + rollback on failed POST |
+| Create    | `createSecret(name, { 'ssh-privatekey': key }, namespace)` | Before ProxyVM POST                                           |
+| Delete    | `deleteSecret(name, namespace)`                            | On ProxyVM delete + rollback on failed POST                   |
 
-Secret name = ProxyVM CR name = `toK8sName(vmName)`.
+Secret name = `${toK8sName(vmName)}-hot-add-ssh-key` (manual) or `${toK8sName(vmName)}-keypair` (generated).
 
 ### VMware Machines (VM picker)
 
@@ -240,7 +450,7 @@ Secret name = ProxyVM CR name = `toK8sName(vmName)`.
 | ----------------------- | ---------------------------------------------- | -------------------------- |
 | List VMs for credential | `getVMwareMachines(namespace, vmwareCredName)` | Filtered by label selector |
 
-Returns `VMwareMachineList`. VM name shown = `machine.spec.vms.name`.
+Returns `VMwareMachineList`. Drawer maps to `VMOption` (name + ipAddress + cpu + powerState + osFamily). Only `powerState === 'running'` items are fetched into the option list; non-Linux and already-registered options remain in the list but are disabled/greyed out client-side (see §4 VMAutocomplete).
 
 ---
 
@@ -258,38 +468,68 @@ useProxyVMsQuery
     any item Pending|Verifying ? 5000 : false
 
 useQuery (VM picker, inline in AddProxyVMDrawer)
-  queryKey: ['vmwaremachines-for-proxy', vmwareCredsRef]
-  queryFn: getVMwareMachines(namespace, vmwareCredsRef)
-  enabled: Boolean(vmwareCredsRef)
+  queryKey: ['vmwaremachines-for-proxy', credsRef]
+  queryFn: getVMwareMachines(namespace, credsRef) → filter running → VMOption[]
+  enabled: Boolean(credsRef) && open
   staleTime: 30_000
+
+useQuery (deploy poll, inline in AddProxyVMDrawer)
+  queryKey: [...PROXY_VMS_QUERY_KEY, 'deploy-poll']
+  queryFn: getProxyVMList()
+  enabled: deploymentStarted
+  refetchInterval: deploymentStarted ? 5000 : false
+  → auto-closes drawer when deployedVMName appears in list
+
+useQuery (vCenter DCs)
+  queryKey: ['vcenter-datacenters', vmwareCredsRef]
+  queryFn: getVCenterResources(vmwareCredsRef)
+  enabled: Boolean(vmwareCredsRef) && formMode === 'create' && open
+  staleTime: 60_000
+
+useQuery (vCenter scoped resources)
+  queryKey: ['vcenter-scoped-resources', vmwareCredsRef, datacenter]
+  queryFn: getVCenterResources(vmwareCredsRef, datacenter)
+  enabled: Boolean(vmwareCredsRef) && Boolean(datacenter) && formMode === 'create' && open
+  staleTime: 60_000
 ```
 
-**Cache invalidation**: After `postProxyVM` or `deleteProxyVM`, invalidate `['proxyvms']`.
+**Cache invalidation**: After `postProxyVM`, `createProxyVMFromOVA`, `deleteProxyVM`, or `retryProxyVMVerification`, invalidate `['proxyvms']`.
 
-### Data Flow
+**`registeredVMNames`**: `useMemo(() => new Set(existingProxyVMs.map(vm => vm.spec.vmName)), [existingProxyVMs])` in `AddProxyVMDrawer`, built from `useProxyVMsQuery()` (enabled only while drawer `open`). Includes ProxyVMs in every status — `Deploying`/`Pending` included, not just `Ready` — so it also blocks re-registering/re-deploying a proxy VM name that hasn't finished provisioning yet. Passed to both `RegisterVMForm` (→ `VMAutocomplete`, disables the option) and `DeployVMForm` (→ blocks the name field's `validate` rule).
+
+### Data Flow — Register Existing VM
 
 ```
-ProxyVMsPage mounts
-  → ProxyVMsTable mounts
-  → useProxyVMsQuery polls /proxyvms
-  → CommonDataGrid renders rows (filtered by statusFilter)
-  → If any Pending/Verifying: re-polls every 5s
-
 User clicks "Add Proxy VM"
-  → AddProxyVMDrawer opens
-  → User selects VMware creds → fetches VMs for that cred
-  → User picks VM from searchable dropdown
-  → User pastes / uploads SSH private key
-  → Submit:
-      1. createSecret(proxyVmName, { ssh-privatekey })
-      2. postProxyVM({ vmName, vmwareCredsRef, sshKeySecretRef })
-      → invalidate ['proxyvms'] → table refetches → new VM appears as Pending
-      → Controller validates → Verifying → Ready | VerificationFailed
+  → AddProxyVMDrawer opens (formMode = 'select')
+  → Selects VMware creds → fetches VMwareMachines for that cred
+  → Picks VM from VMAutocomplete (shows name + IP + vCPU)
+  → SSH Access:
+      Generate Key Pair path:
+        → generateSSHKeyPair(secretName) → get publicKey
+        → User copies publicKey to VM's authorized_keys
+        → Submit → postProxyVM({ ..., sshKeyPairRef: { name: secretName } })
+      Upload Private Key path:
+        → User uploads/pastes private key
+        → Submit → createSecret(name, { ssh-privatekey: key })
+                 → postProxyVM({ ..., sshKeySecretRef: { name: secretName } })
+                 → on failure: deleteSecret(name) rollback
+  → invalidate ['proxyvms'] → close drawer → table shows new VM as Pending
+  → Controller validates → Verifying → Ready | VerificationFailed
+```
 
-User clicks Delete
-  → ConfirmationDialog
-  → deleteProxyVM(name) + deleteSecret(name)
-  → invalidate ['proxyvms']
+### Data Flow — Deploy New VM from OVA
+
+```
+User selects "Deploy a new vJailbreak Proxy VM" method
+  → DeployVMForm shown
+  → Selects creds → fetches datacenters
+  → Selects datacenter → fetches datastores + networks + clusters
+  → Enters VM name (validated: lowercase alnum + hyphens, no spaces, ≤63 chars)
+  → Submit → createProxyVMFromOVA({ vmName, vmwareCredsRef, datacenter, datastore, network, cluster? })
+  → deploymentStarted = true → polls getProxyVMList() every 5s
+  → When deployedVMName appears in list → auto-closes drawer
+  → (OVA deploy injects SSH keys automatically — no key setup required)
 ```
 
 ---
@@ -300,10 +540,14 @@ ProxyVM is consumed in Step 3 (Network and Storage Mapping) of both standard and
 
 ### Storage Copy Method: `HotAdd`
 
-Added to `STORAGE_COPY_METHOD_OPTIONS` in `src/features/migration/constants.ts`:
+The internal enum value is still `'HotAdd'`, but the user-facing label is now **"vJailbreak Accelerated Copy"** (renamed from "Hot-Add via Proxy VM"). `STORAGE_COPY_METHOD_OPTIONS` in `src/features/migration/constants.ts`:
 
 ```ts
-{ value: 'HotAdd', label: 'Hot-Add via Proxy VM' }
+export const STORAGE_COPY_METHOD_OPTIONS = [
+  { value: 'normal', label: 'Standard Copy' },
+  { value: 'StorageAcceleratedCopy', label: 'Storage Accelerated Copy' },
+  { value: 'HotAdd', label: 'vJailbreak Accelerated Copy' }
+] as const
 ```
 
 **`StorageCopyMethod` type** (`src/features/migration/types.ts`):
@@ -314,97 +558,76 @@ type StorageCopyMethod = 'normal' | 'StorageAcceleratedCopy' | 'HotAdd'
 
 **Form params**: `proxyVMRef?: string` added to `FormValues` and `RollingFormParams`.
 
-**Beta chip**: `HotAdd` radio label shows `<Chip label="Beta" color="warning" variant="outlined" />` (same styling as `StorageAcceleratedCopy` beta chip). Applies to both standard and rolling forms since `NetworkAndStorageMappingStep` is shared.
+**Beta chip**: both `StorageAcceleratedCopy` and `HotAdd` radio labels show `<Chip label="Beta" color="warning" variant="outlined" />` (not `HotAdd`-only).
+
+**Migration detail/list display**: `MigrationDetailsTab` labels `HotAdd` migrations as `"vJailbreak Accelerated Copy"` and shows an extra "vJailbreak Proxy VM" field with the proxy's name. `Phase.HotAddTransferInProgress` / `Phase.HotAddCleanup` are surfaced as distinct progress phases in `MigrationProgress`, `MigrationProgressWithPopover`, `MigrationsTable`, and `MigrationNextActionBanner`.
 
 ### NetworkAndStorageMappingStep Behavior (HotAdd)
 
 When `storageCopyMethod === 'HotAdd'`:
 
-- **Proxy VM selector** shown (with `FieldLabel` above):
-  - Source: `useProxyVMsQuery()` filtered to `status.validationStatus === 'Ready'`
+- **VMware Datastore → PCD Volume Type mapping table** shown first (same table as `normal` mode)
+- **Proxy VM selector** shown below it (with `FieldLabel` above):
+  - Source: `useProxyVMsQuery()` (enabled only while `storageCopyMethod === 'HotAdd'`) filtered to `status.validationStatus === 'Ready'`
   - Option label: `metadata.name (status.ipAddress)` or just `metadata.name`
-  - `onChange('proxyVMRef')(selectedName)`
-  - If no Ready VMs: warning Alert shown
-- **VMware Datastore → PCD Volume Type mapping table** also shown (same as `normal` mode)
-  - Uses `params.storageMappings` and `openstackStorage`
-  - All datastores must be mapped to proceed
-- Switching away from HotAdd clears `proxyVMRef` (RadioGroup `onChange`)
-- `unmappedStorage` calculated the same as `normal` mode (uses `params.storageMappings`)
+  - If no Ready VMs: warning Alert, select disabled
+- Switching away from HotAdd clears `proxyVMRef`
 
 ### MigrationOptionsAlt Behavior (HotAdd)
 
-When `storageCopyMethod === 'HotAdd'`:
+When `storageCopyMethod === 'HotAdd'` (`isHotAdd`):
 
-- `dataCopyMethod` forced to `'cold'` via useEffect
-- `hot` and `mock` options disabled in the Select
-- Helper text shown: "Hot-Add migration only supports Cold copy. Hot copy is disabled."
+- `dataCopyMethod` forced to `'cold'` **only if it isn't already `'cold'` or `'mock'`** — i.e. HotAdd allows **Cold or Mock** copy, not cold-only
+- Only the `hot` data-copy option is disabled in the dropdown (`disabled={isHotAdd && item.value !== 'cold' && item.value !== 'mock'}`)
+- Info alert: "vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available."
 
 ### Validation
 
-**Standard** (`useFormValidation.ts`) and **Rolling** (`useRollingFormValidation.ts`) — Step 3:
-
-```ts
-storageValidation =
-  storageCopyMethod === 'HotAdd'
-    ? Boolean(params.proxyVMRef)
-      && !isNilOrEmpty(params.storageMappings)
-      && all datastores mapped via params.storageMappings
-    : storageCopyMethod === 'StorageAcceleratedCopy' ? ...arrayCredsMappings check
-    : ...storageMappings check
-```
-
-HotAdd requires **both** `proxyVMRef` AND fully-mapped `storageMappings` to proceed.
+Step 3 storage validation for HotAdd requires **both** `proxyVMRef` AND fully-mapped `storageMappings`.
 
 ### Form Submit
 
-**Standard** (`useMigrationFormSubmit.ts`) — `handleSubmit`:
-
 ```
-HotAdd → createStorageMapping(params.storageMappings)   // POST /storagemappings
-       → updateMigrationTemplate: set spec.proxyVMRef = { name: params.proxyVMRef }
+HotAdd → createStorageMapping(params.storageMappings)
+       → updateMigrationTemplate: spec.proxyVMRef = { name: params.proxyVMRef }
                                    AND spec.storageMapping = storageMappings.metadata.name
-
-StorageAcceleratedCopy → createArrayCredsMapping → set spec.arrayCredsMapping
-normal → createStorageMapping → set spec.storageMapping
-```
-
-**Rolling** (`useRollingFormSubmit.ts`) — same branching logic applies.
-
-### MigrationTemplate Spec Field
-
-Added to `MigrationTemplateSpec` (`src/api/migration-templates/model.ts`):
-
-```ts
-proxyVMRef?: { name: string }
-storageCopyMethod?: string
 ```
 
 ---
 
 ## 8. Validation Rules
 
-| Rule                     | Condition                                                     | Error                                                                                    |
-| ------------------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| proxyVMRef required      | `storageCopyMethod === 'HotAdd'` and `!params.proxyVMRef`     | "Please select a Proxy VM to use for Hot-Add data copy"                                  |
-| storageMappings required | `storageCopyMethod === 'HotAdd'` and storage not fully mapped | Storage mapping required (same as `normal` mode)                                         |
-| VM required              | Add drawer submit                                             | "VM is required"                                                                         |
-| vmwareCredsRef required  | Add drawer submit                                             | "VMware credentials are required"                                                        |
-| sshPrivateKey required   | Add drawer submit                                             | "SSH private key is required"                                                            |
-| sshPrivateKey format     | Must contain OpenSSH headers                                  | "Invalid key format. Expected OpenSSH private key (-----BEGIN OPENSSH PRIVATE KEY-----)" |
-| SSH key file size        | Upload > 1 MB                                                 | "File too large. SSH private key must be under 1 MB."                                    |
+| Rule                          | Condition                                                                       | Error                                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| proxyVMRef required           | `storageCopyMethod === 'HotAdd'` and `!params.proxyVMRef`                       | "Please select a Proxy VM to use for Hot-Add data copy"                                      |
+| storageMappings required      | `storageCopyMethod === 'HotAdd'` and storage not fully mapped                   | Storage mapping required (same as `normal` mode)                                             |
+| VM required (register)        | Add drawer, select mode, submit                                                 | "VM is required"                                                                              |
+| vmwareCredsRef required       | Add drawer submit                                                               | "VMware credentials are required"                                                             |
+| vmName required (deploy)      | Add drawer, create mode, submit                                                 | "VM name is required"                                                                          |
+| vmName format (deploy)        | Must match `/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/`                                  | "Lowercase letters, numbers, and hyphens only. Cannot start or end with a hyphen."             |
+| vmName blank (deploy)         | Whitespace-only input                                                           | "VM name cannot be blank"                                                                      |
+| vmName length (deploy)        | > 63 characters                                                                 | "Must be 63 characters or fewer"                                                               |
+| vmName vCenter collision (deploy) | Name matches a VM already in the selected vCenter (`vmOptions`)             | "A VM with this name already exists in the selected vCenter."                                 |
+| vmName registered collision (deploy) | Name matches any existing ProxyVM CR, incl. `Deploying`/`Pending` ones (`registeredVMNames`) | "A vJailbreak Proxy VM with this name is already registered or deploying." |
+| VM option disabled (register) | vCenter VM already registered (`registeredVMNames`) or non-Linux (`osFamily !== 'linuxGuest'`) | Option unselectable in `VMAutocomplete`; caption shows why |
+| sshPrivateKey required        | Add drawer, register mode, upload tab, submit                                  | "SSH private key is required"                                                                  |
+| sshPrivateKey format          | Must pass `validateSshPrivateKey` (OpenSSH, RSA, EC, or PKCS#8 headers)         | Format-specific message from `validateSshPrivateKey`                                          |
+| SSH key file size             | Upload > 1 MB                                                                   | "File too large. SSH private key must be under 1 MB."                                          |
+| Generated key required        | Register mode, generate tab, no key generated yet                              | "Generate a key pair first."                                                                    |
+| authorizedKeysConfirmed       | Register mode; generate tab after key generated, OR upload tab after key pasted | "Required" (bold red FormHelperText below checkbox)                                            |
 
 ---
 
 ## 9. Prerequisites for Proxy VM
 
-The VM must have these configured before adding it as a Proxy VM (documented externally — not shown in the UI form):
+The VM must have these configured before registering it (documented externally — not shown in form). Applies only to "Register existing VM" path. Deploy-from-OVA path configures these automatically.
 
 1. `lsblk` — block device lister
 2. `nbdkit` — network block device kit
 3. `qemu-nbd` — QEMU NBD server
 4. `sshd` — SSH daemon running and accessible
 5. `disk.EnableUUID` — VMware disk UUID enabled on VM
-6. SSH key authorization — vJailbreak public key in `~/.ssh/authorized_keys` (the user must do this manually before submitting the form — the drawer's info Alert reminds them)
+6. SSH key authorization — vJailbreak public key in `~/.ssh/authorized_keys`
 
 ---
 
@@ -412,8 +635,12 @@ The VM must have these configured before adding it as a Proxy VM (documented ext
 
 - ProxyVM must be in `migration-system` namespace — hardcoded via `VJAILBREAK_DEFAULT_NAMESPACE`
 - Only `Ready` proxy VMs appear in migration form dropdown
-- HotAdd forces cold copy; warm (hot) migration not supported with HotAdd
-- SSH Secret name = ProxyVM CR name — both derived from `toK8sName(vmName)`. Collision possible if two different VM names normalize to the same K8s-safe string.
-- `AddProxyVMDialog.tsx` — orphaned dead file; safe to delete
+- HotAdd (vJailbreak Accelerated Copy) allows Cold or Mock data copy only; warm (hot) migration not supported with HotAdd
+- SSH Secret name derived from `toK8sName(vmName)`. Collision possible if two VM names normalize to the same K8s-safe string.
 - ProxyVM CRD is not session-scoped — persists across migrations and must be explicitly deleted
-- VM picker in drawer fetches from `/vmwaremachines?labelSelector=...` — requires VMware creds to be already validated and VMwareMachine CRs to exist in the cluster
+- VM picker fetches from `/vmwaremachines?labelSelector=...` — requires VMware creds already validated and VMwareMachine CRs to exist
+- OVA deploy endpoint is at `/dev-api/sdk/vpw/v1/create-proxy-vm` — proxied through the API server
+- vCenter resources endpoint is at `/dev-api/sdk/vpw/v1/vcenter-resources` — scoped by `datacenter` param for second-level resources
+- Windows guest VMs (`osFamily === 'windowsGuest'`) and any non-`linuxGuest` VM cannot be selected as a proxy VM (GHI #2088) — enforced client-side only in `VMAutocomplete`, not by the controller
+- Duplicate-name guard (`registeredVMNames`, GHI #2067) is also client-side only — a race between two clients (or direct API/kubectl use) could still create two ProxyVM CRs whose `spec.vmName` collide; the controller itself does not reject this
+- Retry (`force-reconcile` annotation) only surfaces in the UI for `VerificationFailed` rows; `DeployFailed` rows have no retry action from the table

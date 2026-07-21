@@ -16,6 +16,7 @@ import (
 	subnets "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/subnets"
 	errors "github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/pkg/common/timesettings"
 	migrationutils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/retry"
@@ -405,6 +407,15 @@ func CreateInClusterClient() (client.Client, error) {
 	}
 	logrus.WithField("func", fn).Info("Successfully created in-cluster k8s client")
 	return clientset, nil
+}
+
+// CreateRawK8sClient returns a kubernetes.Interface for pod log streaming.
+func CreateRawK8sClient() (kubernetes.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(cfg)
 }
 
 func isRetryableStatusUpdateError(err error) bool {
@@ -849,6 +860,20 @@ func (p *vjailbreakProxy) InjectEnvVariables(ctx context.Context, in *api.Inject
 		Success: true,
 		Message: successMsg,
 	}, nil
+}
+
+// ApplyTimeSettings applies NTP servers and timezone to the host using D-Bus and
+// hostPath-mounted filesystem paths.
+func (p *vjailbreakProxy) ApplyTimeSettings(ctx context.Context, _ *api.ApplyTimeSettingsRequest) (*api.ApplyTimeSettingsResponse, error) {
+	const fn = "ApplyTimeSettings"
+	logrus.WithField("func", fn).Info("applying time settings via D-Bus + host mounts")
+
+	msg, err := timesettings.Apply(ctx, p.K8sClient)
+	if err != nil {
+		logrus.WithField("func", fn).WithError(err).Error("failed to apply time settings")
+		return nil, err
+	}
+	return &api.ApplyTimeSettingsResponse{Message: msg}, nil
 }
 
 // checkNetworkSubnetCompatibilityRequest is the request body for CheckNetworkSubnetCompatibility

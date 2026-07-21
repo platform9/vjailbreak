@@ -20,6 +20,10 @@ interface UseCredentialFetchingParams {
   params: Partial<FormValues>
   pcdData: Array<{ id: string; name?: string }>
   getFieldErrorsUpdater: (key: string) => (value: string) => void
+  // Retry mode: the template belongs to an existing MigrationPlan and is seeded via
+  // setMigrationTemplate. Disables automatic template creation/patching until
+  // the user submits the Retry action.
+  disableTemplateSync?: boolean
 }
 
 interface UseCredentialFetchingResult {
@@ -37,7 +41,8 @@ interface UseCredentialFetchingResult {
 export function useCredentialFetching({
   params,
   pcdData,
-  getFieldErrorsUpdater
+  getFieldErrorsUpdater,
+  disableTemplateSync = false
 }: UseCredentialFetchingParams): UseCredentialFetchingResult {
   const [vmwareCredentials, setVmwareCredentials] = useState<VMwareCreds | undefined>(undefined)
   const [openstackCredentials, setOpenstackCredentials] = useState<OpenstackCreds | undefined>(
@@ -109,6 +114,7 @@ export function useCredentialFetching({
   }, [params.openstackCreds, getFieldErrorsUpdater])
 
   useEffect(() => {
+    if (disableTemplateSync) return
     if (!vmwareCredsValidated || !openstackCredsValidated) return
 
     const syncMigrationTemplate = async () => {
@@ -128,7 +134,6 @@ export function useCredentialFetching({
               ...(targetPCDClusterName && {
                 targetPCDClusterName
               }),
-              useFlavorless: params.useFlavorless || false,
               useGPUFlavor: params.useGPU || false
             }
           }
@@ -143,7 +148,6 @@ export function useCredentialFetching({
           vmwareRef: vmwareCredentials?.metadata.name,
           openstackRef: openstackCredentials?.metadata.name,
           targetPCDClusterName,
-          useFlavorless: params.useFlavorless || false,
           useGPUFlavor: params.useGPU || false
         })
         const created = await postMigrationTemplate(body)
@@ -169,10 +173,10 @@ export function useCredentialFetching({
     vmwareCredentials?.metadata.name,
     openstackCredentials?.metadata.name,
     targetPCDClusterName,
-    params.useFlavorless,
     params.useGPU,
     migrationTemplate?.metadata?.name,
-    getFieldErrorsUpdater
+    getFieldErrorsUpdater,
+    disableTemplateSync
   ])
 
   const fetchMigrationTemplate = async () => {
@@ -201,9 +205,10 @@ export function useCredentialFetching({
   )
 
   useEffect(() => {
+    if (disableTemplateSync) return
     if (vmwareCredsValidated && openstackCredsValidated) return
     setMigrationTemplate(undefined)
-  }, [vmwareCredsValidated, openstackCredsValidated])
+  }, [vmwareCredsValidated, openstackCredsValidated, disableTemplateSync])
 
   return {
     vmwareCredentials,

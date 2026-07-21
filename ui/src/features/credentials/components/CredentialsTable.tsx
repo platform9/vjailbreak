@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip, Alert } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -8,7 +8,7 @@ import CredentialsIcon from '@mui/icons-material/VpnKey'
 import SyncIcon from '@mui/icons-material/Sync'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import { VmwareCredential } from './VmwareCredentialsForm'
@@ -20,7 +20,9 @@ import { OPENSTACK_CREDS_QUERY_KEY } from 'src/hooks/api/useOpenstackCredentials
 import {
   deleteVMwareCredsWithSecretFlow,
   deleteOpenStackCredsWithSecretFlow,
-  revalidateCredentials
+  revalidateCredentials,
+  checkOpenstackCredsDeletable,
+  OpenstackCredsDeletableResponse
 } from 'src/api/helpers'
 import VMwareCredentialsDrawer from './VMwareCredentialsDrawer'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
@@ -38,6 +40,7 @@ interface CredentialItem {
 }
 
 const REVALIDATION_TIMEOUT_MS = 31 * 60 * 1000
+const REVALIDATION_TIMEOUT_MINUTES = Math.floor(REVALIDATION_TIMEOUT_MS / (60 * 1000))
 
 const syncIconSpin = keyframes`
   from {
@@ -237,6 +240,9 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [timedOutRevalidatingId, setTimedOutRevalidatingId] = useState<string | null>(null)
   const revalidationStartDataUpdatedAtRef = useRef(0)
   const revalidationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Refs so refetchInterval closures always see current values without stale captures
+  const revalidatingIdRef = useRef<string | null>(null)
+  const timedOutRevalidatingIdRef = useRef<string | null>(null)
 
   const isVmware = credentialType === 'vmware'
 
@@ -249,6 +255,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const clearActiveRevalidation = useCallback(() => {
     clearRevalidationTimeout()
+    revalidatingIdRef.current = null
     setRevalidatingId(null)
   }, [clearRevalidationTimeout])
 
@@ -262,15 +269,17 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: (query) => {
+      // Fast path: actively tracking a revalidation — skip full list scan
+      if (revalidatingIdRef.current) return 5000
       const data = query.state.data as VmwareCredential[] | undefined
-      const hasRevalidationInProgress = data?.some((cred) => {
+      const hasBackendRevalidating = data?.some((cred) => {
         const credentialId = `vmware-${cred.metadata.name}`
         return (
-          credentialId !== timedOutRevalidatingId &&
+          credentialId !== timedOutRevalidatingIdRef.current &&
           normalizeCredentialStatus(cred.status?.vmwareValidationStatus) === 'Revalidating'
         )
       })
-      return revalidatingId || hasRevalidationInProgress ? 5000 : false
+      return hasBackendRevalidating ? 5000 : false
     }
   })
 
@@ -284,15 +293,17 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     staleTime: 0,
     refetchOnMount: true,
     refetchInterval: (query) => {
+      // Fast path: actively tracking a revalidation — skip full list scan
+      if (revalidatingIdRef.current) return 5000
       const data = query.state.data as OpenstackCredential[] | undefined
-      const hasRevalidationInProgress = data?.some((cred) => {
+      const hasBackendRevalidating = data?.some((cred) => {
         const credentialId = `openstack-${cred.metadata.name}`
         return (
-          credentialId !== timedOutRevalidatingId &&
+          credentialId !== timedOutRevalidatingIdRef.current &&
           normalizeCredentialStatus(cred.status?.openstackValidationStatus) === 'Revalidating'
         )
       })
-      return revalidatingId || hasRevalidationInProgress ? 5000 : false
+      return hasBackendRevalidating ? 5000 : false
     }
   })
 
@@ -301,6 +312,10 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([])
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [agentNodeInfo, setAgentNodeInfo] = useState<Pick<
+    OpenstackCredsDeletableResponse,
+    'agentNodeCount' | 'agentNodeNames' | 'hasActiveMigrations'
+  > | null>(null)
   const [vmwareCredDrawerOpen, setVmwareCredDrawerOpen] = useState(false)
   const [openstackCredDrawerOpen, setOpenstackCredDrawerOpen] = useState(false)
 
@@ -344,26 +359,37 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const allCredentials = isVmware ? vmwareItems : openstackItems
 
+  const revalidatingItem = useMemo(
+    () => (revalidatingId ? allCredentials.find((cred) => cred.id === revalidatingId) : undefined),
+    [allCredentials, revalidatingId]
+  )
+
   useEffect(() => {
-    if (revalidatingId) {
-      const revalidatingItem = allCredentials.find((cred) => cred.id === revalidatingId)
-      const currentDataUpdatedAt = isVmware ? vmwareDataUpdatedAt : openstackDataUpdatedAt
+    if (!revalidatingId) return
+    const currentDataUpdatedAt = isVmware ? vmwareDataUpdatedAt : openstackDataUpdatedAt
 
-      if (revalidatingItem) {
-        const status = normalizeCredentialStatus(revalidatingItem.status)
-        const hasFreshStatus = currentDataUpdatedAt > revalidationStartDataUpdatedAtRef.current
-
-        if (!isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating') {
-          clearActiveRevalidation()
-          setTimedOutRevalidatingId((current) => (current === revalidatingId ? null : current))
-        }
-      } else {
-        clearActiveRevalidation()
-        setTimedOutRevalidatingId((current) => (current === revalidatingId ? null : current))
+    const clearTimedOut = () => {
+      if (timedOutRevalidatingIdRef.current === revalidatingId) {
+        timedOutRevalidatingIdRef.current = null
       }
+      setTimedOutRevalidatingId((current) => (current === revalidatingId ? null : current))
+    }
+
+    if (revalidatingItem) {
+      const status = normalizeCredentialStatus(revalidatingItem.status)
+      const hasFreshStatus = currentDataUpdatedAt > revalidationStartDataUpdatedAtRef.current
+      const isRevalidationComplete =
+        !isRevalidationApiPending && hasFreshStatus && status !== 'Revalidating'
+      if (isRevalidationComplete) {
+        clearActiveRevalidation()
+        clearTimedOut()
+      }
+    } else {
+      clearActiveRevalidation()
+      clearTimedOut()
     }
   }, [
-    allCredentials,
+    revalidatingItem,
     clearActiveRevalidation,
     isRevalidationApiPending,
     isVmware,
@@ -390,7 +416,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     }
   }, [isVmware, refetchOpenstack, refetchVmware])
 
-  const handleDeleteCredential = (id: string, type: 'VMware' | 'OpenStack') => {
+  const handleDeleteCredential = async (id: string, type: 'VMware' | 'OpenStack') => {
     const credentialName = id.startsWith('vmware-')
       ? id.replace('vmware-', '')
       : id.replace('openstack-', '')
@@ -411,12 +437,33 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
             : (credential as OpenstackCredential).status?.openstackValidationStatus || 'Unknown',
         credObject: credential
       }
+
+      if (type === 'OpenStack') {
+        try {
+          const result = await checkOpenstackCredsDeletable(credentialName)
+          if (result.agentNodeCount > 0) {
+            setAgentNodeInfo({
+              agentNodeCount: result.agentNodeCount,
+              agentNodeNames: result.agentNodeNames,
+              hasActiveMigrations: result.hasActiveMigrations
+            })
+          } else {
+            setAgentNodeInfo(null)
+          }
+        } catch {
+          setAgentNodeInfo(null)
+        }
+      } else {
+        setAgentNodeInfo(null)
+      }
+
       setSelectedForDeletion([credItem])
       setDeleteDialogOpen(true)
     }
   }
 
   const handleRevalidateClick = (row: CredentialItem) => {
+    if (revalidatingId) return
     const { credObject } = row
     if (!credObject) {
       reportError(new Error('Cannot revalidate: Missing credential object data.'), {
@@ -430,14 +477,22 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       ? vmwareDataUpdatedAt
       : openstackDataUpdatedAt
     clearRevalidationTimeout()
+    // Sync refs before async work so refetchInterval closure sees current values immediately
+    timedOutRevalidatingIdRef.current = null
+    revalidatingIdRef.current = row.id
     setTimedOutRevalidatingId(null)
     setRevalidatingId(row.id)
     revalidationTimeoutRef.current = setTimeout(() => {
       revalidationTimeoutRef.current = null
+      // Update refs before invalidateQueries — fixes stale closure in refetchInterval
+      timedOutRevalidatingIdRef.current = row.id
+      if (revalidatingIdRef.current === row.id) revalidatingIdRef.current = null
       setTimedOutRevalidatingId(row.id)
       setRevalidatingId((current) => (current === row.id ? null : current))
       reportError(
-        new Error('Credential revalidation is still in progress after 31 minutes. You can retry.'),
+        new Error(
+          `Credential revalidation is still in progress after ${REVALIDATION_TIMEOUT_MINUTES} minutes. You can retry.`
+        ),
         {
           context: 'credentials-revalidation-timeout',
           metadata: {
@@ -461,9 +516,35 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     setSelectedIds(rowSelectionModel as string[])
   }
 
-  const handleDeleteSelected = () => {
+  const handleDeleteSelected = async () => {
     const selectedCreds = allCredentials.filter((cred) => selectedIds.includes(cred.id))
     setSelectedForDeletion(selectedCreds)
+
+    const openstackCreds = selectedCreds.filter((cred) => cred.type === 'OpenStack')
+    if (openstackCreds.length > 0) {
+      try {
+        const results = await Promise.all(
+          openstackCreds.map((cred) =>
+            checkOpenstackCredsDeletable(cred.id.replace('openstack-', ''))
+          )
+        )
+        const totalCount = results.reduce((sum, r) => sum + r.agentNodeCount, 0)
+        if (totalCount > 0) {
+          setAgentNodeInfo({
+            agentNodeCount: totalCount,
+            agentNodeNames: results.flatMap((r) => r.agentNodeNames),
+            hasActiveMigrations: results.some((r) => r.hasActiveMigrations)
+          })
+        } else {
+          setAgentNodeInfo(null)
+        }
+      } catch {
+        setAgentNodeInfo(null)
+      }
+    } else {
+      setAgentNodeInfo(null)
+    }
+
     setDeleteDialogOpen(true)
   }
 
@@ -471,6 +552,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     setDeleteDialogOpen(false)
     setSelectedForDeletion([])
     setDeleteError(null)
+    setAgentNodeInfo(null)
   }
 
   const handleConfirmDelete = async () => {
@@ -641,8 +723,8 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
       <ConfirmationDialog
         open={deleteDialogOpen}
         onClose={handleDeleteClose}
-        title="Confirm Delete"
-        icon={<WarningIcon color="warning" />}
+        title={agentNodeInfo ? 'Force Delete Credentials' : 'Confirm Delete'}
+        icon={<WarningIcon color={agentNodeInfo ? 'error' : 'warning'} />}
         message={
           selectedForDeletion.length > 1
             ? 'Are you sure you want to delete these credentials?'
@@ -652,7 +734,18 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           id: cred.id,
           name: `${cred.name} (${cred.type})`
         }))}
-        actionLabel="Delete"
+        additionalContent={
+          agentNodeInfo ? (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {agentNodeInfo.agentNodeCount} agent node{agentNodeInfo.agentNodeCount > 1 ? 's' : ''} will also be deleted:{' '}
+              {agentNodeInfo.agentNodeNames.join(', ')}
+              {agentNodeInfo.hasActiveMigrations && (
+                <> Some nodes have active migrations in progress. Deleting may interrupt running migrations.</>
+              )}
+            </Alert>
+          ) : undefined
+        }
+        actionLabel={agentNodeInfo ? 'Force Delete' : 'Delete'}
         actionColor="error"
         actionVariant="outlined"
         onConfirm={handleConfirmDelete}

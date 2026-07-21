@@ -109,24 +109,29 @@ export default function MigrationProgressWithPopover({
 
   const statusIcon = useMemo(() => {
     if (phase === Phase.Succeeded) {
-      return <CheckCircleOutlineIcon style={{ color: 'green' }} />
+      return <CheckCircleOutlineIcon sx={{ color: 'success.main' }} />
     } else if (phase === Phase.AwaitingAdminCutOver) {
-      return <PauseCircleOutlineIcon style={{ color: '#1976d2' }} />
+      return <PauseCircleOutlineIcon sx={{ color: 'warning.main' }} />
     } else if (
       [
         Phase.Validating,
         Phase.AwaitingDataCopyStart,
         Phase.CopyingBlocks,
         Phase.CopyingChangedBlocks,
+        Phase.SnapshottingSourceVM,
+        Phase.AttachingDisksToProxy,
+        Phase.IdentifyingBlockDevices,
+        Phase.HotAddTransferInProgress,
+        Phase.HotAddCleanup,
         Phase.ConvertingDisk,
         Phase.AwaitingCutOverStartTime
       ].includes(phase as Phase)
     ) {
-      return <CircularProgress size={20} style={{ marginRight: 3 }} />
+      return <CircularProgress size={20} sx={{ mr: '3px' }} />
     } else if (phase === Phase.Failed || phase === Phase.ValidationFailed) {
-      return <ErrorOutlineIcon style={{ color: 'red' }} />
+      return <ErrorOutlineIcon sx={{ color: 'error.main' }} />
     } else {
-      return <HourglassBottomIcon style={{ color: 'grey' }} />
+      return <HourglassBottomIcon sx={{ color: 'text.disabled' }} />
     }
   }, [phase])
 
@@ -189,13 +194,13 @@ const StepperComponent = ({ activeStepIndex, activeStep, steps }: StepperCompone
     const StepIcon = (_props: StepIconProps) => {
       switch (status) {
         case Status.Completed:
-          return <CheckCircleOutlineIcon style={{ color: 'green' }} />
+          return <CheckCircleOutlineIcon sx={{ color: 'success.main' }} />
         case Status.Pending:
-          return <HourglassBottomIcon style={{ color: 'grey' }} />
+          return <HourglassBottomIcon sx={{ color: 'text.disabled' }} />
         case Status.InProgress:
-          return <CircularProgress size={20} sx={{ color: 'green' }} />
+          return <CircularProgress size={20} sx={{ color: 'success.main' }} />
         case Status.Failed:
-          return <ErrorOutlineIcon style={{ color: 'red' }} />
+          return <ErrorOutlineIcon sx={{ color: 'error.main' }} />
         default:
           return null
       }
@@ -229,7 +234,7 @@ const StepperComponent = ({ activeStepIndex, activeStep, steps }: StepperCompone
             <StepLabel StepIconComponent={getStepIcon(step.status)}>
               <Typography
                 sx={{
-                  color: step.status === Status.Failed ? 'red' : 'default'
+                  color: step.status === Status.Failed ? 'error.main' : 'text.primary'
                 }}
               >
                 {step.message}

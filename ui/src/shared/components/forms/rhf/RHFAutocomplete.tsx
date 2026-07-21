@@ -12,6 +12,8 @@ export type RHFAutocompleteProps<TOption> = {
   name: ControllerProps<FieldValues>['name']
   options: TOption[]
   multiple?: boolean
+  disableClearable?: boolean
+  clearOnEscape?: boolean
   label?: string
   labelHelperText?: FieldLabelProps['helperText']
   labelProps?: FieldLabelCustomProps
@@ -34,6 +36,8 @@ export default function RHFAutocomplete<TOption>({
   name,
   options,
   multiple = false,
+  disableClearable = false,
+  clearOnEscape = false,
   label,
   labelHelperText,
   labelProps,
@@ -91,6 +95,8 @@ export default function RHFAutocomplete<TOption>({
               options={options}
               disabled={disabled}
               getOptionDisabled={getOptionDisabled}
+              disableClearable={disableClearable}
+              clearOnEscape={clearOnEscape}
               value={selectedOptions as any}
               onChange={(_e, value) => {
                 if (multiple) {

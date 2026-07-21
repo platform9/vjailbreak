@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -999,6 +998,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				DisconnectSourceNetwork: migrationplan.Spec.MigrationStrategy.DisconnectSourceNetwork,
 				NetworkOverrides:        networkOverrides,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
+				PreserveSourceTags:      migrationplan.Spec.PreserveSourceTags,
 			},
 			Status: vjailbreakv1alpha1.MigrationStatus{
 				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -1041,6 +1041,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				return getErr
 			}
 			latest.Spec.NetworkOverrides = networkOverrides
+			latest.Spec.PreserveSourceTags = migrationplan.Spec.PreserveSourceTags
 			if updateErr := r.Update(ctx, latest); updateErr != nil {
 				return updateErr
 			}
@@ -1050,7 +1051,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to update Migration spec for VM %s", vm)
 		}
-		ctxlog.Info("Updated migration spec from MigrationPlan", "networkOverrides", networkOverrides)
+		ctxlog.Info("Updated migration spec from MigrationPlan", "networkOverrides", networkOverrides, "preserveSourceTags", migrationplan.Spec.PreserveSourceTags)
 	}
 	return migrationobj, nil
 }
@@ -1058,13 +1059,11 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
-	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	migrationobj *vjailbreakv1alpha1.Migration,
 	vm string,
 	firstbootconfigMapName string,
 	vmwareSecretRef string,
 	openstackSecretRef string,
-	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arrayCredsSecretRef string,
 ) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
@@ -1097,17 +1096,6 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 			Name:  "VMWARE_MACHINE_OBJECT_NAME",
 			Value: vmk8sname,
 		},
-		{
-			Name:  "USE_FLAVORLESS",
-			Value: strconv.FormatBool(migrationtemplate.Spec.UseFlavorless),
-		},
-	}
-
-	if migrationtemplate.Spec.UseFlavorless {
-		envVars = append(envVars, corev1.EnvVar{
-			Name:  "FLAVORLESS_FLAVOR_ID",
-			Value: vmMachine.Spec.TargetFlavorID,
-		})
 	}
 
 	// Get vjailbreak settings for pod resource configuration
@@ -1373,7 +1361,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 			return nil, err
 		}
 	} else if err == nil {
-		if err = r.updateMigrationConfigMap(ctx, configMap, migrationobj, configMapName); err != nil {
+		if err = r.updateMigrationConfigMap(ctx, configMap, migrationplan, migrationobj, vmMachine, configMapName); err != nil {
 			return nil, err
 		}
 	}
@@ -1431,6 +1419,10 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 	}
 
 	if err := r.setImageMetadataFromProfiles(ctx, configMapData, migrationplan, migrationobj, vmMachine, migrationtemplate); err != nil {
+		return nil, err
+	}
+
+	if err := setTagsAndCustomMetadata(configMapData, migrationplan, migrationobj, vmMachine); err != nil {
 		return nil, err
 	}
 
@@ -1537,6 +1529,10 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 	virtiodrivers string,
 	openstacknws, openstackports, openstackvolumetypes []string,
 ) map[string]string {
+	removeVMwareTools := true
+	if migrationplan.Spec.AdvancedOptions.RemoveVMwareTools != nil {
+		removeVMwareTools = *migrationplan.Spec.AdvancedOptions.RemoveVMwareTools
+	}
 	return map[string]string{
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
@@ -1560,7 +1556,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"PERIODIC_SYNC_INTERVAL":            migrationplan.Spec.AdvancedOptions.PeriodicSyncInterval,
 		"PERIODIC_SYNC_ENABLED":             strconv.FormatBool(migrationplan.Spec.AdvancedOptions.PeriodicSyncEnabled),
 		"NETWORK_PERSISTENCE":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.NetworkPersistence),
-		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(migrationplan.Spec.AdvancedOptions.RemoveVMwareTools),
+		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(removeVMwareTools),
 		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
 	}
@@ -1667,6 +1663,10 @@ func (r *MigrationPlanReconciler) setImageMetadataFromProfiles(ctx context.Conte
 	if len(profileNames) == 0 {
 		return nil
 	}
+	r.ctxlog.Info("Resolving VolumeImageProfiles for migration",
+		"migration", migrationobj.Name,
+		"vm", vmMachine.Name,
+		"requestedProfiles", profileNames)
 
 	// Prefer the migration template's override when set, otherwise fall back to detected OS family.
 	effectiveOSFamily := strings.TrimSpace(vmMachine.Spec.VMInfo.OSFamily)
@@ -1739,6 +1739,11 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 				"vmOSFamily", osFamily)
 			continue
 		}
+		r.ctxlog.Info("Applying VolumeImageProfile",
+			"profile", profile.Name,
+			"profileOSFamily", profileOS,
+			"vmOSFamily", osFamily,
+			"properties", profile.Spec.Properties)
 		for k, v := range profile.Spec.Properties {
 			if prev, exists := merged[k]; exists && prev != v {
 				r.ctxlog.Info("VolumeImageProfile key conflict; later profile wins",
@@ -1752,11 +1757,54 @@ func (r *MigrationPlanReconciler) resolveImageProfiles(ctx context.Context,
 			contributedBy[k] = profile.Name
 		}
 	}
+	if len(merged) > 0 {
+		r.ctxlog.Info("Resolved VolumeImageProfile metadata",
+			"requestedProfiles", profileNames,
+			"vmOSFamily", osFamily,
+			"mergedMetadata", merged,
+			"contributedBy", contributedBy)
+	}
 	return merged, nil
 }
 
+// setTagsAndCustomMetadata writes the preserve-source-tags toggle, the exact resolved
+// source tag/attribute metadata, and the plan's custom metadata into the migration
+// ConfigMap so the v2v-helper can apply them as instance metadata on the target VM.
+func setTagsAndCustomMetadata(configMapData map[string]string,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+) error {
+	configMapData["PRESERVE_SOURCE_TAGS"] = strconv.FormatBool(migrationobj.Spec.PreserveSourceTags)
+	delete(configMapData, "SOURCE_TAGS_METADATA")
+	delete(configMapData, "CUSTOM_METADATA")
+
+	if migrationobj.Spec.PreserveSourceTags {
+		sourceMetadata := utils.BuildSourceTagsMetadata(vmMachine.Spec.VMInfo.Tags, vmMachine.Spec.VMInfo.CustomAttributes)
+		if len(sourceMetadata) > 0 {
+			payload, err := json.Marshal(sourceMetadata)
+			if err != nil {
+				return errors.Wrap(err, "failed to marshal source tags metadata")
+			}
+			configMapData["SOURCE_TAGS_METADATA"] = string(payload)
+		}
+	}
+
+	if len(migrationplan.Spec.CustomMetadata) > 0 {
+		payload, err := json.Marshal(migrationplan.Spec.CustomMetadata)
+		if err != nil {
+			return errors.Wrap(err, "failed to marshal custom metadata")
+		}
+		configMapData["CUSTOM_METADATA"] = string(payload)
+	}
+	return nil
+}
+
 // updateMigrationConfigMap updates the mutable fields of an existing migration ConfigMap.
-func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, configMap *corev1.ConfigMap, migrationobj *vjailbreakv1alpha1.Migration, configMapName string) error {
+func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, configMap *corev1.ConfigMap,
+	migrationplan *vjailbreakv1alpha1.MigrationPlan, migrationobj *vjailbreakv1alpha1.Migration,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine, configMapName string,
+) error {
 	if migrationobj.Spec.NetworkOverrides != "" {
 		configMap.Data["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	} else {
@@ -1770,6 +1818,9 @@ func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, 
 		configMap.Data["IMAGE_METADATA"] = string(payload)
 	} else {
 		delete(configMap.Data, "IMAGE_METADATA")
+	}
+	if err := setTagsAndCustomMetadata(configMap.Data, migrationplan, migrationobj, vmMachine); err != nil {
+		return err
 	}
 	if err := r.Update(ctx, configMap); err != nil {
 		r.ctxlog.Error(err, fmt.Sprintf("Failed to update ConfigMap '%s'", configMapName))
@@ -2003,32 +2054,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	proxyVM *vjailbreakv1alpha1.ProxyVM,
 ) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
-	var (
-		fbcm                 *corev1.ConfigMap
-		baseFlavor           *flavors.Flavor
-		hotplugFlavorMissing = false
-	)
-
-	// For flavorless migrations, check hotplug base flavor availability
-	if migrationtemplate.Spec.UseFlavorless {
-		ctxlog.Info("Flavorless migration detected, attempting to auto-discover base flavor.")
-
-		osClients, err := utils.GetOpenStackClients(ctx, r.Client, openstackcreds)
-		if err != nil {
-			return errors.Wrap(err, "failed to get OpenStack clients for flavor discovery")
-		}
-
-		baseFlavor, err = utils.FindHotplugBaseFlavor(osClients.ComputeClient)
-		if err != nil {
-			ctxlog.Error(err, "Failed to discover hotplug base flavor")
-			if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, "Failed to discover base flavor for flavorless migration"); updateErr != nil {
-				ctxlog.Error(updateErr, "Failed to update migration plan status after flavor discovery failure")
-			}
-			hotplugFlavorMissing = true
-		} else {
-			ctxlog.Info("Successfully discovered base flavor", "flavorName", baseFlavor.Name, "flavorID", baseFlavor.ID)
-		}
-	}
+	var fbcm *corev1.ConfigMap
 
 	vmKeyForMachine := make(map[string]string)
 	for _, group := range migrationplan.Spec.VirtualMachines {
@@ -2055,17 +2081,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm = vmMachineObj.Spec.VMInfo.Name
 		}
 
-		if migrationtemplate.Spec.UseFlavorless && !hotplugFlavorMissing {
-			if vmMachineObj.Spec.TargetFlavorID != baseFlavor.ID {
-				patch := client.MergeFrom(vmMachineObj.DeepCopy())
-				vmMachineObj.Spec.TargetFlavorID = baseFlavor.ID
-				if err := r.Patch(ctx, vmMachineObj, patch); err != nil {
-					return errors.Wrap(err, "failed to automatically patch VMwareMachine with discovered base flavor ID")
-				}
-				ctxlog.Info("Patched VMwareMachine with base flavor ID", "vmwareMachine", vmMachineObj.Name, "flavorID", baseFlavor.ID)
-			}
-		}
-
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
@@ -2081,13 +2096,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 
-		if migrationtemplate.Spec.UseFlavorless && hotplugFlavorMissing {
-			ctxlog.Info("Marking migration as Failed due to missing hotplug base flavor", "vm", vm)
-			if err := r.markMigrationFailed(ctx, migrationobj, "Failed to discover base flavor for flavorless migration"); err != nil {
-				ctxlog.Error(err, "Failed to mark migration as Failed", "vm", vm)
-			}
-			continue
-		}
 		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
@@ -2108,13 +2116,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		err = r.CreateJob(ctx,
 			migrationplan,
-			migrationtemplate,
 			migrationobj,
 			vm,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
-			vmMachineObj,
 			arraycredsSecretRef)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
@@ -2128,9 +2134,6 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		}
 	}
 
-	if hotplugFlavorMissing {
-		return nil
-	}
 	return nil
 }
 
@@ -2585,16 +2588,4 @@ func (r *MigrationPlanReconciler) markMigrationValidationFailed(ctx context.Cont
 	if err := r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed, condition, vmName); err != nil {
 		r.ctxlog.Error(err, "Failed to mark migration as ValidationFailed", "vm", vmName)
 	}
-}
-
-// markMigrationFailed updates a Migration status to Failed
-func (r *MigrationPlanReconciler) markMigrationFailed(ctx context.Context, migrationObj *vjailbreakv1alpha1.Migration, message string) error {
-	condition := corev1.PodCondition{
-		Type:               "Failed",
-		Status:             corev1.ConditionTrue,
-		Reason:             "MigrationFailed",
-		Message:            message,
-		LastTransitionTime: metav1.Now(),
-	}
-	return r.updateMigrationPhaseWithRetry(ctx, migrationObj, vjailbreakv1alpha1.VMMigrationPhaseFailed, condition, migrationObj.Name)
 }

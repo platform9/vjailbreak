@@ -1,4 +1,10 @@
-export type ProxyVMValidationStatus = 'Pending' | 'Verifying' | 'Ready' | 'VerificationFailed'
+export type ProxyVMValidationStatus =
+  | 'Deploying'
+  | 'DeployFailed'
+  | 'Pending'
+  | 'Verifying'
+  | 'Ready'
+  | 'VerificationFailed'
 
 export interface ProxyVMSpec {
   vmName: string
@@ -8,6 +14,15 @@ export interface ProxyVMSpec {
   sshKeySecretRef?: {
     name: string
   }
+  sshKeyPairRef?: {
+    name: string
+  }
+}
+
+export interface ProxyVMComponentCheck {
+  name: string
+  present: boolean
+  message?: string
 }
 
 export interface ProxyVMStatus {
@@ -15,7 +30,7 @@ export interface ProxyVMStatus {
   validationMessage?: string
   ipAddress?: string
   attachedDiskCount?: number
-  componentsVerified?: string[]
+  componentsVerified?: ProxyVMComponentCheck[]
   lastValidationTime?: string
 }
 

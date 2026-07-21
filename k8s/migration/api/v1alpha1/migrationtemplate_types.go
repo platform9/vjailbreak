@@ -68,9 +68,6 @@ type MigrationTemplateSpec struct {
 	Destination MigrationTemplateDestination `json:"destination"`
 	// TargetPCDClusterName is the name of the PCD cluster where the virtual machine will be migrated
 	TargetPCDClusterName string `json:"targetPCDClusterName,omitempty"`
-	// UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-	// +optional
-	UseFlavorless bool `json:"useFlavorless,omitempty"`
 	// UseGPUFlavor indicates if the migration should filter and use GPU-enabled flavors.
 	// +optional
 	UseGPUFlavor bool `json:"useGPUFlavor,omitempty"`

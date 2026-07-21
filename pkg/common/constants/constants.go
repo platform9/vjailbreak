@@ -740,6 +740,8 @@ const (
 	HotAddPortRangeMax = 11808
 
 	// ProxyVM validation statuses
+	ProxyVMStatusDeploying          = "Deploying"
+	ProxyVMStatusDeployFailed       = "DeployFailed"
 	ProxyVMStatusPending            = "Pending"
 	ProxyVMStatusVerifying          = "Verifying"
 	ProxyVMStatusReady              = "Ready"
@@ -756,9 +758,18 @@ const (
 
 	// ProxyVMFinalizer is the finalizer for ProxyVM resources
 	ProxyVMFinalizer = "proxyvm.k8s.pf9.io/finalizer" //nolint:gosec // not a password string
+
+	// Normalised OS distro constants used for auto-install logic.
+	ProxyVMOSDistroDebian = "debian"
+	ProxyVMOSDistroAlpine = "alpine"
+
+	ProxyVMOVAURLKey     = "PROXY_VM_OVA_URL"
+	ProxyVMOVAURLDefault = "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+	ProxyVMOVADir        = "/home/ubuntu/proxy-vm-template"
+	ProxyVMOVAFileName   = "ha-proxy-vm.ova"
 )
 
 var (
 	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
-	ProxyVMRequiredComponents = []string{"qemu-nbd", "sshd"}
+	ProxyVMRequiredComponents = []string{"qemu-nbd"}
 )

@@ -1,3 +1,4 @@
+import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 export interface GetMigrationTemplatesList {
   apiVersion: string
   items: MigrationTemplate[]
@@ -38,7 +39,11 @@ export interface MigrationTemplateSpec {
   source: Source
   storageMapping: string
   targetPCDClusterName?: string
-  useFlavorless?: boolean
+  useGPUFlavor?: boolean
+  storageCopyMethod?: string
+  arrayCredsMapping?: string
+  proxyVMRef?: { name: string }
+  osFamily?: string
 }
 
 export interface Destination {
@@ -47,6 +52,7 @@ export interface Destination {
 
 export interface Source {
   vmwareRef: string
+  datacenter?: string
 }
 
 export interface MigrationTemplateStatus {
@@ -73,7 +79,7 @@ export interface VmData {
   esxHost?: string
   ipAddress?: string
   targetFlavorId?: string
-  disks?: string[]
+  disks?: VMwareDiskEntry[]
   labels?: { [key: string]: string }
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]
@@ -81,6 +87,10 @@ export interface VmData {
   preserveIp?: Record<number, boolean>
   preserveMac?: Record<number, boolean>
   hasSharedRdm?: boolean
+  // vSphere tag category name -> comma-separated tag names
+  tags?: Record<string, string>
+  // vSphere custom attribute name -> value
+  customAttributes?: Record<string, string>
 }
 
 export interface VmNetworkInterface {

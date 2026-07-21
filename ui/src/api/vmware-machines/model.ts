@@ -1,7 +1,16 @@
+export interface VMwareDisk {
+  name?: string
+  capacityGB?: number
+  datastore?: string
+  datastoreId?: string
+}
+
+export type VMwareDiskEntry = string | VMwareDisk
+
 export interface VMwareVM {
   cpu: number
   datastores: string[]
-  disks: string[]
+  disks: VMwareDiskEntry[]
   memory: number
   name: string
   vmid?: string
@@ -14,6 +23,10 @@ export interface VMwareVM {
   rdmDisks?: string[]
   clusterName?: string
   useGPU?: boolean
+  // vSphere tag category name -> comma-separated tag names (e.g. "env" -> "production")
+  tags?: Record<string, string>
+  // vSphere custom attribute name -> value (e.g. "Owner" -> "alice@corp.com")
+  customAttributes?: Record<string, string>
 }
 
 export interface VmNetworkInterface {

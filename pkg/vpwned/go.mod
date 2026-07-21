@@ -18,6 +18,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/vmware/govmomi v0.51.0
 	go.uber.org/mock v0.5.1
+	golang.org/x/crypto v0.44.0
 	golang.org/x/mod v0.29.0
 	golang.org/x/oauth2 v0.30.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20250929231259-57b25ae835d4
@@ -48,6 +49,7 @@ require (
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/google/btree v1.1.3 // indirect

@@ -25,6 +25,7 @@ import { CUTOVER_TYPES } from '../constants'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import type { AmplitudeEventName, EventProperties } from 'src/types/amplitude'
 import type { VM, ESXHost, SelectedMigrationOptionsType, RollingFormParams } from '../types'
+import { customMetadataToRecord } from '../utils/metadataUtils'
 import type { SourceDataItem, PcdDataItem } from './useClusterData'
 import type { ErrorContext } from 'src/services/errorReporting'
 
@@ -124,7 +125,7 @@ export function useRollingFormSubmit({
       }
 
       if (storageCopyMethod === 'HotAdd' && !params.proxyVMRef) {
-        setStorageMappingError('Please select a Proxy VM to use for Hot-Add data copy')
+        setStorageMappingError('Please select a vJailbreak Proxy VM to use for Accelerated Copy data copy')
         setSubmitting(false)
         return
       }
@@ -350,7 +351,11 @@ export function useRollingFormSubmit({
             })
         },
         migrationTemplate: migrationTemplateResponse.metadata.name,
-        namespace: VJAILBREAK_DEFAULT_NAMESPACE
+        namespace: VJAILBREAK_DEFAULT_NAMESPACE,
+        preserveSourceTags: Boolean(params.preserveSourceTags),
+        ...(customMetadataToRecord(params.customMetadata) && {
+          customMetadata: customMetadataToRecord(params.customMetadata)
+        })
       })
 
       await postRollingMigrationPlan(migrationPlanJson, VJAILBREAK_DEFAULT_NAMESPACE)

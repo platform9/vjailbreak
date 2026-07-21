@@ -1,4 +1,5 @@
 import { Box, IconButton, Tooltip, Typography, Menu, MenuItem } from '@mui/material'
+import { keyframes } from '@mui/material/styles'
 import { GridToolbarQuickFilter } from '@mui/x-data-grid'
 import {
   RefreshRounded,
@@ -8,10 +9,16 @@ import {
 } from '@mui/icons-material'
 import { useState } from 'react'
 
+const spinAnimation = keyframes`
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+`
+
 interface CustomSearchToolbarProps {
   title?: string
   onRefresh?: () => void
   disableRefresh?: boolean
+  isRefreshing?: boolean
   placeholder?: string
   maxSearchWidth?: number | string
   onStatusFilterChange?: (filter: string) => void
@@ -25,6 +32,7 @@ const CustomSearchToolbar = ({
   title,
   onRefresh,
   disableRefresh = false,
+  isRefreshing = false,
   placeholder = 'Search',
   maxSearchWidth = 360,
   onStatusFilterChange,
@@ -84,10 +92,12 @@ const CustomSearchToolbar = ({
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {onRefresh && (
-            <Tooltip title="Refresh">
+            <Tooltip title={isRefreshing ? 'Revalidating VMware credentials...' : 'Refresh'}>
               <span>
-                <IconButton onClick={onRefresh} disabled={disableRefresh} size="small">
-                  <RefreshRounded />
+                <IconButton data-testid="vm-list-refresh-button" onClick={onRefresh} disabled={disableRefresh || isRefreshing} size="small">
+                  <RefreshRounded
+                    sx={isRefreshing ? { animation: `${spinAnimation} 1s linear infinite` } : undefined}
+                  />
                 </IconButton>
               </span>
             </Tooltip>

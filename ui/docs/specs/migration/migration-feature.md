@@ -2,7 +2,7 @@
 
 **Feature path**: `src/features/migration/`  
 **Generated**: 2026-05-20  
-**Updated**: 2026-05-29 (HotAdd storage mapping, powered-on VM filter, validation fixes)  
+**Updated**: 2026-06-09 (unified logs icons, migration name consistency between logs drawer and details)  
 **Coverage**: 73 files — api, components, context, hooks, pages, steps, utils
 
 ---
@@ -126,7 +126,7 @@ src/features/migration/
 │   │   └── index.ts            — Cell exports
 │   ├── BaseLogsDrawer.tsx      — Reusable log viewer (search, filter, copy, download)
 │   ├── BulkIPEditDialog.tsx    — Bulk IP + preserve IP/MAC dialog
-│   ├── ControllerLogsDrawer.tsx — Controller pod logs drawer
+│   ├── ControllerLogsDrawer.tsx — Controller pod logs drawer (app-bar `ListAlt` icon, same as pod logs)
 │   ├── FlavorAssignmentDialog.tsx — Bulk flavor assignment dialog
 │   ├── HostConfigAssignmentDialog.tsx — Bulk host config assignment dialog
 │   ├── LogLine.tsx             — Syntax-highlighted log line renderer
@@ -136,7 +136,7 @@ src/features/migration/
 │   ├── MigrationsTable.tsx     — Main DataGrid for migration list
 │   ├── MissingInterfaceIpWarningAlert.tsx — Alert for VMs with missing IPs
 │   ├── missingInterfaceIpWarnings.ts — Logic to detect missing IP warnings
-│   ├── PodLogsDrawer.tsx       — Pod logs with download bundle support
+│   ├── PodLogsDrawer.tsx       — Pod logs with download bundle support (header subtitle = migration `spec.vmName`)
 │   ├── RdmDiskConfigurationPanel.tsx — RDM disk → Cinder backend config
 │   ├── ResourceMappingTable.tsx — Read-only mapping table with delete
 │   ├── ResourceMappingTableNew.tsx — RHF-integrated mapping table
@@ -407,6 +407,8 @@ Migration monitoring
 | `selectedPod` | `object \| null` | `null` |
 | `bulkCutoverDialogOpen` | `boolean` | `false` |
 
+**`selectedPod` shape**: `{ name, namespace, migrationName?, migrationPhase?, vmName? }`. `vmName` carries the migration's `spec.vmName` and is passed to `PodLogsDrawer` so the drawer header shows the same name as the Migration Details modal (rather than a name derived from the pod/migration object name).
+
 ---
 
 ### VmsSelectionStep (`steps/VmsSelectionStep.tsx`)
@@ -499,6 +501,22 @@ Migration monitoring
 **Search**: Powered by `fuse.js` (fuzzy search across filtered logs).
 
 **Log Levels**: ALL, ERROR, WARN, INFO, DEBUG
+
+---
+
+### PodLogsDrawer (`components/PodLogsDrawer.tsx`)
+
+**Purpose**: Migration pod log viewer (wraps `BaseLogsDrawer`) with combined download bundle.
+
+**Header subtitle**: Prefers the `vmName` prop (the migration's `spec.vmName`, passed from `MigrationsTable`) so it matches the Migration Details modal header. Only when `vmName` is absent does it fall back to deriving a name by stripping `migration-`/`v2v-helper-` prefixes and trailing hash suffixes from `migrationName`/`podName`.
+
+**Props**: `open`, `onClose`, `podName`, `namespace`, `migrationName?`, `migrationPhase?`, `vmName?`.
+
+---
+
+### ControllerLogsDrawer (`components/ControllerLogsDrawer.tsx`)
+
+**Purpose**: Controller-manager pod logs (wraps `BaseLogsDrawer`), opened from the app-bar button. Uses the `ListAlt` icon — the same icon as the per-migration pod-logs button — so both log entry points are visually consistent.
 
 ---
 
@@ -890,7 +908,8 @@ All step completion flags, error flags, and section nav items are computed via `
 
 ### Flow 9 — View Pod Logs
 
-1. User clicks log icon on migration row → `PodLogsDrawer` opens
+1. User clicks the log (`ListAlt`) icon on migration row → `PodLogsDrawer` opens
+   - Drawer header shows the migration's `spec.vmName` — the same name as the Migration Details modal
 2. Logs stream via `useDirectPodLogs` hook
 3. User can search, filter by level, pause stream
 4. User clicks Download → downloads combined bundle:
@@ -941,7 +960,7 @@ All step completion flags, error flags, and section nav items are computed via `
 
 ### Feature Flags and Conditional Behavior
 
-- `isPCD` flag (derived from OpenstackCreds) enables GPU and flavorless options in MigrationOptionsAlt
+- `isPCD` flag (derived from OpenstackCreds) enables the GPU flavour option in MigrationOptionsAlt. Hotplug (flavorless) provisioning has no toggle: assigning a hotplug base flavor (0 vCPU, 0 RAM) to a VM is the sole signal, and the v2v-helper infers it from the flavor itself.
 - `storageCopyMethod === 'StorageAcceleratedCopy'` hides data copy + cutover scheduling
 - `storageCopyMethod === 'HotAdd'` forces cold copy, disables hot/mock, shows ProxyVM selector + storage mapping table in Step 3; submit POSTs `/storagemappings` and sets both `proxyVMRef` and `storageMapping` on template
 - `hasL2Network` disables security groups and fallback to DHCP

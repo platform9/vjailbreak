@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
@@ -67,7 +69,6 @@ type Migrate struct {
 	SecurityGroups          []string
 	ServerGroup             string
 	RDMDisks                []string
-	UseFlavorless           bool
 	TenantName              string
 	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
@@ -94,6 +95,9 @@ type Migrate struct {
 	NetworkOverrides  []NICOverride
 	isSimpleNetwork   bool
 	ImageMetadata     map[string]string
+	// TargetMetadata is the merged instance metadata (preserved source tags/attributes
+	// plus user-entered custom metadata) applied to the target VM at create time.
+	TargetMetadata map[string]string
 }
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
@@ -292,6 +296,108 @@ func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 	return nil
 }
 
+// DetachAllVolumesWithCleanup is like DetachAllVolumes but handles the case where
+// a volume is attached to a foreign server (e.g. an orphaned target VM created by
+// a timed-out CreateTargetInstance call). Boot volumes cannot be hot-detached from
+// a running VM, so the foreign server is deleted first, then WaitForVolume polls
+// until Cinder reports the volume available.
+func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo vm.VMInfo) error {
+	openstackops := migobj.Openstackclients
+
+	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	if err != nil {
+		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
+	}
+
+	deletedServers := map[string]bool{}
+
+	for _, vmdisk := range vminfo.VMDisks {
+		if vmdisk.OpenstackVol == nil {
+			migobj.logMessage(fmt.Sprintf("Skipping detach for disk %s: no OpenStack volume was created", vmdisk.Name))
+			continue
+		}
+
+		volume, err := openstackops.GetVolume(ctx, vmdisk.OpenstackVol.ID)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get volume state for disk %s", vmdisk.Name)
+		}
+
+		if len(volume.Attachments) == 0 {
+			migobj.logMessage(fmt.Sprintf("Volume %s is already detached, skipping", vmdisk.Name))
+			continue
+		}
+
+		attachedServerID := volume.Attachments[0].ServerID
+
+		if attachedServerID == vjailbreakUUID {
+			migobj.logMessage(fmt.Sprintf("Detaching volume %s from vJailbreak VM", vmdisk.Name))
+			if err := openstackops.DetachVolumeFromVM(ctx, vmdisk.OpenstackVol.ID); err != nil && !strings.Contains(err.Error(), "is not attached to volume") {
+				return errors.Wrap(err, "failed to detach volume from vJailbreak VM")
+			}
+		} else {
+			if !deletedServers[attachedServerID] {
+				migobj.logMessage(fmt.Sprintf("Volume %s is attached to orphaned server %s, deleting server", vmdisk.Name, attachedServerID))
+				if err := openstackops.DeleteServer(ctx, attachedServerID); err != nil {
+					return errors.Wrapf(err, "failed to delete orphaned server %s", attachedServerID)
+				}
+				deletedServers[attachedServerID] = true
+			}
+		}
+
+		if err := openstackops.WaitForVolume(ctx, vmdisk.OpenstackVol.ID); err != nil {
+			return errors.Wrapf(err, "failed to wait for volume %s to become available", vmdisk.Name)
+		}
+		migobj.logMessage(fmt.Sprintf("Volume %s detached from VM", vmdisk.Name))
+	}
+
+	time.Sleep(1 * time.Second)
+	return nil
+}
+
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) error {
+	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	if err != nil {
+		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
+	}
+
+	var bootDisk *vm.VMDisk
+	for i := range vminfo.VMDisks {
+		if vminfo.VMDisks[i].Boot {
+			bootDisk = &vminfo.VMDisks[i]
+			break
+		}
+	}
+	if bootDisk == nil || bootDisk.OpenstackVol == nil {
+		return fmt.Errorf("no boot volume found")
+	}
+
+	volume, err := migobj.Openstackclients.GetVolume(ctx, bootDisk.OpenstackVol.ID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get boot volume")
+	}
+
+	if len(volume.Attachments) == 0 {
+		return fmt.Errorf("boot volume is not attached to any server")
+	}
+
+	attachedServerID := volume.Attachments[0].ServerID
+	if attachedServerID == vjailbreakUUID {
+		return fmt.Errorf("boot volume is still attached to vJailbreak VM")
+	}
+
+	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
+	if err != nil {
+		return errors.Wrap(err, "failed to get target VM status")
+	}
+
+	if strings.ToUpper(status) != "ACTIVE" {
+		return fmt.Errorf("target VM %s is in %s state", attachedServerID, status)
+	}
+
+	migobj.logMessage(fmt.Sprintf("Boot volume attached to active target VM %s", attachedServerID))
+	return nil
+}
+
 func (migobj *Migrate) DeleteAllVolumes(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 	for _, vmdisk := range vminfo.VMDisks {
@@ -377,6 +483,28 @@ func (migobj *Migrate) validateDiskMapping(vminfo vm.VMInfo) error {
 // This function enables CBT on the VM if it is not enabled and takes a snapshot for initializing CBT
 func (migobj *Migrate) EnableCBTWrapper() error {
 	vmops := migobj.VMops
+
+	// If it is cold migration we do not need to enable CBT.
+	if migobj.MigrationType == "cold" {
+		migobj.logMessage("Cold migration selected: skipping CBT check and enablement")
+		return nil
+	}
+
+	// CBT requires virtual hardware >= 7. Fail with a clear error if
+	// changeTrackingEnabled is unavailable, instead of panicking.
+	hwVersion, VersionErr := vmops.GetHardwareVersion()
+	if VersionErr != nil {
+		migobj.logMessage(fmt.Sprintf("Could not determine hardware version, Trying to enable CBT: %s", VersionErr))
+	}
+	migobj.logMessage(fmt.Sprintf("Hardware version detected: %s", hwVersion))
+
+	if hwVersion > 0 && hwVersion < vm.MinCBTHardwareVersion {
+		return fmt.Errorf(
+			"changed block tracking (CBT) is not supported on virtual hardware version %d "+
+				"(requires version %d or newer); please use cold migration for this VM",
+			hwVersion, vm.MinCBTHardwareVersion)
+	}
+
 	cbt, err := vmops.IsCBTEnabled()
 	if err != nil {
 		return errors.Wrap(err, "failed to check if CBT is enabled")
@@ -780,7 +908,10 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")
 	}
 
-	err = vmops.UpdateDisksInfo(&vminfo)
+	// Cold migrations never use CBT, so the snapshot disks have no change IDs
+	// (especially on legacy hardware version < 7). Only require change IDs for
+	// non-cold migrations, which rely on them for incremental copies.
+	err = vmops.UpdateDisksInfo(&vminfo, migobj.MigrationType != "cold")
 	if err != nil {
 		return vminfo, errors.Wrap(err, "failed to update disk info")
 	}
@@ -986,6 +1117,25 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to cleanup snapshot of source VM")
 		}
+
+		// If migration type is cold, check power state and exit the live replicate function.
+		if migobj.MigrationType == "cold" {
+			// Verify VM is actually powered off
+			if err := utils.DoRetryWithExponentialBackoff(ctx, func() error {
+				currState, stateErr := vmops.GetVMObj().PowerState(ctx)
+				if stateErr != nil {
+					return stateErr
+				}
+				if currState != types.VirtualMachinePowerStatePoweredOff {
+					return fmt.Errorf("Cold migration requires the VM to remain powered off. However, the VM was found in the '%s' state after power-off and snapshot copy. Aborting migration to avoid data inconsistency.", currState)
+				}
+				return nil
+			}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap); err != nil {
+				return vminfo, errors.Wrap(err, "failed to verify VM power state after power off")
+			}
+			break
+		}
+
 		err = vmops.TakeSnapshot(constants.MigrationSnapshotName)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to take snapshot of source VM")
@@ -1071,6 +1221,11 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	finalBootIndex = bootVolumeIndex
 	finalOsPath = osPath
 
+	// Nothing downstream is safe to index if there are no disks.
+	if len(vminfo.VMDisks) == 0 {
+		return -1, "", "", -1, errors.New("no disks present for VM; cannot detect boot disk")
+	}
+
 	// Run get-bootable-partition.sh script
 	var ans string
 	var cmdErr error
@@ -1097,13 +1252,22 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	}
 	migobj.logMessage(fmt.Sprintf("Bootable partition index: %d", finalBootIndex))
 
+	// device-index can resolve to the libguestfs appliance's own disk (a slot past
+	// the guest's disks). Fail the migration rather than indexing vminfo.VMDisks out
+	// of range (which would panic) or silently converting the wrong disk.
+	if finalBootIndex < 0 || finalBootIndex >= len(vminfo.VMDisks) {
+		return -1, "", "", -1, errors.Errorf(
+			"detected boot disk index %d is out of range for %d disk(s); aborting migration",
+			finalBootIndex, len(vminfo.VMDisks))
+	}
+
 	// Detect ESP for UEFI VMs
 	espDiskIndex = -1
 	if vminfo.UEFI {
 		detectedESPIndex, espErr := virtv2v.DetectESPDiskIndex(vminfo.VMDisks)
 		if espErr != nil {
 			migobj.logMessage(fmt.Sprintf("Error detecting ESP disk: %v", espErr))
-		} else if detectedESPIndex >= 0 {
+		} else if detectedESPIndex >= 0 && detectedESPIndex < len(vminfo.VMDisks) {
 			espDiskIndex = detectedESPIndex
 			migobj.logMessage(fmt.Sprintf("ESP detected on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
 		} else {
@@ -1158,7 +1322,7 @@ func (migobj *Migrate) validateLinuxOS(osRelease string) error {
 		"redhat", "red hat", "rhel", "centos", "scientific linux",
 		"oracle linux", "fedora", "sles", "sled", "opensuse",
 		"alt linux", "debian", "ubuntu", "rocky linux",
-		"suse linux enterprise server", "alma linux",
+		"suse linux enterprise server", "suse linux enterprise desktop", "alma linux",
 	}
 
 	for _, s := range supportedOS {
@@ -1178,10 +1342,23 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 	var finalBootIndex int
 	var err error
 
+	if len(vminfo.VMDisks) == 0 {
+		return -1, "", errors.New("no disks present for VM; cannot detect boot disk")
+	}
+
 	utils.PrintLog("checking for bootable volume in case of LDM")
 	finalBootIndex, err = virtv2v.GetBootableVolumeIndex(vminfo.VMDisks)
 	if err != nil {
 		return -1, "", errors.Wrap(err, "Failed to get bootable volume index")
+	}
+
+	// Same guard as the Linux path: GetBootableVolumeIndex resolves via device-index,
+	// which can point at the libguestfs appliance disk (past the guest's disks).
+	// Fail the migration rather than indexing vminfo.VMDisks out of range.
+	if finalBootIndex < 0 || finalBootIndex >= len(vminfo.VMDisks) {
+		return -1, "", errors.Errorf(
+			"detected boot disk index %d is out of range for %d disk(s); aborting migration",
+			finalBootIndex, len(vminfo.VMDisks))
 	}
 
 	osRelease, err := virtv2v.GetWindowsVersion(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path)
@@ -1305,8 +1482,9 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s)", vminfo.Name, osPath, vminfo.OSType))
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease); err != nil {
+	blockDriver := blockDriverFromMetadata(migobj.ImageMetadata)
+	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s, blockDriver=%q)", vminfo.Name, osPath, vminfo.OSType, blockDriver))
+	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, blockDriver); err != nil {
 		return errors.Wrap(err, "failed to run virt-v2v")
 	}
 	utils.PrintLog("virt-v2v conversion completed successfully")
@@ -1468,6 +1646,20 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 	return nil
 }
 
+// blockDriverFromMetadata returns the virt-v2v --block-driver value that
+// matches the hw_disk_bus / hw_scsi_model image properties the caller intends
+// to set on the migrated volume.  The two values must agree: if User wants to use
+// virtio-scsi controller (hw_disk_bus=scsi, hw_scsi_model=virtio-scsi)
+// virt-v2v must make vioscsi boot-critical; or else virtio-blk
+// (hw_disk_bus=virtio, the default) virt-v2v must make viostor boot-critical.
+// Returning "" lets virt-v2v use its built-in default (virtio-blk / viostor).
+func blockDriverFromMetadata(metadata map[string]string) string {
+	if metadata["hw_disk_bus"] == "scsi" && metadata["hw_scsi_model"] == "virtio-scsi" {
+		return "virtio-scsi"
+	}
+	return ""
+}
+
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
@@ -1535,7 +1727,8 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, migobj.ImageMetadata); err != nil {
 				return -1, errors.Wrap(err, "failed to apply VolumeImageProfile metadata to boot volume")
 			}
-			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume", len(migobj.ImageMetadata)))
+			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume %s: %v",
+				len(migobj.ImageMetadata), bootVol.ID, migobj.ImageMetadata))
 		}
 	}
 
@@ -1614,20 +1807,13 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	var flavor *flavors.Flavor
 	var err error
 
-	if migobj.UseFlavorless {
-		if migobj.TargetFlavorId == "" {
-			err = fmt.Errorf("flavorless creation is enabled, but TargetFlavorId in vmwaremachine %s is empty. Please set it to the ID of your base flavor (e.g., '0-0-x')", vminfo.Name)
-			return errors.Wrap(err, "failed to create target instance")
-		}
-		migobj.logMessage(fmt.Sprintf("Using flavorless creation with base flavor ID: %s", migobj.TargetFlavorId))
-		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
-		if err != nil {
-			return errors.Wrap(err, "failed to get the specified base flavor for flavorless creation")
-		}
-	} else if migobj.TargetFlavorId != "" {
+	if migobj.TargetFlavorId != "" {
 		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
 		if err != nil {
 			return errors.Wrap(err, "failed to get OpenStack flavor")
+		}
+		if utils.IsHotplugFlavor(flavor) {
+			migobj.logMessage(fmt.Sprintf("Assigned flavor %s is a hotplug base flavor (0 vCPU, 0 RAM); VM will be created with hotplug metadata", flavor.Name))
 		}
 	} else {
 		flavor, err = openstackops.GetClosestFlavour(ctx, vminfo.CPU, vminfo.Memory)
@@ -1657,7 +1843,11 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	utils.PrintLog(fmt.Sprintf("Fetched vjailbreak settings for VM active wait retry limit: %d, VM active wait interval seconds: %d", vjailbreakSettings.VMActiveWaitRetryLimit, vjailbreakSettings.VMActiveWaitIntervalSeconds))
 
 	// Create a new VM in OpenStack
-	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, migobj.UseFlavorless, espDiskIndex)
+	if len(migobj.TargetMetadata) > 0 {
+		vminfo.TargetMetadata = migobj.TargetMetadata
+		migobj.logMessage(fmt.Sprintf("Applying %d instance metadata entries (preserved source tags/custom metadata) to target VM", len(migobj.TargetMetadata)))
+	}
+	newVM, err := openstackops.CreateVM(ctx, flavor, networkids, portids, vminfo, migobj.TargetAvailabilityZone, securityGroupIDs, migobj.ServerGroup, *vjailbreakSettings, espDiskIndex)
 	if err != nil {
 		return errors.Wrap(err, "failed to create VM")
 	}
@@ -1962,16 +2152,25 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 		vminfo, err = migobj.CreateVolumes(ctx, vminfo)
 		if err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create volumes for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after HotAdd volume creation failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
 		}
 		for idx, vmdisk := range vminfo.VMDisks {
 			path, err := migobj.AttachVolume(ctx, vmdisk)
 			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+				}
 				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
 			}
 			vminfo.VMDisks[idx].Path = path
 		}
 		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+			}
 			return errors.Wrap(err, "failed to perform HotAdd disk copy")
 		}
 
@@ -2033,11 +2232,15 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
 	if err != nil {
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
-			// combine both errors
-			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+		if recoveryErr := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo); recoveryErr == nil {
+			migobj.logMessage(fmt.Sprintf("VM created despite CreateTargetInstance error (%v), skipping cleanup", err))
+		} else {
+			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to create target instance: %s", err), portids, vcenterSettings); cleanuperror != nil {
+				// combine both errors
+				return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+			}
+			return errors.Wrap(err, "failed to create target instance")
 		}
-		return errors.Wrap(err, "failed to create target instance")
 	}
 
 	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
@@ -2049,7 +2252,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
-	err := migobj.DetachAllVolumes(ctx, vminfo)
+	err := migobj.DetachAllVolumesWithCleanup(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))
 	}
@@ -2107,151 +2310,207 @@ func (migobj *Migrate) DeleteAllPorts(ctx context.Context, portids []string) err
 	return nil
 }
 
+// ReservePortsForVM reserves ports for every VM NIC: reuseExistingPorts if the
+// user pre-created ports, otherwise createPortsForNetworks makes new ones.
 func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo) ([]string, []string, []string, error) {
-
-	networkids := []string{}
-	ipaddresses := []string{}
-	portids := []string{}
-	openstackops := migobj.Openstackclients
-	networknames := migobj.Networknames
 	migobj.isSimpleNetwork = false
-	// Get security group IDs
-	securityGroupIDs, err := openstackops.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
+
+	securityGroupIDs, err := migobj.Openstackclients.GetSecurityGroupIDs(ctx, migobj.SecurityGroups, migobj.TenantName)
 	if err != nil {
 		return nil, nil, nil, errors.Wrap(err, "failed to resolve security group names to IDs")
 	}
 	utils.PrintLog(fmt.Sprintf("Using provided security group IDs %v", securityGroupIDs))
 
-	// Log server group
 	if migobj.ServerGroup != "" {
 		utils.PrintLog(fmt.Sprintf("Server group ID for VM placement: %s", migobj.ServerGroup))
 	}
 
-	// Create ports
 	if len(migobj.Networkports) != 0 {
-		if len(migobj.Networkports) != len(networknames) {
-			return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
+		return migobj.reuseExistingPorts(ctx)
+	}
+	return migobj.createPortsForNetworks(ctx, vminfo, securityGroupIDs)
+}
+
+// reuseExistingPorts handles the pre-created-ports flow: migobj.Networkports
+// holds one OpenStack port ID per NIC, created outside this migration.
+func (migobj *Migrate) reuseExistingPorts(ctx context.Context) ([]string, []string, []string, error) {
+	if len(migobj.Networkports) != len(migobj.Networknames) {
+		return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
+	}
+
+	networkids := []string{}
+	portids := []string{}
+	ipaddresses := []string{}
+	for _, portID := range migobj.Networkports {
+		retrPort, err := migobj.Openstackclients.GetPort(ctx, portID)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to get port")
 		}
-		for _, port := range migobj.Networkports {
-			retrPort, err := openstackops.GetPort(ctx, port)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to get port")
-			}
-			networkids = append(networkids, retrPort.NetworkID)
-			portids = append(portids, retrPort.ID)
-			for _, fixedIP := range retrPort.FixedIPs {
-				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
-			}
+		networkids = append(networkids, retrPort.NetworkID)
+		portids = append(portids, retrPort.ID)
+		for _, fixedIP := range retrPort.FixedIPs {
+			ipaddresses = append(ipaddresses, fixedIP.IPAddress)
 		}
-	} else {
-
-		for idx, networkname := range networknames {
-			// Create Port Group with the same mac address as the source VM
-			// Find the network with the given ID
-			network, err := openstackops.GetNetwork(ctx, networkname)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to get network")
-			}
-
-			if network == nil {
-				return nil, nil, nil, errors.Errorf("network not found")
-			}
-			// determine simple network
-			isSimpleNetwork, err := openstackops.GetIsSimpleNetwork(ctx, network.ID)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
-			}
-			migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
-			// Check for per-NIC overrides. Default to true (preserve everything).
-			// Only override when explicitly set — nil means "not specified, keep default".
-			preserveIP := true
-			preserveMAC := true
-			userAssignedIp := []string{}
-			for _, override := range migobj.NetworkOverrides {
-				if override.InterfaceIndex == idx {
-					if override.PreserveIP != nil {
-						preserveIP = *override.PreserveIP
-					}
-					if override.PreserveMAC != nil {
-						preserveMAC = *override.PreserveMAC
-					}
-					if override.UserAssignedIP != "" {
-						splitUserAssignedIP := strings.Split(override.UserAssignedIP, ",")
-						for _, ip := range splitUserAssignedIP {
-							trimmedIP := strings.TrimSpace(ip)
-							if trimmedIP != "" {
-								userAssignedIp = append(userAssignedIp, trimmedIP)
-							}
-						}
-					}
-					break
-				}
-			}
-			if len(userAssignedIp) > 0 && len(userAssignedIp) > 1 {
-				return nil, nil, nil, errors.Errorf("multiple user assigned IPs not supported for an interface")
-			}
-			var ippm []string
-
-			// VMware Tools detected IPs
-			if detectedIPs, ok := vminfo.IPperMac[vminfo.Mac[idx]]; ok && len(detectedIPs) > 0 {
-				for _, detectedIP := range detectedIPs {
-					ippm = append(ippm, detectedIP.IP)
-				}
-				utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", vminfo.Mac[idx], detectedIPs))
-			}
-
-			// Apply per-NIC overrides
-			mac := vminfo.Mac[idx]
-			if !preserveIP {
-				// Check if user provided a custom IP for this NIC via assignedIPsPerVM.
-				hasUserAssignedIP := false
-				if len(userAssignedIp) > 0 {
-					ippm = []string{}
-					vminfo.IPperMac[vminfo.Mac[idx]] = []vm.IpEntry{}
-					for _, ip := range userAssignedIp {
-						vminfo.IPperMac[vminfo.Mac[idx]] = append(vminfo.IPperMac[vminfo.Mac[idx]], vm.IpEntry{
-							IP:     ip,
-							Prefix: 0,
-						})
-						ippm = append(ippm, ip)
-					}
-					hasUserAssignedIP = true
-				}
-				// If so, honour it (Case 1). If not, create a port with no fixed IPs (Case 2).
-				if !hasUserAssignedIP {
-					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s — port will have no fixed IPs", idx, mac))
-					vminfo.IPperMac[mac] = []vm.IpEntry{} // empty non-nil signals "no fixed IPs" to GetCreateOpts
-				} else {
-					utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
-				}
-			}
-			if !preserveMAC {
-				utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
-				// Always copy IPs (preserved, custom, or empty-non-nil) to the "" key so
-				// GetCreateOpts uses them when no MAC is specified (OpenStack generates one).
-				vminfo.IPperMac[""] = vminfo.IPperMac[mac]
-				mac = ""
-			}
-
-			utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], ippm))
-			port, err := openstackops.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
-			if err != nil {
-				return nil, nil, nil, errors.Wrap(err, "failed to create port group")
-			}
-			addressesOfPort := []string{}
-			for _, fixedIP := range port.FixedIPs {
-				addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
-			}
-			utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
-			networkids = append(networkids, network.ID)
-			portids = append(portids, port.ID)
-			for _, fixedIP := range port.FixedIPs {
-				ipaddresses = append(ipaddresses, fixedIP.IPAddress)
-			}
-		}
-		utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
 	}
 	return networkids, portids, ipaddresses, nil
+}
+
+// createPortsForNetworks handles the create-new-ports flow: one port per
+// entry in migobj.Networknames, in NIC order.
+func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VMInfo, securityGroupIDs []string) ([]string, []string, []string, error) {
+	networkids := []string{}
+	portids := []string{}
+	ipaddresses := []string{}
+
+	for idx, networkname := range migobj.Networknames {
+		network, err := migobj.Openstackclients.GetNetwork(ctx, networkname)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to get network")
+		}
+		if network == nil {
+			return nil, nil, nil, errors.Errorf("network not found")
+		}
+
+		isSimpleNetwork, err := migobj.Openstackclients.GetIsSimpleNetwork(ctx, network.ID)
+		if err != nil {
+			return nil, nil, nil, errors.Wrap(err, "failed to check if network is L2")
+		}
+		migobj.isSimpleNetwork = migobj.isSimpleNetwork || isSimpleNetwork
+
+		override, err := resolveNICOverride(migobj.NetworkOverrides, idx)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		mac := vminfo.Mac[idx]
+		detectedIPs := logAndCollectDetectedIPs(vminfo, mac)
+		loggedIPs := applyPreserveIPOverride(vminfo, idx, mac, override, detectedIPs, migobj.FallbackToDHCP)
+		mac = applyPreserveMACOverride(vminfo, idx, mac, override.preserveMAC)
+		utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], loggedIPs))
+
+		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		networkids = append(networkids, network.ID)
+		portids = append(portids, port.ID)
+		for _, fixedIP := range port.FixedIPs {
+			ipaddresses = append(ipaddresses, fixedIP.IPAddress)
+		}
+	}
+	utils.PrintLog(fmt.Sprintf("Gateways : %v", vminfo.GatewayIP))
+	return networkids, portids, ipaddresses, nil
+}
+
+// createPort creates a single OpenStack port on network for the given
+// (possibly overridden) MAC, using vminfo.IPperMac to determine fixed IPs.
+func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string) (*ports.Port, error) {
+	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create port group")
+	}
+	addressesOfPort := []string{}
+	for _, fixedIP := range port.FixedIPs {
+		addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
+	}
+	utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
+	return port, nil
+}
+
+// nicOverride is the resolved per-NIC configuration for preserveIP/preserveMAC
+// and any user-assigned replacement IP, defaulting to "preserve everything".
+type nicOverride struct {
+	preserveIP     bool
+	preserveMAC    bool
+	userAssignedIP []string
+}
+
+// resolveNICOverride resolves the NICOverride (if any) for interface idx
+// against the "preserve everything" default; a nil field means "not set".
+func resolveNICOverride(overrides []NICOverride, idx int) (nicOverride, error) {
+	result := nicOverride{preserveIP: true, preserveMAC: true}
+
+	for _, override := range overrides {
+		if override.InterfaceIndex != idx {
+			continue
+		}
+		if override.PreserveIP != nil {
+			result.preserveIP = *override.PreserveIP
+		}
+		if override.PreserveMAC != nil {
+			result.preserveMAC = *override.PreserveMAC
+		}
+		if override.UserAssignedIP != "" {
+			for _, ip := range strings.Split(override.UserAssignedIP, ",") {
+				if trimmedIP := strings.TrimSpace(ip); trimmedIP != "" {
+					result.userAssignedIP = append(result.userAssignedIP, trimmedIP)
+				}
+			}
+		}
+		break
+	}
+
+	if len(result.userAssignedIP) > 1 {
+		return nicOverride{}, errors.Errorf("multiple user assigned IPs not supported for an interface")
+	}
+	return result, nil
+}
+
+// logAndCollectDetectedIPs logs and returns the IPs VMware Tools reported for
+// mac, or nil if none were detected.
+func logAndCollectDetectedIPs(vminfo *vm.VMInfo, mac string) []string {
+	detectedIPs := vminfo.IPperMac[mac]
+	if len(detectedIPs) == 0 {
+		return nil
+	}
+	ippm := make([]string, 0, len(detectedIPs))
+	for _, detectedIP := range detectedIPs {
+		ippm = append(ippm, detectedIP.IP)
+	}
+	utils.PrintLog(fmt.Sprintf("Detected IPs from VMware Tools for MAC %s: %v", mac, detectedIPs))
+	return ippm
+}
+
+// applyPreserveIPOverride replaces vminfo.IPperMac[mac] with the user-assigned
+// IP, or clears it, when preserveIP is false; returns the IPs for logging.
+// If no custom IP is given, fallbackToDHCP picks nil (auto-allocate) vs an
+// empty slice (no fixed IPs) for GetCreateOpts.
+func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override nicOverride, detectedIPs []string, fallbackToDHCP bool) []string {
+	if override.preserveIP {
+		return detectedIPs
+	}
+
+	if len(override.userAssignedIP) > 0 {
+		entries := make([]vm.IpEntry, 0, len(override.userAssignedIP))
+		for _, ip := range override.userAssignedIP {
+			entries = append(entries, vm.IpEntry{IP: ip, Prefix: 0})
+		}
+		vminfo.IPperMac[mac] = entries
+		utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, using user-assigned custom IP for MAC %s", idx, mac))
+		return override.userAssignedIP
+	}
+
+	if fallbackToDHCP {
+		utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s, fallbackToDHCP=true — port will auto-allocate an IP", idx, mac))
+		vminfo.IPperMac[mac] = nil
+		return detectedIPs
+	}
+
+	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveIP=false, no custom IP for MAC %s, fallbackToDHCP=false — port will have no fixed IPs", idx, mac))
+	vminfo.IPperMac[mac] = []vm.IpEntry{}
+	return detectedIPs
+}
+
+// applyPreserveMACOverride copies mac's IPs to the "" key and returns "" so
+// OpenStack generates a new MAC, when preserveMAC is false.
+func applyPreserveMACOverride(vminfo *vm.VMInfo, idx int, mac string, preserveMAC bool) string {
+	if preserveMAC {
+		return mac
+	}
+	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
+	vminfo.IPperMac[""] = vminfo.IPperMac[mac]
+	return ""
 }
 
 // LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.

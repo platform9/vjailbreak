@@ -1147,9 +1147,19 @@ spec:
                       migration plan should be synced
                     type: string
                   removeVMwareTools:
-                    description: RemoveVMwareTools instructs the migration helper
-                      to remove VMware Tools post migration
+                    default: true
+                    description: |-
+                      RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration.
+                      Defaults to true since most migrations require VMware Tools removal.
                     type: boolean
+                type: object
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -1240,6 +1250,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               securityGroups:
                 items:
                   type: string
@@ -1373,6 +1389,12 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags indicates whether the source VM's vSphere tags and custom
+                  attributes are copied to the migrated VM as instance metadata.
+                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack
@@ -1611,10 +1633,6 @@ spec:
                 description: TargetPCDClusterName is the name of the PCD cluster where
                   the virtual machine will be migrated
                 type: string
-              useFlavorless:
-                description: UseFlavorless indicates if the migration should use flavorless
-                  VM creation for PCD.
-                type: boolean
               useGPUFlavor:
                 description: UseGPUFlavor indicates if the migration should filter
                   and use GPU-enabled flavors.
@@ -2243,9 +2261,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          ProxyVM is the Schema for a registered Proxy VM used in Hot-Add data copy migrations.
-          The controller validates SSH connectivity and required components on the referenced VM.
+        description: ProxyVM is the Schema for the proxyvms API.
         properties:
           apiVersion:
             description: |-
@@ -2267,12 +2283,28 @@ spec:
           spec:
             description: ProxyVMSpec defines the desired state of ProxyVM
             properties:
+              sshKeyPairRef:
+                description: |-
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               vmName:
-                description: VMName is the display name of the Proxy VM in vCenter.
                 type: string
               vmwareCredsRef:
-                description: VMwareCredsRef references the VMwareCreds used to locate
-                  and connect to the Proxy VM.
+                description: |-
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
                 properties:
                   name:
                     default: ""
@@ -2293,27 +2325,17 @@ spec:
             description: ProxyVMStatus defines the observed state of ProxyVM
             properties:
               attachedDiskCount:
-                description: |-
-                  AttachedDiskCount is the number of source-snapshot disks currently attached
-                  to this Proxy VM across all active Hot-Add migrations. Max 60.
                 type: integer
               componentsVerified:
-                description: ComponentsVerified lists each required component and
-                  whether it was found.
                 items:
                   description: ProxyVMComponentCheck records whether a required component
                     was found on the Proxy VM.
                   properties:
                     message:
-                      description: Message provides detail for missing components.
                       type: string
                     name:
-                      description: Name is the component name (e.g. "lsblk", "qemu-nbd",
-                        "sshd").
                       type: string
                     present:
-                      description: Present indicates whether the component was found
-                        in PATH.
                       type: boolean
                   required:
                   - name
@@ -2321,21 +2343,13 @@ spec:
                   type: object
                 type: array
               ipAddress:
-                description: IPAddress is the IP address discovered from vCenter guest
-                  info.
                 type: string
               lastValidationTime:
-                description: LastValidationTime records when the last verification
-                  completed.
                 format: date-time
                 type: string
               validationMessage:
-                description: ValidationMessage contains a human-readable summary of
-                  the last validation result.
                 type: string
               validationStatus:
-                description: 'ValidationStatus is one of: Pending, Verifying, Ready,
-                  VerificationFailed.'
                 type: string
             type: object
         type: object
@@ -2585,8 +2599,10 @@ spec:
                       migration plan should be synced
                     type: string
                   removeVMwareTools:
-                    description: RemoveVMwareTools instructs the migration helper
-                      to remove VMware Tools post migration
+                    default: true
+                    description: |-
+                      RemoveVMwareTools instructs the migration helper to remove VMware Tools post migration.
+                      Defaults to true since most migrations require VMware Tools removal.
                     type: boolean
                 type: object
               bmConfigRef:
@@ -2684,6 +2700,14 @@ spec:
                   - vmSequence
                   type: object
                 type: array
+              customMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  CustomMetadata is a map of additional key-value pairs applied as instance
+                  metadata to every migrated VM in the plan. Keys here override colliding
+                  keys derived from preserved source tags.
+                type: object
               firstBootScript:
                 default: echo "Add your startup script here!"
                 type: string
@@ -2741,6 +2765,12 @@ spec:
                   suffix:
                     type: string
                 type: object
+              preserveSourceTags:
+                default: false
+                description: |-
+                  PreserveSourceTags copies each source VM's vSphere tags and custom attributes
+                  to the migrated VM as instance metadata. Applies to all VMs in the plan.
+                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -3028,6 +3058,12 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackServerGroup:
+                description: |-
+                  OpenstackServerGroup is the ID of the OpenStack server group used for VM placement scheduling.
+                  When set, the agent VM is placed according to the server group's policy.
+                  If empty, default OpenStack scheduling applies.
+                type: string
               openstackVolumeType:
                 description: |-
                   OpenstackVolumeType is the volume type for the root disk of the VM
@@ -3420,6 +3456,12 @@ spec:
                   cpu:
                     description: CPU is the number of CPUs in the virtual machine
                     type: integer
+                  customAttributes:
+                    additionalProperties:
+                      type: string
+                    description: CustomAttributes maps vSphere custom attribute names
+                      to their values for the VM
+                    type: object
                   datastores:
                     description: Datastores is the list of datastores for the virtual
                       machine
@@ -3527,6 +3569,13 @@ spec:
                     items:
                       type: string
                     type: array
+                  tags:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      Tags maps vSphere tag category names to a comma-separated list of the
+                      tag names attached to the VM in that category (e.g. "env" -> "production")
+                    type: object
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
@@ -4912,6 +4961,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
+            optional: true
         image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
@@ -4999,13 +5049,26 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
       containers:
-      - envFrom:
+      - env:
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: unix:path=/run/dbus/system_bus_socket
+        envFrom:
         - configMapRef:
             name: pf9-env
+            optional: true
         image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
@@ -5013,6 +5076,14 @@ spec:
         - containerPort: 3001
           protocol: TCP
         resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - DAC_OVERRIDE
+            drop:
+            - ALL
+          runAsUser: 0
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -5021,6 +5092,18 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+        - mountPath: /run/dbus/system_bus_socket
+          name: dbus-socket
+        - mountPath: /etc/systemd/timesyncd.conf.d
+          name: timesyncd-conf-dir
+        - mountPath: /usr/share/zoneinfo
+          name: host-zoneinfo
+          readOnly: true
+        - mountPath: /etc/pf9
+          name: pf9-config
+        - mountPath: /var/log/pf9
+          name: pf9-logs
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -5040,6 +5123,26 @@ spec:
           path: /home/ubuntu
           type: DirectoryOrCreate
         name: vddk-storage
+      - hostPath:
+          path: /run/dbus/system_bus_socket
+          type: Socket
+        name: dbus-socket
+      - hostPath:
+          path: /etc/systemd/timesyncd.conf.d
+          type: DirectoryOrCreate
+        name: timesyncd-conf-dir
+      - hostPath:
+          path: /usr/share/zoneinfo
+          type: Directory
+        name: host-zoneinfo
+      - hostPath:
+          path: /etc/pf9
+          type: Directory
+        name: pf9-config
+      - hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
+        name: pf9-logs
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -5099,21 +5202,18 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
+              optional: true
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow
-          - name: pf9-logs
-            mountPath: /var/log/pf9
-            readOnly: true
       volumes:
       - name: nginx-shadow-htpasswd
         hostPath:
           path: /etc/htpasswd
           type: FileOrCreate
-      - name: pf9-logs
-        hostPath:
-          path: /var/log/pf9
-          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
@@ -5344,3 +5444,99 @@ subjects:
 - kind: ServiceAccount
   name: ui-manager-sa
   namespace: migration-system
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vjailbreak-ai-sa
+  namespace: migration-system
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vjailbreak-ai-data
+  namespace: migration-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ai
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ai
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
+      serviceAccountName: vjailbreak-ai-sa
+      containers:
+        - name: vjailbreak-ai
+          image: quay.io/platform9/vjailbreak-ai:main
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: api-key
+                  optional: true
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: admin-key
+                  optional: true
+            - name: CHROMA_PATH
+              value: /data/chroma
+            - name: CONTEXT_PATH
+              value: /data/context.md
+            - name: ALLOWED_ORIGINS
+              value: "http://vjailbreak-ui-service.migration-system.svc.cluster.local"
+          volumeMounts:
+            - name: ai-data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+      volumes:
+        - name: ai-data
+          persistentVolumeClaim:
+            claimName: vjailbreak-ai-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ai
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

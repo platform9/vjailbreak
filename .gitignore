@@ -1,3 +1,4 @@
+graphify-out/
 artifacts/*
 image_builder/deploy/*
 k8s/migration/dist/*
@@ -22,3 +23,4 @@ proto_dependencies
 ui/test-results/*
 ui/playwright-report/*
 ui/coverage/*
+graphify-out/

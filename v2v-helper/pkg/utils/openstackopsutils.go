@@ -33,6 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
@@ -468,9 +469,12 @@ func (osclient *OpenStackClients) ApplyBootVolumeImageMetadata(ctx context.Conte
 	if len(metadata) == 0 {
 		return nil
 	}
-	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s", len(metadata), volume.ID))
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		metadataJSON = []byte(fmt.Sprintf("%v", metadata))
+	}
+	PrintLog(fmt.Sprintf("OPENSTACK API: Merging %d profile image metadata key(s) onto boot volume %s: %s", len(metadata), volume.ID, string(metadataJSON)))
 	options := volumes.ImageMetadataOpts{Metadata: metadata}
-	var err error
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
 		err = volumes.SetImageMetadata(ctx, osclient.BlockStorageClient, volume.ID, options).ExtractErr()
 		if err == nil {
@@ -494,10 +498,24 @@ func (osclient *OpenStackClients) SetVolumeBootable(ctx context.Context, volume 
 			return nil
 		}
 		PrintLog(fmt.Sprintf("Transient error setting volume %s as bootable (attempt %d/%d): %s", volume.ID, i+1, constants.DeleteOperationRetryCount, err))
-		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+
+		// Cinder may have committed the change server-side even when the API
+		// call returns an error (e.g. timeout, 5xx). Verify actual state so we
+		// don't retry an operation that already succeeded.
+		current, getErr := osclient.GetVolume(ctx, volume.ID)
+		if getErr == nil && current.Bootable == "true" {
+			PrintLog(fmt.Sprintf("Volume %s is already bootable (Cinder applied the change but returned an error); treating as success", volume.ID))
+			return nil
+		}
+
+		time.Sleep(setBootableRetryInterval)
 	}
 	return fmt.Errorf("failed to set volume %s as bootable after %d attempts: %s", volume.ID, constants.DeleteOperationRetryCount, err)
 }
+
+// setBootableRetryInterval is the delay between SetVolumeBootable retry
+// attempts. Exposed as a variable so tests can set it to zero.
+var setBootableRetryInterval = time.Duration(constants.DeleteOperationRetryIntervalSeconds) * time.Second
 
 func (osclient *OpenStackClients) GetClosestFlavour(ctx context.Context, cpu int32, memory int32) (*flavors.Flavor, error) {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Getting closest flavor for %d vCPUs and %d MB RAM, authurl %s, tenant %s", cpu, memory, osclient.AuthURL, osclient.Tenant))
@@ -621,7 +639,8 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 		return nil, err
 	}
 	for _, port := range portList {
-		if port.MACAddress == mac {
+		// Neutron stores MACs lowercase; compare case-insensitively
+		if strings.EqualFold(port.MACAddress, mac) {
 			if port.DeviceID != "" {
 				return nil, fmt.Errorf("precheck failed: port %s (MAC %s) is already in use by device %s", port.ID, mac, port.DeviceID)
 			}
@@ -720,7 +739,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		// empty non-nil slice: user explicitly wants a port with no fixed IPs (preserveIP=false, no custom IP)
 		PrintLog("Creating port with no fixed IPs for mac " + mac)
 		createOpts.FixedIPs = []ports.IP{}
-	} else {
+	} else if len(network.Subnets) > 0 {
 		// nil: original VM had no IPs on this NIC — let OpenStack DHCP assign
 		PrintLog("Empty port on vcentre detected for mac " + mac)
 		subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
@@ -728,6 +747,11 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
 		gatewayIP[mac] = subnetID.GatewayIP
+	} else {
+		// nil ipEntries but the network has no subnets at all (e.g. an L2-only
+		// network that legitimately has zero subnets). There's no subnet to
+		// query or gateway to record, so just leave FixedIPs/gatewayIP unset.
+		PrintLog("Empty port with no subnets on network " + network.ID + " for mac " + mac)
 	}
 	return createOpts, nil
 }
@@ -821,21 +845,62 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 	return osclient.createPortLowLevel(ctx, createOpts)
 }
 
+// l2PortBindingProfileKey is the binding profile flag PCD expects on ports that
+// belong to an L2-only network. Downstream consumers (e.g. the PCD Veeam Proxy)
+// use it to detect that a port is on an L2 network; without it, backup/restore
+// of migrated workloads fails. See PCD docs:
+//
+//	pcdctl port create ... --binding-profile '{"l2-port": true}'
+const l2PortBindingProfileKey = "l2-port"
+
+// buildPortCreateOptions layers the OpenStack port extensions required by
+// vJailbreak onto the base create options:
+//   - L2-only networks get the {"l2-port": true} binding profile so PCD treats
+//     the port as belonging to an L2 network.
+//   - Ports with no security groups get port security disabled.
+//
+// Both extensions implement ports.CreateOptsBuilder and compose, so they can be
+// layered together when both conditions apply. Kept as a pure function so the
+// option-building logic can be unit tested without an OpenStack client.
+func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool) ports.CreateOptsBuilder {
+	var optsBuilder ports.CreateOptsBuilder = createOpts
+
+	// For L2-only networks, attach the binding profile expected by PCD.
+	if isL2Network {
+		optsBuilder = portsbinding.CreateOptsExt{
+			CreateOptsBuilder: optsBuilder,
+			Profile:           map[string]any{l2PortBindingProfileKey: true},
+		}
+	}
+
+	// When no security groups are selected, disable port security.
+	if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
+		disabled := false
+		optsBuilder = portsecurity.PortCreateOptsExt{
+			CreateOptsBuilder:   optsBuilder,
+			PortSecurityEnabled: &disabled,
+		}
+	}
+
+	return optsBuilder
+}
+
 func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
 	var port *ports.Port
 	var err error
+
+	// Determine once (before the retry loop) whether this is an L2-only network
+	// so we can attach the required l2-port binding profile. A lookup failure is
+	// non-fatal: log it and create the port without the profile rather than
+	// failing migration outright.
+	isL2Network, l2Err := osclient.GetIsSimpleNetwork(ctx, createOpts.NetworkID)
+	if l2Err != nil {
+		return nil, fmt.Errorf("failed determine if network %s is L2: %s", createOpts.NetworkID, l2Err)
+	}
+
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
-		// When no security groups are selected, disable port security
-		if createOpts.SecurityGroups == nil || len(*createOpts.SecurityGroups) == 0 {
-			disabled := false
-			extOpts := portsecurity.PortCreateOptsExt{
-				CreateOptsBuilder:   createOpts,
-				PortSecurityEnabled: &disabled,
-			}
-			port, err = ports.Create(ctx, osclient.NetworkingClient, extOpts).Extract()
-		} else {
-			port, err = ports.Create(ctx, osclient.NetworkingClient, createOpts).Extract()
-		}
+		opts := buildPortCreateOptions(createOpts, isL2Network)
+		port, err = ports.Create(ctx, osclient.NetworkingClient, opts).Extract()
 		if err == nil {
 			return port, nil
 		}
@@ -845,7 +910,26 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	return nil, fmt.Errorf("failed to create port after %d attempts: %s", constants.DeleteOperationRetryCount, err)
 }
 
-func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, useFlavorless bool, espDiskIndex int) (*servers.Server, error) {
+// IsHotplugFlavor reports whether the flavor is a hotplug base flavor
+// (0 vCPUs and 0 RAM). Assigning such a flavor expresses the user's intent
+// to use hotplug-based (flavorless) provisioning, so the VM is created with
+// hotplug metadata instead of fixed flavor resources.
+func IsHotplugFlavor(flavor *flavors.Flavor) bool {
+	return flavor != nil && flavor.VCPUs == 0 && flavor.RAM == 0
+}
+
+// HotplugMetadata builds the server metadata for hotplug (flavorless)
+// provisioning.
+func HotplugMetadata(cpu, memoryMB int32) map[string]string {
+	return map[string]string{
+		constants.HotplugCPUKey:       fmt.Sprintf("%d", cpu),
+		constants.HotplugMemoryKey:    fmt.Sprintf("%d", memoryMB),
+		constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", 2*cpu),
+		constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", 2*memoryMB),
+	}
+}
+
+func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.Flavor, networkIDs, portIDs []string, vminfo vm.VMInfo, availabilityZone string, securityGroups []string, serverGroupID string, vjailbreakSettings k8sutils.VjailbreakSettings, espDiskIndex int) (*servers.Server, error) {
 	uuid := ""
 	bootableDiskIndex := 0
 	for idx, disk := range vminfo.VMDisks {
@@ -874,6 +958,15 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		Networks:       openstacknws,
 		SecurityGroups: securityGroups,
 	}
+	if len(vminfo.TargetMetadata) > 0 {
+		// Preserved source tags/attributes and custom metadata. Set first so the
+		// hotplug/RDM system keys below win on any collision.
+		serverCreateOpts.Metadata = make(map[string]string, len(vminfo.TargetMetadata))
+		for key, value := range vminfo.TargetMetadata {
+			serverCreateOpts.Metadata[key] = value
+		}
+		PrintLog(fmt.Sprintf("Applying %d instance metadata entries to VM %s", len(vminfo.TargetMetadata), vminfo.Name))
+	}
 	if len(networkIDs) == 0 {
 		// Nova's "networks":"none" sentinel was added in compute API
 		// microversion 2.37. Without this header bump the request goes out at
@@ -888,13 +981,13 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			vminfo.Name,
 		))
 	}
-	if useFlavorless {
-		PrintLog(fmt.Sprintf("Using flavorless provisioning. Adding hotplug metadata: CPU=%d, Memory=%dMB", vminfo.CPU, vminfo.Memory))
-		serverCreateOpts.Metadata = map[string]string{
-			constants.HotplugCPUKey:       fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryKey:    fmt.Sprintf("%d", vminfo.Memory),
-			constants.HotplugCPUMaxKey:    fmt.Sprintf("%d", vminfo.CPU),
-			constants.HotplugMemoryMaxKey: fmt.Sprintf("%d", vminfo.Memory),
+	if IsHotplugFlavor(flavor) {
+		PrintLog(fmt.Sprintf("Hotplug base flavor assigned. Adding hotplug metadata: CPU=%d, Memory=%dMB (max 2x)", vminfo.CPU, vminfo.Memory))
+		if serverCreateOpts.Metadata == nil {
+			serverCreateOpts.Metadata = map[string]string{}
+		}
+		for key, value := range HotplugMetadata(vminfo.CPU, vminfo.Memory) {
+			serverCreateOpts.Metadata[key] = value
 		}
 	}
 
@@ -1041,6 +1134,35 @@ func (osclient *OpenStackClients) WaitUntilVMActive(ctx context.Context, vmID st
 		return false, fmt.Errorf("server is not active")
 	}
 	return true, nil
+}
+
+func (osclient *OpenStackClients) GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error) {
+	var volume *volumes.Volume
+	var err error
+	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
+		volume, err = volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
+		if err == nil {
+			return volume, nil
+		}
+		PrintLog(fmt.Sprintf("Transient error getting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
+		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
+	}
+	return nil, fmt.Errorf("failed to get volume %s after %d attempts: %s", volumeID, constants.DeleteOperationRetryCount, err)
+}
+
+func (osclient *OpenStackClients) GetServerStatus(ctx context.Context, serverID string) (string, error) {
+	server, err := servers.Get(ctx, osclient.ComputeClient, serverID).Extract()
+	if err != nil {
+		return "", fmt.Errorf("failed to get server %s: %s", serverID, err)
+	}
+	return server.Status, nil
+}
+
+func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+	return DoRetryWithExponentialBackoff(ctx, func() error {
+		return servers.Delete(ctx, osclient.ComputeClient, serverID).ExtractErr()
+	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder

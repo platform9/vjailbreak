@@ -8,7 +8,7 @@ $ScriptRoot = "C:\firstboot"
 $LogFile = Join-Path $ScriptRoot "Firstboot-Scheduler.log"
 $TaskName = "FirstbootSchedulerPostReboot"
 $StateFilePath = Join-Path $ScriptRoot "Firstboot-Scheduler.state"
-$SchedulerScriptPath = Join-Path $ScriptRoot "Firstboot-Scheduler.ps1"
+$SchedulerScriptPath = Join-Path $ScriptRoot "0-Firstboot-Scheduler.ps1"
 $failedScriptNames = New-Object 'System.Collections.Generic.List[string]'
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")

@@ -1,1 +1,0 @@
-export { fetchMigrationResourceBundle } from './buildMigrationResourceBundle'

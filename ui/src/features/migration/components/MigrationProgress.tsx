@@ -27,27 +27,32 @@ export default function MigrationProgress({ progressText, phase, syncWarningMess
   const statusIcon = useMemo(() => {
     // Show warning icon if sync is in warning state (non-empty warning message)
     if (syncWarningMessage) {
-      return <WarningAmberIcon style={{ color: '#ed6c02' }} />
+      return <WarningAmberIcon sx={{ color: 'warning.main' }} />
     }
     if (phase === Phase.Succeeded) {
-      return <CheckCircleOutlineIcon style={{ color: 'green' }} />
+      return <CheckCircleOutlineIcon sx={{ color: 'success.main' }} />
     } else if (phase === Phase.AwaitingAdminCutOver) {
-      return <PauseCircleOutlineIcon style={{ color: '#1976d2' }} />
+      return <PauseCircleOutlineIcon sx={{ color: 'warning.main' }} />
     } else if (
       [
         Phase.Validating,
         Phase.AwaitingDataCopyStart,
         Phase.CopyingBlocks,
         Phase.CopyingChangedBlocks,
+        Phase.SnapshottingSourceVM,
+        Phase.AttachingDisksToProxy,
+        Phase.IdentifyingBlockDevices,
+        Phase.HotAddTransferInProgress,
+        Phase.HotAddCleanup,
         Phase.ConvertingDisk,
         Phase.AwaitingCutOverStartTime
       ].includes(phase as Phase)
     ) {
-      return <CircularProgress size={20} style={{ marginRight: 3 }} />
+      return <CircularProgress size={20} sx={{ mr: '3px' }} />
     } else if (phase === Phase.Failed || phase === Phase.ValidationFailed) {
-      return <ErrorOutlineIcon style={{ color: 'red' }} />
+      return <ErrorOutlineIcon sx={{ color: 'error.main' }} />
     } else {
-      return <HourglassBottomIcon style={{ color: 'grey' }} />
+      return <HourglassBottomIcon sx={{ color: 'text.disabled' }} />
     }
   }, [phase, syncWarningMessage])
 

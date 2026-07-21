@@ -254,6 +254,7 @@ const NodesToolbar = ({
             onClick={onScaleUp}
             disabled={loading}
             sx={{ height: 40 }}
+            data-testid="scaleup-open-button"
           >
             Scale Up
           </Button>
@@ -291,6 +292,8 @@ export default function NodesTable() {
   const queryClient = useQueryClient()
   const [scaleDownError, setScaleDownError] = useState<string | null>(null)
   const [reprovisionError, setReprovisionError] = useState<string | null>(null)
+  const [reprovisionDialogOpen, setReprovisionDialogOpen] = useState(false)
+  const [nodeToReprovision, setNodeToReprovision] = useState<string | null>(null)
 
   const masterNode = nodes?.find((node) => node.spec.nodeRole === 'master') || null
 
@@ -330,11 +333,21 @@ export default function NodesTable() {
     setScaleDownDialogOpen(true)
   }
 
-  const handleReprovisionNode = async (nodeName: string) => {
+  const handleReprovisionNode = (nodeName: string) => {
+    setNodeToReprovision(nodeName)
+    setReprovisionDialogOpen(true)
+  }
+
+  const confirmReprovisionNode = async () => {
+    const nodeName = nodeToReprovision
+    if (!nodeName) return
+
     try {
       setLoading(true)
       setReprovisionError(null)
       await reprovisionNode(nodeName)
+      setReprovisionDialogOpen(false)
+      setNodeToReprovision(null)
       setSuccessMessage(`Reprovision requested for node "${nodeName}". A new VM will be created with the latest settings.`)
       queryClient.invalidateQueries({ queryKey: NODES_QUERY_KEY })
     } catch (error) {
@@ -500,6 +513,25 @@ export default function NodesTable() {
         onConfirm={confirmScaleDown}
         errorMessage={scaleDownError}
         onErrorChange={setScaleDownError}
+      />
+
+      <ConfirmationDialog
+        open={reprovisionDialogOpen}
+        onClose={() => {
+          setReprovisionDialogOpen(false)
+          setNodeToReprovision(null)
+          setReprovisionError(null)
+        }}
+        title="Confirm Reprovision"
+        icon={<WarningIcon color="warning" />}
+        message="Are you sure you want to reprovision this node? The existing agent VM will be torn down and re-created with the latest settings."
+        items={nodeToReprovision ? [{ id: nodeToReprovision, name: nodeToReprovision }] : []}
+        actionLabel="Reprovision"
+        actionColor="warning"
+        actionVariant="outlined"
+        onConfirm={confirmReprovisionNode}
+        errorMessage={reprovisionError}
+        onErrorChange={setReprovisionError}
       />
 
       <ScaleUpDrawer open={scaleUpOpen} onClose={handleCloseScaleUp} masterNode={masterNode} />

@@ -1,6 +1,7 @@
 import {
   FormControl,
   FormHelperText,
+  Link,
   MenuItem,
   Select,
   styled,
@@ -12,10 +13,9 @@ import {
   Alert,
   Chip
 } from '@mui/material'
+import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { useMemo } from 'react'
-import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useFilteredMappings } from '../hooks/useFilteredMappings'
-import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
 import { ResourceMappingTableNew as ResourceMappingTable } from '../components'
 import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
@@ -25,6 +25,9 @@ import type { NetworkAndStorageMappingStepProps } from '../types'
 import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 
 export type { ResourceMap, StorageCopyMethod } from '../types'
+
+const NETWORK_MAPPING_DOCS_URL =
+  'https://platform9.github.io/vjailbreak/concepts/network-storage-mapping/#network-mapping'
 
 const VmsSelectionStepContainer = styled('div')(({ theme }) => ({
   display: 'grid',
@@ -48,8 +51,7 @@ export default function NetworkAndStorageMappingStep({
   stepNumber = '3',
   loading = false,
   showHeader = true,
-  selectedVMs = [],
-  openstackCredentials
+  subnetWarnings = {}
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
@@ -97,16 +99,6 @@ export default function NetworkAndStorageMappingStep({
     storageCopyMethod,
     validatedArrayCreds,
     onChange
-  })
-
-  const networkIPsMap = useNetworkIPsMap(selectedVMs)
-
-  const subnetWarnings = useNetworkSubnetCompatibility({
-    networkMappings: params.networkMappings,
-    openstackCredentials,
-    selectedVMs,
-    networkIPsMap,
-    openstackNetworks
   })
 
   // Calculate unmapped networks and storage
@@ -187,7 +179,17 @@ export default function NetworkAndStorageMappingStep({
                   />
                   {Object.entries(subnetWarnings).map(([sourceNetwork, warning]) => (
                     <Alert key={sourceNetwork} severity="warning" sx={{ mt: 1 }}>
-                      <strong>{sourceNetwork}:</strong> {warning}
+                      <strong>{sourceNetwork}:</strong> {warning}{' '}
+                      <Link
+                        href={NETWORK_MAPPING_DOCS_URL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="always"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.25 }}
+                      >
+                        Show more
+                        <OpenInNewIcon fontSize="inherit" />
+                      </Link>
                     </Alert>
                   ))}
                 </>
@@ -341,18 +343,18 @@ export default function NetworkAndStorageMappingStep({
                     fieldPrefix="storageMapping"
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select a verified Proxy VM to use for Hot-Add disk access during migration.
+                    Select a verified vJailbreak Proxy VM to use for Accelerated Copy disk access during migration.
                   </Typography>
                   {readyProxyVMs.length === 0 ? (
                     <Alert severity="warning" sx={{ mb: 2 }}>
-                      No Ready Proxy VM found. Add and verify a Proxy VM on the Proxy VMs page
-                      before starting a Hot-Add migration.
+                      No Ready vJailbreak Proxy VM found. Add and verify a vJailbreak Proxy VM on the vJailbreak Proxy VMs page
+                      before starting a vJailbreak Accelerated Copy migration.
                     </Alert>
                   ) : null}
 
                   <Box sx={{ mb: 2 }}>
                     <Box sx={{ mb: 1 }}>
-                      <FieldLabel label="Proxy VM" required align="flex-start" />
+                      <FieldLabel label="vJailbreak Proxy VM" required align="flex-start" />
                     </Box>
                     <FormControl
                       fullWidth
@@ -366,7 +368,7 @@ export default function NetworkAndStorageMappingStep({
                         onChange={(e) => onChange('proxyVMRef')(e.target.value)}
                         disabled={readyProxyVMs.length === 0}
                         renderValue={(selected) => {
-                          if (!selected) return <em>Select Proxy VM</em>
+                          if (!selected) return <em>Select vJailbreak Proxy VM</em>
                           const vm = readyProxyVMs.find((v) => v.metadata.name === selected)
                           return vm?.status?.ipAddress
                             ? `${vm.metadata.name} (${vm.status.ipAddress})`

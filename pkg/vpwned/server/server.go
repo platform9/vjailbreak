@@ -18,6 +18,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 var grpcServer *grpc.Server
@@ -64,6 +66,12 @@ func startgRPCServer(ctx context.Context, network, port string) error {
 		return errors.Wrap(err, "failed to create k8s client for grpc server")
 	}
 
+	// Debug bundle needs kubernetes clients and the /var/log/pf9 mount;
+	// outside a cluster the GetDebugBundle API reports Unavailable.
+	if err := InitDebugBundle(); err != nil {
+		logrus.Warnf("debug bundle init skipped (non-cluster env): %v", err)
+	}
+
 	//Register all services here
 	//TODO: Register proto servers here.
 	api.RegisterVersionServer(grpcServer, &VpwnedVersion{})
@@ -97,6 +105,34 @@ func gRPCErrHandler(ctx context.Context, mux *runtime.ServeMux, m runtime.Marsha
 	runtime.DefaultHTTPErrorHandler(ctx, mux, m, w, r, err)
 }
 
+// contentDispositionMetadataKey is the gRPC header metadata key that file
+// download RPCs (e.g. GetDebugBundle) set to control the browser filename.
+const contentDispositionMetadataKey = "content-disposition"
+
+type rawStreamMarshaler struct{ runtime.Marshaler }
+
+func (rawStreamMarshaler) Delimiter() []byte { return nil }
+
+// maxGatewayRecvBytes is the receive limit for the gateway's loopback gRPC
+// connection (256 MiB), sized above the debug bundle content caps.
+const maxGatewayRecvBytes = 256 << 20
+
+// forwardDownloadHeaders promotes content-disposition gRPC header metadata
+// to a real HTTP Content-Disposition header so gateway responses can be
+// served as file downloads. Without this, the gateway would only expose it
+// as a Grpc-Metadata-Content-Disposition header, which browsers ignore.
+func forwardDownloadHeaders(ctx context.Context, w http.ResponseWriter, _ proto.Message) error {
+	md, ok := runtime.ServerMetadataFromContext(ctx)
+	if !ok {
+		return nil
+	}
+	if vals := md.HeaderMD.Get(contentDispositionMetadataKey); len(vals) > 0 {
+		w.Header().Set("Content-Disposition", vals[0])
+		w.Header().Del(runtime.MetadataHeaderPrefix + "Content-Disposition")
+	}
+	return nil
+}
+
 func APILogger(fwd http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		logrus.Info(r.Method, r.RemoteAddr, r.RequestURI)
@@ -125,10 +161,37 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	}
 	mux.HandleFunc("/vpw/v1/k8s/", HandleK8sProxy)
 
+	// SSH key pair generation — generates RSA-4096, stores in k8s Secret, returns public key only.
+	mux.HandleFunc("/vpw/v1/generate-ssh-keypair", HandleGenerateSSHKeyPair)
+
+	// Proxy VM creation from OVA — accepts deploy config, runs full creation routine async.
+	mux.HandleFunc("/vpw/v1/create-proxy-vm", HandleCreateProxyVM)
+
+	// vCenter resource listing — returns datacenters, clusters, datastores, networks.
+	mux.HandleFunc("/vpw/v1/vcenter-resources", HandleVCenterResources)
+
+	// OpenstackCreds deletion check — returns whether creds can be safely deleted
+	// based on number of non-master agent nodes referencing them.
+	mux.HandleFunc("/vpw/v1/openstackcreds-deletable", HandleCheckOpenstackCredsDeletable)
+
 	//gatewayMuxer
-	gatewayMuxer := runtime.NewServeMux() //runtime.WithErrorHandler(gRPCErrHandler))
+	gatewayMuxer := runtime.NewServeMux( //runtime.WithErrorHandler(gRPCErrHandler))
+		runtime.WithForwardResponseOption(forwardDownloadHeaders),
+		runtime.WithMarshalerOption(runtime.MIMEWildcard, rawStreamMarshaler{
+			Marshaler: &runtime.HTTPBodyMarshaler{
+				Marshaler: &runtime.JSONPb{
+					MarshalOptions:   protojson.MarshalOptions{EmitUnpopulated: true},
+					UnmarshalOptions: protojson.UnmarshalOptions{DiscardUnknown: true},
+				},
+			},
+		}),
+	)
 	option := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Debug bundles (pod logs + CR YAMLs + /var/log/pf9 logs) far exceed
+		// the 4 MiB gRPC default on this loopback hop; the bundle itself is
+		// bounded by the caps in server/debugbundle.
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(maxGatewayRecvBytes)),
 	}
 
 	// ctx, muxer, "127.0.0.1:3000", option
@@ -152,6 +215,20 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		logrus.Errorf("cannot start handler for StorageArray")
 	}
 
+	// AI analysis endpoints
+	aiK8sClient, err := CreateInClusterClient()
+	if err != nil {
+		logrus.Warnf("ai handler: failed to create k8s client (non-cluster env): %v", err)
+	} else {
+		rawK8s, rawErr := CreateRawK8sClient()
+		if rawErr != nil {
+			logrus.Warnf("ai handler: failed to create raw k8s client: %v", rawErr)
+		}
+		aiHandler := NewAIAnalyzeHandler(aiK8sClient, rawK8s)
+		mux.Handle("/vpw/v1/ai/analyze", aiHandler)
+		mux.Handle("/vpw/v1/ai/key", &aiKeyHandler{k8sClient: aiK8sClient, rawK8s: rawK8s})
+	}
+
 	// Wrap gatewayMuxer to handle all other routes
 	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
 		// Skip VDDK endpoints - they're already registered
@@ -173,6 +250,31 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 			HandleK8sProxy(w, r)
 			return
 		}
+		// SSH key pair generation
+		if r.URL.Path == "/vpw/v1/generate-ssh-keypair" {
+			HandleGenerateSSHKeyPair(w, r)
+			return
+		}
+		// Proxy VM creation from OVA
+		if r.URL.Path == "/vpw/v1/create-proxy-vm" {
+			HandleCreateProxyVM(w, r)
+			return
+		}
+		// vCenter resource listing
+		if r.URL.Path == "/vpw/v1/vcenter-resources" {
+			HandleVCenterResources(w, r)
+			return
+		}
+		// OpenstackCreds deletion check
+		if r.URL.Path == "/vpw/v1/openstackcreds-deletable" {
+			HandleCheckOpenstackCredsDeletable(w, r)
+			return
+		}
+		// Skip AI endpoints - registered with their own handlers above
+		if strings.HasPrefix(r.URL.Path, "/vpw/v1/ai/") {
+			http.NotFound(w, r)
+			return
+		}
 		APILogger(gatewayMuxer).ServeHTTP(w, r)
 	})
 
@@ -183,6 +285,9 @@ func StartServer(host, port, apiPort, apiHost string) error {
 	ctx := context.Background()
 	ctx, cncl := context.WithCancel(ctx)
 	defer cncl()
+
+	go prefetchProxyVMOVA()
+	go watchOVAURLChanges(ctx)
 
 	go func() {
 		if err := startgRPCServer(ctx, "tcp", host+":"+port); err != nil {

@@ -8,6 +8,8 @@ export interface VjailbreakSettings {
     CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: string
     DEFAULT_MIGRATION_METHOD: string
     DEPLOYMENT_NAME: string
+    TIMEZONE?: string
+    NTP_SERVERS?: string
     PROXY?: string
     POPULATE_VMWARE_MACHINE_FLAVORS: string
     VCENTER_LOGIN_RETRY_LIMIT: number
@@ -15,6 +17,7 @@ export interface VjailbreakSettings {
     VM_ACTIVE_WAIT_INTERVAL_SECONDS: number
     VM_ACTIVE_WAIT_RETRY_LIMIT: number
     AUTO_FSTAB_UPDATE: string
+    DEFAULT_NETWORK_PERSISTENCE?: string
     HTTP_TIMEOUT_SECONDS: string
   }
   kind: string

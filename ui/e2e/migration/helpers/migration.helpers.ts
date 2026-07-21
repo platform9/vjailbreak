@@ -5,7 +5,10 @@ import { Page, expect } from '@playwright/test'
 export const NS = 'migration-system'
 const V1A1 = `/apis/vjailbreak.k8s.pf9.io/v1alpha1/namespaces/${NS}`
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
 export const API = {
+  settingsConfigMap: `**/api/v1/namespaces/${NS}/configmaps/vjailbreak-settings`,
   migrations: `**${V1A1}/migrations`,
   migrationByName: (name: string) => `**${V1A1}/migrations/${name}`,
   migrationPlans: `**${V1A1}/migrationplans`,
@@ -14,10 +17,14 @@ export const API = {
   migrationTemplateByName: (name: string) => `**${V1A1}/migrationtemplates/${name}`,
   vmwareCreds: `**${V1A1}/vmwarecreds`,
   vmwareCredByName: (name: string) => `**${V1A1}/vmwarecreds/${name}`,
-  openstackCreds: `**${V1A1}/openstackcreds`,
+  // The list endpoint is paginated (?limit=N), which glob patterns can't express
+  // without also swallowing the by-name routes — use a regex instead.
+  openstackCreds: new RegExp(`${escapeRegExp(V1A1)}/openstackcreds(\\?.*)?$`),
   openstackCredByName: (name: string) => `**${V1A1}/openstackcreds/${name}`,
   networkMappings: `**${V1A1}/networkmappings`,
+  networkMappingByName: (name: string) => `**${V1A1}/networkmappings/${name}`,
   storageMappings: `**${V1A1}/storagemappings`,
+  storageMappingByName: (name: string) => `**${V1A1}/storagemappings/${name}`,
   vmwareMachines: `**${V1A1}/vmwaremachines**`,
   vmwareMachineByName: (name: string) => `**${V1A1}/vmwaremachines/${name}`,
   vmwareClusters: `**${V1A1}/vmwareclusters**`,
@@ -28,6 +35,7 @@ export const API = {
   rdmDisks: `**${V1A1}/rdmdisks`,
   volumeImageProfiles: `**${V1A1}/volumeimageprofiles**`,
   validateIPs: `**/validate_openstack_ip`,
+  checkSubnetCompatibility: `**/check_network_subnet_compatibility`,
   podLogs: (namespace: string, podName: string) =>
     `**/namespaces/${namespace}/pods/${podName}/log*`,
   rollingMigrationPlans: `**${V1A1}/rollingmigrationplans`,
@@ -45,6 +53,12 @@ export async function goToMigrations(page: Page): Promise<void> {
   await page.goto(ROUTES.migrations)
   await page.waitForURL(/\/dashboard\/migrations/)
   await expect(page.getByTestId('migrations-table')).toBeVisible({ timeout: 10_000 })
+}
+
+export async function goToGlobalSettings(page: Page): Promise<void> {
+  await page.goto('/dashboard/global-settings')
+  await page.waitForURL(/\/dashboard\/global-settings/)
+  await expect(page.getByTestId('global-settings-form')).toBeVisible({ timeout: 10_000 })
 }
 
 // ─── Form interactions ────────────────────────────────────────────────────────
@@ -82,7 +96,7 @@ type JsonBody = Record<string, unknown>
 
 export async function mockRoute(
   page: Page,
-  url: string,
+  url: string | RegExp,
   method: HttpMethod,
   body: JsonBody | JsonBody[],
   status = 200,

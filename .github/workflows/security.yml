@@ -276,6 +276,30 @@ jobs:
           path: tmp/gosec-report.json
           retention-days: 90
 
+      - name: Save Gosec PR Summary for Comment Workflow
+        if: github.event_name == 'pull_request'
+        env:
+          GOSEC_ADDED_DETAILS: ${{ steps.gosec_compare.outputs.added_details }}
+          GOSEC_FIXED_DETAILS: ${{ steps.gosec_compare.outputs.fixed_details }}
+        run: |
+          mkdir -p tmp/gosec-summary
+          echo "${{ github.event.pull_request.number }}" > tmp/gosec-summary/pr-number.txt
+          echo "${{ github.event.pull_request.base.sha }}" > tmp/gosec-summary/base-sha.txt
+          echo "${{ steps.gosec_compare.outputs.current_count }}" > tmp/gosec-summary/current.txt
+          echo "${{ steps.gosec_compare.outputs.baseline_count }}" > tmp/gosec-summary/baseline.txt
+          echo "${{ steps.gosec_compare.outputs.added_count }}" > tmp/gosec-summary/added.txt
+          echo "${{ steps.gosec_compare.outputs.fixed_count }}" > tmp/gosec-summary/fixed.txt
+          echo "${{ steps.gosec_compare.outputs.baseline_method }}" > tmp/gosec-summary/method.txt
+          printf '%s' "$GOSEC_ADDED_DETAILS" > tmp/gosec-summary/added-details.txt
+          printf '%s' "$GOSEC_FIXED_DETAILS" > tmp/gosec-summary/fixed-details.txt
+
+      - name: Upload Gosec PR Summary Artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-gosec-summary
+          path: tmp/gosec-summary/
+
       # - name: Create Pull Request (if vulnerabilities found)
       #   if: ${{ github.event_name == 'push' && steps.scan.outputs.gosec_high_found == 'true' }}
       #   continue-on-error: true
@@ -624,6 +648,30 @@ jobs:
           path: tmp/trivy-report.json
           retention-days: 90
 
+      - name: Save Trivy PR Summary for Comment Workflow
+        if: github.event_name == 'pull_request'
+        env:
+          TRIVY_ADDED_DETAILS: ${{ steps.trivy_compare.outputs.added_details }}
+          TRIVY_FIXED_DETAILS: ${{ steps.trivy_compare.outputs.fixed_details }}
+        run: |
+          mkdir -p tmp/trivy-summary
+          echo "${{ github.event.pull_request.number }}" > tmp/trivy-summary/pr-number.txt
+          echo "${{ github.event.pull_request.base.sha }}" > tmp/trivy-summary/base-sha.txt
+          echo "${{ steps.trivy_compare.outputs.current_count }}" > tmp/trivy-summary/current.txt
+          echo "${{ steps.trivy_compare.outputs.baseline_count }}" > tmp/trivy-summary/baseline.txt
+          echo "${{ steps.trivy_compare.outputs.added_count }}" > tmp/trivy-summary/added.txt
+          echo "${{ steps.trivy_compare.outputs.fixed_count }}" > tmp/trivy-summary/fixed.txt
+          echo "${{ steps.trivy_compare.outputs.baseline_method }}" > tmp/trivy-summary/method.txt
+          printf '%s' "$TRIVY_ADDED_DETAILS" > tmp/trivy-summary/added-details.txt
+          printf '%s' "$TRIVY_FIXED_DETAILS" > tmp/trivy-summary/fixed-details.txt
+
+      - name: Upload Trivy PR Summary Artifact
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-trivy-summary
+          path: tmp/trivy-summary/
+
       # - name: Create Pull Request (if vulnerabilities found)
       #   if: ${{ github.event_name == 'push' && steps.scan.outputs.trivy_high_found == 'true' }}
       #   continue-on-error: true
@@ -648,126 +696,6 @@ jobs:
       #     echo "New HIGH/CRITICAL vulnerabilities introduced: ${{ steps.trivy_compare.outputs.added_count }}"
       #     exit 1
 
-  vulnerability_summary:
-    name: Vulnerability Summary Report
-    needs: [gosec_scan, trivy_scan]
-    runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request'
-    steps:
-      - name: Create Vulnerability Summary Comment
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const gosecCurrent = '${{ needs.gosec_scan.outputs.gosec_current_count }}' || '0';
-            const gosecBaseline = '${{ needs.gosec_scan.outputs.gosec_baseline_count }}' || '0';
-            const gosecAdded = '${{ needs.gosec_scan.outputs.gosec_added_count }}' || '0';
-            const gosecFixed = '${{ needs.gosec_scan.outputs.gosec_fixed_count }}' || '0';
-            
-            const trivyCurrent = '${{ needs.trivy_scan.outputs.trivy_current_count }}' || '0';
-            const trivyBaseline = '${{ needs.trivy_scan.outputs.trivy_baseline_count }}' || '0';
-            const trivyAdded = '${{ needs.trivy_scan.outputs.trivy_added_count }}' || '0';
-            const trivyFixed = '${{ needs.trivy_scan.outputs.trivy_fixed_count }}' || '0';
-            
-            const gosecMethod = '${{ needs.gosec_scan.outputs.gosec_baseline_method }}' || 'none';
-            const trivyMethod = '${{ needs.trivy_scan.outputs.trivy_baseline_method }}' || 'none';
-            
-            const gosecAddedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_added_details) }} || '';
-            const gosecFixedDetails = ${{ toJSON(needs.gosec_scan.outputs.gosec_fixed_details) }} || '';
-            const trivyAddedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_added_details) }} || '';
-            const trivyFixedDetails = ${{ toJSON(needs.trivy_scan.outputs.trivy_fixed_details) }} || '';
-            const totalAdded = parseInt(gosecAdded) + parseInt(trivyAdded);
-            const totalFixed = parseInt(gosecFixed) + parseInt(trivyFixed);
-            const totalCurrent = parseInt(gosecCurrent) + parseInt(trivyCurrent);
-            const totalBaseline = parseInt(gosecBaseline) + parseInt(trivyBaseline);
-            
-            const getMethodIcon = (method) => {
-              switch(method) {
-                case 'artifact': return '📦';
-                case 'live_scan': return '🔄';
-                case 'no_baseline': return '⚠️';
-                default: return '❓';
-              }
-            };
-            
-            let statusIcon = '✅';
-            let statusText = 'No change in security posture';
-            
-            if (totalAdded > 0 && totalFixed === 0) {
-              statusIcon = '🚨';
-              statusText = 'Security posture degraded';
-            } else if (totalAdded === 0 && totalFixed > 0) {
-              statusIcon = '🎉';
-              statusText = 'Security posture improved';
-            } else if (totalAdded > 0 && totalFixed > 0) {
-              statusIcon = '⚠️';
-              statusText = 'Mixed security changes';
-            }
-            
-            const comment = `## ${statusIcon} Security Vulnerability Summary
-            
-            **${statusText}**
-            
-            ### 📊 Overall Changes
-            | Metric | Count |
-            |--------|-------|
-            | **Total Added** | **${totalAdded}** |
-            | **Total Fixed** | **${totalFixed}** |
-            | **Net Change** | **${totalAdded - totalFixed > 0 ? '+' : ''}${totalAdded - totalFixed}** |
-            
-            ### 🔍 Detailed Breakdown
-            
-            #### ${getMethodIcon(gosecMethod)} Gosec (Static Analysis)
-            | Current | Baseline | Added | Fixed | Method |
-            |---------|----------|-------|-------|--------|
-            | ${gosecCurrent} | ${gosecBaseline} | ${gosecAdded} | ${gosecFixed} | ${gosecMethod} |
-            
-            #### ${getMethodIcon(trivyMethod)} Trivy (Dependency Scan)
-            | Current | Baseline | Added | Fixed | Method |
-            |---------|----------|-------|-------|--------|
-            | ${trivyCurrent} | ${trivyBaseline} | ${trivyAdded} | ${trivyFixed} | ${trivyMethod} |
-            
-            ### 📋 Baseline Methods
-            - **📦 artifact**: Used stored report from main branch
-            - **🔄 live_scan**: Scanned base branch in real-time  
-            - **⚠️ no_baseline**: No baseline available (all vulnerabilities treated as new)
-            
-            ${totalAdded > 0 ? `
-            ### 🚨 Added Vulnerabilities
-            
-            ${parseInt(gosecAdded) > 0 ? `
-            #### Gosec (Static Analysis) - ${gosecAdded} Added
-            ${gosecAddedDetails || '*No detailed information available*'}
-            ` : ''}
-            
-            ${parseInt(trivyAdded) > 0 ? `
-            #### Trivy (Dependencies) - ${trivyAdded} Added
-            ${trivyAddedDetails || '*No detailed information available*'}
-            ` : ''}
-            
-            ` : ''}
-            
-            ${totalFixed > 0 ? `
-            ### 🎉 Fixed Vulnerabilities
-            
-            ${parseInt(gosecFixed) > 0 ? `
-            #### Gosec (Static Analysis) - ${gosecFixed} Fixed
-            ${gosecFixedDetails || '*No detailed information available*'}
-            ` : ''}
-            
-            ${parseInt(trivyFixed) > 0 ? `
-            #### Trivy (Dependencies) - ${trivyFixed} Fixed
-            ${trivyFixedDetails || '*No detailed information available*'}
-            ` : ''}
-            
-            ` : ''}
-            
-            ---
-            *Only HIGH and CRITICAL severity vulnerabilities are tracked*
-            *Baseline: \`${{ github.event.pull_request.base.sha }}\`*`;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
+  # vulnerability_summary job moved to security-comment.yml workflow
+  # which uses workflow_run trigger to post PR comments with full write permissions,
+  # including for fork PRs where pull_request trigger tokens are read-only.

@@ -18,6 +18,8 @@ interface CreateRollingMigrationPlanParams {
   migrationStrategy?: MigrationStrategy
   migrationTemplate?: string
   namespace?: string
+  preserveSourceTags?: boolean
+  customMetadata?: Record<string, string>
 }
 
 export const createRollingMigrationPlanJson = (params: CreateRollingMigrationPlanParams) => {
@@ -31,7 +33,9 @@ export const createRollingMigrationPlanJson = (params: CreateRollingMigrationPla
     firstBootScript,
     migrationStrategy,
     migrationTemplate,
-    namespace
+    namespace,
+    preserveSourceTags,
+    customMetadata
   } = params || {}
 
   const spec: Partial<RollingMigrationPlanSpec> = {
@@ -50,6 +54,10 @@ export const createRollingMigrationPlanJson = (params: CreateRollingMigrationPla
   if (firstBootScript) spec.firstBootScript = firstBootScript
   if (migrationStrategy) spec.migrationStrategy = migrationStrategy
   if (migrationTemplate) spec.migrationTemplate = migrationTemplate
+  if (typeof preserveSourceTags === 'boolean') spec.preserveSourceTags = preserveSourceTags
+  if (customMetadata && Object.keys(customMetadata).length > 0) {
+    spec.customMetadata = customMetadata
+  }
 
   return {
     apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',

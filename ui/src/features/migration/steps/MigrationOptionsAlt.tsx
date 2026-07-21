@@ -85,7 +85,8 @@ export default function MigrationOptionsAlt({
   errors,
   getErrorsUpdater,
   stepNumber,
-  showHeader = true
+  showHeader = true,
+  hasSubnetMismatch = false
 }: MigrationOptionsPropsInterface) {
   const { setValue } = useFormContext()
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
@@ -240,6 +241,14 @@ export default function MigrationOptionsAlt({
     return computedMin.isAfter(now) ? computedMin : now
   }, [params, selectedMigrationOptions])
 
+  // Persist IP is mutually exclusive with mapping to a network whose subnet
+  // does not contain the source VM IPs — auto-uncheck when a mismatch appears
+  useEffect(() => {
+    if (hasSubnetMismatch && params?.networkPersistence) {
+      onChange('networkPersistence')(false)
+    }
+  }, [hasSubnetMismatch, params?.networkPersistence, onChange])
+
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
   const hasL2Network = hasSelectedLayer2Network(
     params.networkMappings,
@@ -266,7 +275,7 @@ export default function MigrationOptionsAlt({
 
               {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  Hot-Add migration requires Cold or Mock copy. Other data copy methods are not available.
+                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available.
                 </Alert>
               )}
               <OptionRow>
@@ -682,7 +691,9 @@ export default function MigrationOptionsAlt({
                 label="Persist source network interfaces"
                 control={
                   <Checkbox
+                    data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
+                    disabled={hasSubnetMismatch}
                     onChange={(e) => {
                       onChange('networkPersistence')(e.target.checked)
                     }}
@@ -695,6 +706,14 @@ export default function MigrationOptionsAlt({
             </OptionLeft>
             <Box />
           </OptionRow>
+
+          {hasSubnetMismatch && (
+            <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
+              Persist source network interfaces is not available because some IP addresses of the
+              selected VMs do not lie within the subnet of the selected destination network(s). Map
+              to a network with a matching subnet to enable this option.
+            </Alert>
+          )}
         </SectionBlock>
 
         {isPCD ? (
@@ -730,27 +749,6 @@ export default function MigrationOptionsAlt({
               <Box />
             </OptionRow>
 
-            <OptionRow>
-              <OptionLeft>
-                <FormControlLabel
-                  label="Use dynamic hotplug-enabled flavors"
-                  control={
-                    <Checkbox
-                      checked={params?.useFlavorless || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked
-                        updateSelectedMigrationOptions('useFlavorless')(isChecked)
-                        onChange('useFlavorless')(isChecked)
-                      }}
-                    />
-                  }
-                />
-                <OptionHelp variant="caption">
-                  Uses the base flavor ID configured in PCD.
-                </OptionHelp>
-              </OptionLeft>
-              <Box />
-            </OptionRow>
           </SectionBlock>
         ) : null}
 

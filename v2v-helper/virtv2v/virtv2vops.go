@@ -33,7 +33,7 @@ type VirtV2VOperations interface {
 	RetainAlphanumeric(input string) string
 	GetPartitions(disk string) ([]string, error)
 	NTFSFix(path string) error
-	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error
+	ConvertDisk(ctx context.Context, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string, blockDriver string) error
 	AddWildcardNetplan(path string) error
 	GetOsRelease(path string) (string, error)
 	AddFirstBootScript(firstbootscript, firstbootscriptname string) error
@@ -271,6 +271,15 @@ func IsSUSEFamily(osRelease string) bool {
 		strings.Contains(lowerRelease, "opensuse")
 }
 
+// MountPersistenceScriptArgs picks generate-mount-persistence.sh flags per OS: non-SUSE uses
+// --force-uuid; SUSE uses --replace-fstab --os-family=suse to skip the device.map rewrite that breaks GRUB (Error 21).
+func MountPersistenceScriptArgs(osRelease string) string {
+	if IsSUSEFamily(osRelease) {
+		return "--replace-fstab --os-family=suse"
+	}
+	return "--force-uuid"
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -313,8 +322,8 @@ func NTFSFix(path string) error {
 		cmd := exec.Command("ntfsfix", append(args, partition)...)
 		log.Printf("Executing %s", cmd.String())
 
-		// Use the debug logging with proper file cleanup
-		err := utils.RunCommandWithLogFile(cmd)
+		// Use the debug logging with proper file cleanup, into the dedicated virtv2v log file
+		err := utils.RunCommandWithLogFileCategory(cmd, utils.LogCategoryVirtV2V)
 		if err != nil {
 			log.Printf("Skipping NTFS fix on %s", partition)
 		}
@@ -401,7 +410,7 @@ func isBareDisk(path string) bool {
 	return lastChar < '0' || lastChar > '9'
 }
 
-func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string) error {
+func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver string, firstbootscripts []string, diskPath string, osRelease string, blockDriver string) error {
 	// Step 1: Handle Windows driver injection
 	if strings.ToLower(ostype) == constants.OSFamilyWindows {
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
@@ -448,6 +457,13 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	for _, script := range firstbootscripts {
 		args = append(args, "--firstboot", fmt.Sprintf("/home/fedora/%s.sh", script))
 	}
+	// For Windows: select which block driver virt-v2v makes boot-critical.
+	// Must match the hw_disk_bus/hw_scsi_model set on the volume so the guest
+	// boots with the controller whose driver was prepared by virt-v2v.
+	if strings.ToLower(ostype) == constants.OSFamilyWindows && blockDriver != "" {
+		args = append(args, "--block-driver", blockDriver)
+	}
+
 	// Always use libvirtxml mode to convert all disks
 	args = append(args, "-i", "libvirtxml", xmlFile)
 	if strings.ToLower(ostype) != constants.OSFamilyWindows {
@@ -470,8 +486,8 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 	cmd := exec.CommandContext(ctx, "virt-v2v-in-place", args...)
 	log.Printf("Executing %s", cmd.String())
 
-	// Use the debug logging with proper file cleanup
-	err := utils.RunCommandWithLogFile(cmd)
+	// Use the debug logging with proper file cleanup, into the dedicated virtv2v log file
+	err := utils.RunCommandWithLogFileCategory(cmd, utils.LogCategoryVirtV2V)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -594,7 +610,8 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 				continue
 			}
 			if len(gn.DNS) > 0 {
-				macToDNS[gn.MAC] = gn.DNS
+				// ipPerMac keys are canonical lowercase; match that case
+				macToDNS[strings.ToLower(gn.MAC)] = gn.DNS
 			}
 		}
 	}
@@ -732,11 +749,17 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	cmd := prepareGuestfishCommand(disks, command, write, args...)
 	log.Printf("Executing %s", cmd.String())
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(string(out)))
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err := cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("guestfish stderr (%s): %s", command, strings.TrimSpace(stderrBuf.String()))
 	}
-	return strings.ToLower(string(out)), nil
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(stderrBuf.String()))
+	}
+	return strings.ToLower(stdoutBuf.String()), nil
 }
 
 // GetDeviceNumberFromPartition returns the device index for a given partition name
@@ -803,7 +826,8 @@ func AddUdevRules(disks []vm.VMDisk, diskPath string, interfaces []string, macs 
 	// Create the udev rules content
 	var udevRules strings.Builder
 	for i, iface := range interfaces {
-		udevRules.WriteString(fmt.Sprintf("SUBSYSTEM==\"net\", ACTION==\"add\", ATTR{address}==\"%s\", NAME=\"%s\"\n", macs[i], iface))
+		// udev ATTR{address} matches sysfs, which is always lowercase
+		udevRules.WriteString(fmt.Sprintf("SUBSYSTEM==\"net\", ACTION==\"add\", ATTR{address}==\"%s\", NAME=\"%s\"\n", vm.CanonicalMAC(macs[i]), iface))
 		log.Printf("Adding udev rule: %s", udevRules.String())
 	}
 
@@ -976,17 +1000,14 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 		return fmt.Errorf("generate-mount-persistence.sh script not found at %s", scriptPath)
 	}
 
-	// Choose the script flag based on OS family.
-	// SUSE GRUB Legacy guests must not have device.map rewritten before virt-v2v
-	// runs, so we use --replace-fstab (which skips fix_grub_config) instead of
-	// --force-uuid.
-	scriptFlag := "--force-uuid"
+	// Pick script args by OS family: SUSE uses --replace-fstab --os-family=suse instead of
+	// --force-uuid, skipping the pre-virt-v2v device.map rewrite that breaks SUSE GRUB Legacy.
+	scriptArgs := MountPersistenceScriptArgs(osRelease)
 	if IsSUSEFamily(osRelease) {
-		scriptFlag = "--replace-fstab"
-		log.Printf("SUSE guest detected: using --replace-fstab (skipping fix_grub_config) to avoid corrupting device.map before virt-v2v")
+		log.Printf("SUSE guest detected: using --replace-fstab --os-family=suse (script will safely fix GRUB Legacy cmdline if detected, without touching device.map)")
 	}
 
-	log.Printf("Running generate-mount-persistence.sh with %s option", scriptFlag)
+	log.Printf("Running generate-mount-persistence.sh with %s option(s)", scriptArgs)
 
 	// Upload the script to the guest VM
 	var uploadErr error
@@ -1019,7 +1040,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 	var runOutput string
 
 	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptFlag)
+	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptArgs)
 
 	if runErr != nil {
 		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
@@ -1027,7 +1048,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 		return nil
 	}
 
-	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptFlag)
+	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptArgs)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
 
 	return nil

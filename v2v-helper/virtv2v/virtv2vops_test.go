@@ -5,6 +5,7 @@ package virtv2v
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -94,41 +95,60 @@ func TestIsSUSEFamily(t *testing.T) {
 // correctly gates the call in the migration flow.
 // ---------------------------------------------------------------------------
 
-// TestMkinitrdLVMWrapperContent verifies the embedded wrapper script contains
-// the required translation logic and safety guards.
+// mkinitrdLVMWrapperFile is the on-disk source of the wrapper script that the
+// v2v-helper image ships at mkinitrdLVMWrapperPath. The script used to be an
+// embedded Go const (mkinitrdLVMWrapper) but was moved to
+// scripts/mkinitrd-lvm-wrapper.sh and is COPY'd into the image at build time, so
+// the tests now validate the file that actually ships. Relative to this package
+// dir (v2v-helper/virtv2v), the repo-root scripts/ dir is two levels up.
+var mkinitrdLVMWrapperFile = filepath.Join("..", "..", "scripts", "mkinitrd-lvm-wrapper.sh")
+
+// readMkinitrdLVMWrapper loads the wrapper script content from disk.
+func readMkinitrdLVMWrapper(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(mkinitrdLVMWrapperFile)
+	require.NoError(t, err, "wrapper script must exist at %s", mkinitrdLVMWrapperFile)
+	return string(b)
+}
+
+// TestMkinitrdLVMWrapperContent verifies the wrapper script contains the
+// required translation logic and safety guards.
 func TestMkinitrdLVMWrapperContent(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
+
 	// Verify the wrapper calls the original binary
-	assert.Contains(t, mkinitrdLVMWrapper, "/sbin/mkinitrd.orig",
+	assert.Contains(t, wrapper, "/sbin/mkinitrd.orig",
 		"wrapper must delegate to the backed-up original")
 
 	// Verify -d flag handling is present
-	assert.Contains(t, mkinitrdLVMWrapper, "-d",
+	assert.Contains(t, wrapper, "-d",
 		"wrapper must handle the -d flag")
 
 	// Verify /dev/mapper translation is present
-	assert.Contains(t, mkinitrdLVMWrapper, "/dev/mapper/",
+	assert.Contains(t, wrapper, "/dev/mapper/",
 		"wrapper must translate to /dev/mapper/ path")
 
 	// Verify argument-boundary preservation via xargs -0
-	assert.Contains(t, mkinitrdLVMWrapper, "xargs -0",
+	assert.Contains(t, wrapper, "xargs -0",
 		"wrapper must use xargs -0 to preserve argument boundaries across spaces")
 
 	// Verify temp-file cleanup on exit
-	assert.Contains(t, mkinitrdLVMWrapper, "trap",
+	assert.Contains(t, wrapper, "trap",
 		"wrapper must clean up temp file via trap")
 
 	// Verify shebang
-	assert.True(t, len(mkinitrdLVMWrapper) > 0 && mkinitrdLVMWrapper[0:2] == "#!",
+	assert.True(t, len(wrapper) > 0 && wrapper[0:2] == "#!",
 		"wrapper must start with a shebang")
 }
 
 // TestMkinitrdWrapperWritable verifies the wrapper can be written to disk with
 // correct permissions (mirrors the write step inside FixLegacyMkinitrd).
 func TestMkinitrdWrapperWritable(t *testing.T) {
+	wrapper := readMkinitrdLVMWrapper(t)
 	dir := t.TempDir()
 	wrapperPath := filepath.Join(dir, "mkinitrd-lvm-wrapper.sh")
 
-	err := os.WriteFile(wrapperPath, []byte(mkinitrdLVMWrapper), 0755)
+	err := os.WriteFile(wrapperPath, []byte(wrapper), 0755)
 	require.NoError(t, err, "wrapper should be writable")
 
 	info, err := os.Stat(wrapperPath)
@@ -138,7 +158,7 @@ func TestMkinitrdWrapperWritable(t *testing.T) {
 
 	content, err := os.ReadFile(wrapperPath)
 	require.NoError(t, err)
-	assert.Equal(t, mkinitrdLVMWrapper, string(content),
+	assert.Equal(t, wrapper, string(content),
 		"wrapper content must round-trip through disk without modification")
 }
 
@@ -218,3 +238,77 @@ func TestMountPersistenceScriptFlagSelection(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// blockDriver arg selection
+// ---------------------------------------------------------------------------
+
+// buildV2VArgs is a thin wrapper that exposes the block-driver selection logic
+// without executing the command, for unit testing.
+func buildV2VArgs(ostype, blockDriver string) []string {
+	args := []string{"-v", "--no-fstrim"}
+	if strings.ToLower(ostype) == "windows" && blockDriver != "" {
+		args = append(args, "--block-driver", blockDriver)
+	}
+	return args
+}
+
+func TestConvertDisk_BlockDriverArg(t *testing.T) {
+	tests := []struct {
+		name            string
+		ostype          string
+		blockDriver     string
+		wantBlockDriver bool
+		wantValue       string
+	}{
+		{
+			name:            "windows virtio-scsi adds --block-driver",
+			ostype:          "windows",
+			blockDriver:     "virtio-scsi",
+			wantBlockDriver: true,
+			wantValue:       "virtio-scsi",
+		},
+		{
+			name:            "windows empty blockDriver omits flag (defaults to virtio-blk)",
+			ostype:          "windows",
+			blockDriver:     "",
+			wantBlockDriver: false,
+		},
+		{
+			name:            "linux ignores blockDriver",
+			ostype:          "linux",
+			blockDriver:     "virtio-scsi",
+			wantBlockDriver: false,
+		},
+		{
+			name:            "linux empty blockDriver omits flag",
+			ostype:          "linux",
+			blockDriver:     "",
+			wantBlockDriver: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := buildV2VArgs(tt.ostype, tt.blockDriver)
+			idx := -1
+			for i, a := range args {
+				if a == "--block-driver" {
+					idx = i
+					break
+				}
+			}
+			if tt.wantBlockDriver {
+				if idx == -1 {
+					t.Fatalf("expected --block-driver in args %v but not found", args)
+				}
+				if idx+1 >= len(args) || args[idx+1] != tt.wantValue {
+					t.Errorf("--block-driver value = %q, want %q", args[idx+1], tt.wantValue)
+				}
+			} else {
+				if idx != -1 {
+					t.Errorf("unexpected --block-driver in args %v", args)
+				}
+			}
+		})
+	}
+}

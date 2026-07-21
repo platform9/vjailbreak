@@ -20,7 +20,7 @@ interface UseFormValidationParams {
   openstackCredsValidated: boolean
   rdmDisks: RdmDisk[]
   openstackCredentials: OpenstackCreds | undefined
-  touchedSections: { options: boolean }
+  touchedSections: { options: boolean; tagsMetadata: boolean }
 }
 
 interface UseFormValidationResult {
@@ -39,10 +39,11 @@ interface UseFormValidationResult {
   isStep3Complete: boolean
   step4Complete: boolean
   step5Complete: boolean
+  step6Complete: boolean
   step1HasErrors: boolean
   step2HasErrors: boolean
   step3HasErrors: boolean
-  step5HasErrors: boolean
+  step6HasErrors: boolean
   unmappedNetworksCount: number
   unmappedStorageCount: number
   hasAnyMigrationOptionSelected: boolean
@@ -289,11 +290,7 @@ export function useFormValidation({
     fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
   )
 
-  const step3HasErrors = Boolean(
-    fieldErrors['networksMapping'] ||
-    fieldErrors['storageMapping'] ||
-    ((params.vms?.length ?? 0) > 0 && (unmappedNetworksCount > 0 || unmappedStorageCount > 0))
-  )
+  const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
 
   const step4Complete = Boolean(
     (params.securityGroups && params.securityGroups.length > 0) ||
@@ -301,7 +298,14 @@ export function useFormValidation({
       (params.imageProfiles && params.imageProfiles.length > 0)
   )
 
-  const step5HasErrors = Boolean(
+
+  const step5Complete = Boolean(
+    params.preserveSourceTags ||
+      (params.customMetadata || []).some((row) => row.key.trim() !== '') ||
+      touchedSections.tagsMetadata
+  )
+
+  const step6HasErrors = Boolean(
     (selectedMigrationOptions.dataCopyStartTime && fieldErrors['dataCopyStartTime']) ||
       (selectedMigrationOptions.cutoverOption &&
         (fieldErrors['cutoverOption'] ||
@@ -328,7 +332,6 @@ export function useFormValidation({
       Boolean(selectedMigrationOptions.postMigrationScript) ||
       Boolean(params.removeVMwareTools) ||
       Boolean(selectedMigrationOptions.useGPU) ||
-      Boolean(selectedMigrationOptions.useFlavorless) ||
       Boolean(selectedMigrationOptions.periodicSyncEnabled) ||
       postMigrationActionSelected
     )
@@ -378,8 +381,7 @@ export function useFormValidation({
       (postMigrationScriptValue !== '' && !fieldErrors['postMigrationScript'])
 
     const pcdOptionsOk =
-      (!selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean') &&
-      (!selectedMigrationOptions.useFlavorless || typeof params.useFlavorless === 'boolean')
+      !selectedMigrationOptions.useGPU || typeof params.useGPU === 'boolean'
 
     const postMigrationAction = selectedMigrationOptions.postMigrationAction
     const postMigrationActionSelected = Boolean(
@@ -419,21 +421,21 @@ export function useFormValidation({
     params.periodicSyncInterval,
     params.postMigrationScript,
     params.useGPU,
-    params.useFlavorless,
     params.postMigrationAction,
     fieldErrors
   ])
 
-  const step5Complete = Boolean(
-    touchedSections.options &&
-      (areSelectedMigrationOptionsConfigured ||
-        Boolean(
-          params.disconnectSourceNetwork ||
-            params.fallbackToDHCP ||
-            params.networkPersistence ||
-            params.removeVMwareTools
-        )) &&
-      !step5HasErrors
+  const anyNetworkOptionSet = Boolean(
+    params.disconnectSourceNetwork ||
+      params.fallbackToDHCP ||
+      params.networkPersistence ||
+      params.removeVMwareTools
+  )
+
+  const step6Complete = Boolean(
+    (touchedSections.options || anyNetworkOptionSet) &&
+      (areSelectedMigrationOptionsConfigured || anyNetworkOptionSet) &&
+      !step6HasErrors
   )
 
   const sectionNavItems = useMemo<SectionNavItem[]>(
@@ -463,10 +465,16 @@ export function useFormValidation({
         status: step4Complete ? 'complete' : 'incomplete'
       },
       {
+        id: 'tags-metadata',
+        title: 'Tags & Metadata',
+        description: 'Preserve source tags and custom metadata',
+        status: step5Complete ? 'complete' : 'incomplete'
+      },
+      {
         id: 'options',
         title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
-        status: step5HasErrors ? 'attention' : step5Complete ? 'complete' : 'incomplete'
+        status: step6HasErrors ? 'attention' : step6Complete ? 'complete' : 'incomplete'
       }
     ],
     [
@@ -474,11 +482,12 @@ export function useFormValidation({
       isStep2Complete,
       isStep3Complete,
       step4Complete,
+      step5Complete,
       step1HasErrors,
       step2HasErrors,
       step3HasErrors,
-      step5HasErrors,
-      step5Complete
+      step6HasErrors,
+      step6Complete
     ]
   )
 
@@ -498,10 +507,11 @@ export function useFormValidation({
     isStep3Complete,
     step4Complete,
     step5Complete,
+    step6Complete,
     step1HasErrors,
     step2HasErrors,
     step3HasErrors,
-    step5HasErrors,
+    step6HasErrors,
     unmappedNetworksCount,
     unmappedStorageCount,
     hasAnyMigrationOptionSelected,

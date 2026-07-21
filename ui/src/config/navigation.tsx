@@ -38,6 +38,16 @@ export const navigationItems: NavigationItem[] = [
         id: 'inventory',
         label: 'Inventory',
         path: '/dashboard/inventory'
+      },
+      {
+        id: 'proxy-vms',
+        label: 'vJailbreak Proxy VMs',
+        path: '/dashboard/proxy-vms',
+        badge: {
+          label: 'Beta',
+          color: 'warning',
+          variant: 'outlined'
+        }
       }
     ]
   },
@@ -72,16 +82,6 @@ export const navigationItems: NavigationItem[] = [
         label: 'ESXi SSH',
         path: '/dashboard/esxi-ssh-keys',
         icon: <VpnKeyIcon />
-      },
-      {
-        id: 'proxy-vms',
-        label: 'Proxy VMs',
-        path: '/dashboard/proxy-vms',
-        badge: {
-          label: 'Beta',
-          color: 'warning',
-          variant: 'outlined'
-        }
       }
     ]
   },
@@ -92,15 +92,15 @@ export const navigationItems: NavigationItem[] = [
     icon: <ConfigIcon />,
     children: [
       {
+        id: 'global-settings',
+        label: 'Global Settings',
+        path: '/dashboard/global-settings'
+      },
+      {
         id: 'baremetal-config',
         label: 'Bare Metal Config',
         path: '/dashboard/baremetal-config',
         icon: <Storage />
-      },
-      {
-        id: 'global-settings',
-        label: 'Global Settings',
-        path: '/dashboard/global-settings'
       }
     ]
   },

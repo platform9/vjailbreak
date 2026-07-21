@@ -1,3 +1,4 @@
+import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 export interface GetMigrationTemplatesList {
   apiVersion: string
   items: MigrationTemplate[]
@@ -38,7 +39,6 @@ export interface MigrationTemplateSpec {
   source: Source
   storageMapping: string
   targetPCDClusterName?: string
-  useFlavorless?: boolean
   storageCopyMethod?: string
   proxyVMRef?: { name: string }
 }
@@ -75,7 +75,7 @@ export interface VmData {
   esxHost?: string
   ipAddress?: string
   targetFlavorId?: string
-  disks?: string[]
+  disks?: VMwareDiskEntry[]
   labels?: { [key: string]: string }
   vmWareMachineName?: string
   networkInterfaces?: VmNetworkInterface[]

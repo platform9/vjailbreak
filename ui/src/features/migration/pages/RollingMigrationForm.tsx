@@ -11,7 +11,7 @@ import {
 } from '@mui/material'
 import { ActionButton } from 'src/components'
 import ClusterIcon from '@mui/icons-material/Hub'
-import React, { useState, useMemo, useEffect, useCallback } from 'react'
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { DataGrid, GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
 import { useNavigate } from 'react-router-dom'
 import { useKeyboardSubmit } from 'src/hooks/ui/useKeyboardSubmit'
@@ -24,15 +24,20 @@ import SecurityGroupAndServerGroupStep from '../steps/SecurityGroupAndServerGrou
 import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from '../steps/MigrationOptionsAlt'
+import TagsAndMetadataSection from '../steps/TagsAndMetadataSection'
 import WarningIcon from '@mui/icons-material/Warning'
 import { useClusterData } from '../hooks/useClusterData'
 import { useErrorHandler } from 'src/hooks/useErrorHandler'
 import { useHostConfigHandlers } from '../hooks/useHostConfigHandlers'
 import { useRollingFormData } from '../hooks/useRollingFormData'
+import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
+import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
+import { hasAnySubnetMismatch } from '../utils/subnetMismatch'
 import { useRollingFormValidation } from '../hooks/useRollingFormValidation'
 import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useRollingFormSync } from '../hooks/useRollingFormSync'
+import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -48,6 +53,7 @@ import type {
   FieldErrors,
   RollingFormParams
 } from '../types'
+import type { VmData } from '../api/migration-templates/model'
 
 // RollingMigration includes osFamily which the shared SelectedMigrationOptionsType does not
 export interface SelectedMigrationOptionsType extends Record<string, unknown> {
@@ -59,7 +65,6 @@ export interface SelectedMigrationOptionsType extends Record<string, unknown> {
   postMigrationScript: boolean
   osFamily: boolean
   useGPU?: boolean
-  useFlavorless?: boolean
   postMigrationAction?: {
     suffix?: boolean
     folderName?: boolean
@@ -78,7 +83,6 @@ const defaultMigrationOptions: SelectedMigrationOptionsType = {
   postMigrationScript: false,
   osFamily: false,
   useGPU: false,
-  useFlavorless: false,
   postMigrationAction: {
     suffix: false,
     folderName: false,
@@ -139,7 +143,25 @@ export default function RollingMigrationFormDrawer({
   const [vmOSAssignments, setVmOSAssignments] = useState<Record<string, string>>({})
 
   // Migration Options state
-  const { params, getParamsUpdater } = useParams<RollingFormParams>({})
+  const { params, getParamsUpdater, updateParams } = useParams<RollingFormParams>({ removeVMwareTools: true })
+
+  const { data: settingsConfigMap } = useSettingsConfigMapQuery()
+  const networkPersistenceSeedRef = useRef(false)
+
+  // Seed networkPersistence from the global default once per open session.
+  // Reset the flag when the drawer closes so the next open starts fresh.
+  useEffect(() => {
+    if (!open) {
+      networkPersistenceSeedRef.current = false
+      return
+    }
+    if (networkPersistenceSeedRef.current) return
+    if (!settingsConfigMap) return
+    networkPersistenceSeedRef.current = true
+    const raw = settingsConfigMap.data?.DEFAULT_NETWORK_PERSISTENCE
+    updateParams({ networkPersistence: raw === 'true' })
+  }, [open, settingsConfigMap, updateParams])
+
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const getFieldErrorsUpdater = useCallback(
     (key: string | number) => (value: string) => {
@@ -374,6 +396,30 @@ export default function RollingMigrationFormDrawer({
     return volumeTypes.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
   }, [openstackCredData])
 
+  // Subnet compatibility between VM IPs and mapped target networks — shared by
+  // the mapping step (warnings) and migration options (persist IP block).
+  const subnetCheckVMs = useMemo<VmData[]>(
+    () =>
+      vmsWithAssignments.map((vm) => ({
+        id: vm.id,
+        name: vm.name,
+        datastores: vm.datastores || [],
+        networks: vm.networks,
+        ipAddress: vm.ip,
+        networkInterfaces: vm.networkInterfaces
+      })),
+    [vmsWithAssignments]
+  )
+  const networkIPsMap = useNetworkIPsMap(subnetCheckVMs)
+  const subnetWarnings = useNetworkSubnetCompatibility({
+    networkMappings: params.networkMappings,
+    openstackCredentials: openstackCredData || undefined,
+    selectedVMs: subnetCheckVMs,
+    networkIPsMap,
+    openstackNetworks
+  })
+  const hasSubnetMismatch = hasAnySubnetMismatch(subnetWarnings)
+
   // Update ESXi host config names when OpenStack host configs become available
   useEffect(() => {
     const pcdHostConfigs = openstackCredData?.spec?.pcdHostConfig || []
@@ -425,6 +471,7 @@ export default function RollingMigrationFormDrawer({
     vms: false,
     mapResources: false,
     security: false,
+    tagsMetadata: false,
     options: false
   })
 
@@ -526,6 +573,7 @@ export default function RollingMigrationFormDrawer({
       vms: false,
       mapResources: false,
       security: false,
+      tagsMetadata: false,
       options: false
     })
   }, [open])
@@ -537,6 +585,7 @@ export default function RollingMigrationFormDrawer({
   const vmsRef = React.useRef<HTMLDivElement | null>(null)
   const mapResourcesRef = React.useRef<HTMLDivElement | null>(null)
   const securityRef = React.useRef<HTMLDivElement | null>(null)
+  const tagsMetadataRef = React.useRef<HTMLDivElement | null>(null)
   const optionsRef = React.useRef<HTMLDivElement | null>(null)
   const previewRef = React.useRef<HTMLDivElement | null>(null)
 
@@ -550,6 +599,7 @@ export default function RollingMigrationFormDrawer({
       { ref: vmsRef, id: 'vms' },
       { ref: mapResourcesRef, id: 'map-resources' },
       { ref: securityRef, id: 'security' },
+      { ref: tagsMetadataRef, id: 'tags-metadata' },
       { ref: optionsRef, id: 'options' }
     ],
     setActiveSectionId
@@ -563,6 +613,7 @@ export default function RollingMigrationFormDrawer({
       vms: vmsRef,
       'map-resources': mapResourcesRef,
       security: securityRef,
+      'tags-metadata': tagsMetadataRef,
       options: optionsRef
     }
 
@@ -871,8 +922,7 @@ export default function RollingMigrationFormDrawer({
                       storageMappingError={storageMappingError}
                       loading={loadingOpenstackDetails}
                       showHeader={false}
-                      selectedVMs={vmsWithAssignments as any}
-                      openstackCredentials={openstackCredData || undefined}
+                      subnetWarnings={subnetWarnings}
                     />
                   ) : (
                     <Typography variant="body2" color="text.secondary">
@@ -909,6 +959,29 @@ export default function RollingMigrationFormDrawer({
               <Divider />
 
               <Box
+                ref={tagsMetadataRef}
+                data-testid="rolling-migration-form-step-tags-metadata"
+                onChangeCapture={() => markTouched('tagsMetadata')}
+                onClickCapture={() => markTouched('tagsMetadata')}
+              >
+                <SurfaceCard
+                  variant="section"
+                  title="Tags & Metadata"
+                  subtitle="Carry organizational context from VMware to the migrated VMs"
+                  data-testid="rolling-migration-form-tags-metadata-card"
+                >
+                  <TagsAndMetadataSection
+                    preserveSourceTags={Boolean(params?.preserveSourceTags)}
+                    customMetadata={params?.customMetadata || []}
+                    onChange={getParamsUpdater}
+                    showHeader={false}
+                  />
+                </SurfaceCard>
+              </Box>
+
+              <Divider />
+
+              <Box
                 ref={optionsRef}
                 data-testid="rolling-migration-form-step-options"
                 onChangeCapture={() => markTouched('options')}
@@ -930,6 +1003,7 @@ export default function RollingMigrationFormDrawer({
                     errors={fieldErrors}
                     getErrorsUpdater={getFieldErrorsUpdater}
                     showHeader={false}
+                    hasSubnetMismatch={hasSubnetMismatch}
                   />
                 </SurfaceCard>
               </Box>

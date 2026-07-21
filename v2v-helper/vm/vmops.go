@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,12 +27,18 @@ import (
 
 //go:generate mockgen -source=vmops.go -destination=vmops_mock.go -package=vm
 
+// MinCBTHardwareVersion is the minimum VMware virtual hardware version that
+// supports Changed Block Tracking (CBT). VMs on older hardware versions cannot
+// use CBT and must be migrated using cold migration. See VMware KB 1020128.
+const MinCBTHardwareVersion = 7
+
 type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
 	UpdateDiskInfo(*VMInfo, VMDisk, bool) error
-	UpdateDisksInfo(*VMInfo) error
+	UpdateDisksInfo(*VMInfo, bool) error
 	IsCBTEnabled() (bool, error)
+	GetHardwareVersion() (int, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
 	DeleteSnapshot(name string) error
@@ -69,6 +76,7 @@ type VMInfo struct {
 	NetworkInterfaces []vjailbreakv1alpha1.NIC
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
 	GatewayIP         map[string]string
+	TargetMetadata    map[string]string
 }
 
 type NIC struct {
@@ -195,12 +203,11 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 	var mac []string
 	for _, device := range o.Config.Hardware.Device {
 		if nic, ok := device.(types.BaseVirtualEthernetCard); ok {
-			mac = append(mac, nic.GetVirtualEthernetCard().MacAddress)
+			// Canonical lowercase so IPperMac lookups by vminfo.Mac always hit,
+			// regardless of the case vCenter reports for manually-assigned MACs
+			mac = append(mac, CanonicalMAC(nic.GetVirtualEthernetCard().MacAddress))
 		}
 	}
-	// Get IP addresses of the VM from vmwaremachines
-	ips := []string{}
-	ipPerMac := make(map[string][]IpEntry)
 
 	// Get the vmware machine from k8s
 	vmk8sName, err := k8sutils.GetVMwareMachineName()
@@ -213,46 +220,7 @@ func (vmops *VMOps) GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error) 
 		return VMInfo{}, fmt.Errorf("failed to get vmware machine: %s", err)
 	}
 
-	for _, macAddresss := range mac {
-		// Get the IPs from the vmware machine.
-		if vmwareMachine.Spec.VMInfo.GuestNetworks != nil {
-			for _, guestNetwork := range vmwareMachine.Spec.VMInfo.GuestNetworks {
-				// Every mac should have a corresponding IP, Ignore link layer ip
-				if strings.EqualFold(guestNetwork.MAC, macAddresss) {
-					if _, ok := ipPerMac[guestNetwork.MAC]; !ok {
-						ipPerMac[guestNetwork.MAC] = []IpEntry{}
-					}
-					if !strings.Contains(guestNetwork.IP, ":") {
-						ips = append(ips, guestNetwork.IP)
-						ipPerMac[guestNetwork.MAC] = append(ipPerMac[guestNetwork.MAC], IpEntry{
-							IP:     guestNetwork.IP,
-							Prefix: guestNetwork.PrefixLength,
-						})
-					}
-				}
-			}
-		} else {
-			if vmwareMachine.Spec.VMInfo.NetworkInterfaces != nil {
-				for _, networkInterface := range vmwareMachine.Spec.VMInfo.NetworkInterfaces {
-					if networkInterface.MAC == macAddresss {
-						if _, ok := ipPerMac[networkInterface.MAC]; !ok {
-							ipPerMac[networkInterface.MAC] = []IpEntry{}
-						}
-						for _, ipAddress := range networkInterface.IPAddress {
-							if strings.Contains(ipAddress, ":") {
-								continue
-							}
-							ips = append(ips, ipAddress)
-							ipPerMac[networkInterface.MAC] = append(ipPerMac[networkInterface.MAC], IpEntry{
-								IP:     ipAddress,
-								Prefix: 0,
-							})
-						}
-					}
-				}
-			}
-		}
-	}
+	ipPerMac := CollectIPsPerMac(mac, vmwareMachine.Spec.VMInfo.GuestNetworks, vmwareMachine.Spec.VMInfo.NetworkInterfaces)
 
 	vmdisks := []VMDisk{}
 	for _, device := range o.Config.Hardware.Device {
@@ -379,7 +347,7 @@ func getChangeID(disk *types.VirtualDisk) (*ChangeID, error) {
 	return parseChangeID(changeId)
 }
 
-func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
+func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo, requireChangeID bool) error {
 	pc := vmops.vcclient.VCPropertyCollector
 	var snapbackingdisk []string
 	var snapname []string
@@ -424,16 +392,24 @@ func (vmops *VMOps) UpdateDisksInfo(vminfo *VMInfo) error {
 			case *types.VirtualDisk:
 				backing := disk.Backing.(types.BaseVirtualDeviceFileBackingInfo)
 				info := backing.GetVirtualDeviceFileBackingInfo()
+				var changeIDValue string
 				changeid, err := getChangeID(disk)
 				if err != nil {
-					return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					// For cold migrations, CBT is not used. Missing change IDs are expected
+					// (especially on hardware version < 7), so continue without failing.
+					if requireChangeID {
+						return fmt.Errorf("failed to get change ID for device key %d: %s", disk.Key, err)
+					}
+					log.Printf("Change ID unavailable for device key %d (%s); continuing without CBT", disk.Key, err)
+				} else {
+					changeIDValue = changeid.Value
 				}
 				snapshotInfo[disk.Key] = struct {
 					FileName string
 					ChangeID string
 				}{
 					FileName: info.FileName,
-					ChangeID: changeid.Value,
+					ChangeID: changeIDValue,
 				}
 			}
 		}
@@ -552,7 +528,53 @@ func (vmops *VMOps) IsCBTEnabled() (bool, error) {
 			return false, fmt.Errorf("failed to get VM properties: %s", err)
 		}
 	}
+	// CBT is unsupported on virtual hardware < 7. If changeTrackingEnabled
+	// is absent, treat CBT as disabled and avoid nil pointer dereferences.
+	if o.Config == nil || o.Config.ChangeTrackingEnabled == nil {
+		return false, nil
+	}
 	return *o.Config.ChangeTrackingEnabled, nil
+}
+
+// parseHardwareVersion extracts the numeric virtual hardware version from a
+// VMware config.version string such as "vmx-07". It returns 0 when the value is
+// empty or cannot be parsed.
+func parseHardwareVersion(version string) int {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(version), "vmx-")
+	if trimmed == "" {
+		return 0
+	}
+	parsedHarwareVersion, err := strconv.Atoi(trimmed)
+	if err != nil {
+		return 0
+	}
+	return parsedHarwareVersion
+}
+
+// GetHardwareVersion returns the numeric virtual hardware version of the VM
+// (e.g. 4 for "vmx-04", 13 for "vmx-13"). It returns 0 when the version cannot
+// be determined.
+func (vmops *VMOps) GetHardwareVersion() (int, error) {
+	vm := vmops.VMObj
+	var o mo.VirtualMachine
+	err := vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+	if err != nil {
+		if !vcenter.IsTransientVCenterError(err) {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return 0, fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		err = vm.Properties(vmops.ctx, vm.Reference(), []string{"config.version"}, &o)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get VM properties: %s", err)
+		}
+	}
+	if o.Config == nil {
+		return 0, nil
+	}
+	return parseHardwareVersion(o.Config.Version), nil
 }
 
 func (vmops *VMOps) EnableCBT() error {

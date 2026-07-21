@@ -1,6 +1,6 @@
 # Stage 1: Build environment
-# Using Fedora 42 which includes Go 1.24 required by our go.mod
-FROM fedora:42 AS builder
+# Using Fedora 44 to match runtime stage and vendored libnbd-devel
+FROM fedora:44 AS builder
 
 # Build arguments for multi-platform support and versioning
 ARG TARGETOS
@@ -9,9 +9,16 @@ ARG RELEASE_VERSION
 ENV RELEASE_VERSION=$RELEASE_VERSION
 
 # Install build dependencies
-# - golang: Required for building the application (Go 1.24.1 from Fedora 42)
+# - golang: Required for building the application
 # - libnbd-devel: Development files for NBD (Network Block Device) support
-RUN dnf install -y golang libnbd-devel
+#   Installed from vendored fc44 RPM to match the runtime libnbd version exactly
+WORKDIR /tmp/rpms
+COPY v2v-helper/nbdkit/libnbd-1.25.5-1.fc44.x86_64.rpm \
+     v2v-helper/nbdkit/libnbd-devel-1.25.5-1.fc44.x86_64.rpm /tmp/rpms/
+RUN dnf install -y golang \
+    ./libnbd-1.25.5-1.fc44.x86_64.rpm \
+    ./libnbd-devel-1.25.5-1.fc44.x86_64.rpm && \
+    dnf clean all && rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/
 
 # Set up build workspace
 WORKDIR /workspace
@@ -22,8 +29,8 @@ WORKDIR /workspace
 COPY v2v-helper/manager manager
 
 # Stage 2: Runtime environment
-# Using same Fedora version for consistency and required runtime dependencies
-FROM fedora:42
+# Using Fedora 44 to match vendored RPM set (virt-v2v 2.11.8, nbdkit 1.47.5, libnbd 1.25.5)
+FROM fedora:44
 
 WORKDIR /tmp/rpms
 COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
@@ -32,23 +39,36 @@ COPY v2v-helper/nbdkit/*.rpm /tmp/rpms/
 # - --nodocs: Skip documentation files
 # - --setopt=install_weak_deps=False: Skip weak dependencies
 # - Clean up aggressively after install
+# All packages installed from vendored fc44 RPMs for reproducible builds.
+# netplan is the only package pulled from the repo (no fc44 RPM vendored).
 RUN dnf install -y \
     --nodocs \
     --setopt=install_weak_deps=False \
-    ./libnbd-1.22.2-1.fc42.x86_64.rpm \
-    ./nbdkit-server-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-basic-plugins-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-basic-filters-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-vddk-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-ssh-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-curl-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-python-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./nbdkit-nbd-plugin-1.42.4-1.fc42.x86_64.rpm \
-    ./virt-v2v-2.8.1-1.fc42.x86_64.rpm \
-    ./nbdkit-selinux-1.42.4-1.fc42.noarch.rpm \
-    guestfs-tools \
+    ./libnbd-1.25.5-1.fc44.x86_64.rpm \
+    ./nbdkit-server-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-basic-plugins-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-basic-filters-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-vddk-plugin-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-ssh-plugin-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-curl-plugin-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-python-plugin-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-nbd-plugin-1.47.5-1.fc44.x86_64.rpm \
+    ./nbdkit-selinux-1.47.5-1.fc44.noarch.rpm \
+    ./libguestfs-1.59.8-1.fc44.x86_64.rpm \
+    ./libguestfs-appliance-1.59.8-1.fc44.x86_64.rpm \
+    ./guestfs-tools-1.55.8-1.fc44.x86_64.rpm \
     netplan && \
+    # Install pf9-patched virt-v2v via dnf (not rpm --nodeps) so that the
+    # RPM's explicit Requires and Recommends are honoured:
+    #   Requires:    xfsprogs, mingw-srvany-redistributable
+    #   Recommends:  reiserfs-utils, jfsutils, f2fs-tools
+    # The RPM's %post scriptlet registers the filesystem tools with the
+    # libguestfs supermin appliance, and the RPM bundles rhsrvany.exe /
+    # pnp_wait.exe for Windows firstboot support.
+    # AutoReq: no in the spec means only our explicit deps are resolved —
+    # no version conflicts with the vendored libguestfs above.
+    dnf install -y --nodocs ./virt-v2v-2.11.8-1.pf9.fc44.x86_64.rpm && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum /tmp/rpms/ && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/locale && \
@@ -57,11 +77,22 @@ RUN dnf install -y \
 # Version lock to prevent accidental upgrades
 # Install versionlock plugin without docs to save space
 RUN dnf install -y --nodocs --setopt=install_weak_deps=False python3-dnf-plugin-versionlock && \
-    dnf versionlock add nbdkit-1.42.4-1.fc42 nbdkit-vddk-plugin-1.42.4-1.fc42 \
-    libnbd-1.22.2-1.fc42 nbdkit-server-1.42.4-1.fc42 nbdkit-basic-plugins-1.42.4-1.fc42 \ 
-    nbdkit-basic-filters-1.42.4-1.fc42 nbdkit-curl-plugin-1.42.4-1.fc42 \
-    nbdkit-ssh-plugin-1.42.4-1.fc42 nbdkit-python-plugin-1.42.4-1.fc42 \
-    nbdkit-nbd-plugin-1.42.4-1.fc42 virt-v2v-2.8.1-1.fc42.x86_64 nbdkit-selinux-1.42.4-1.fc42.noarch && \
+    dnf versionlock add \
+    nbdkit-1.47.5-1.fc44 \
+    nbdkit-vddk-plugin-1.47.5-1.fc44 \
+    libnbd-1.25.5-1.fc44 \
+    nbdkit-server-1.47.5-1.fc44 \
+    nbdkit-basic-plugins-1.47.5-1.fc44 \
+    nbdkit-basic-filters-1.47.5-1.fc44 \
+    nbdkit-curl-plugin-1.47.5-1.fc44 \
+    nbdkit-ssh-plugin-1.47.5-1.fc44 \
+    nbdkit-python-plugin-1.47.5-1.fc44 \
+    nbdkit-nbd-plugin-1.47.5-1.fc44 \
+    nbdkit-selinux-1.47.5-1.fc44.noarch \
+    virt-v2v-1:2.11.8-1.pf9.fc44.x86_64 \
+    libguestfs-1.59.8-1.fc44.x86_64 \
+    libguestfs-appliance-1.59.8-1.fc44.x86_64 \
+    guestfs-tools-1.55.8-1.fc44.x86_64 && \
     dnf clean all && \
     rm -rf /var/cache/dnf /var/cache/yum
 

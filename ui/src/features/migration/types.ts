@@ -1,6 +1,8 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
+import type { RetryMigrationConfig } from './context/MigrationFormContext'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
+import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
 import type { GridRowSelectionModel, GridToolbarProps } from '@mui/x-data-grid'
@@ -69,6 +71,14 @@ export interface FormValues extends Record<string, unknown> {
   networkPersistence?: boolean
   removeVMwareTools?: boolean
   imageProfiles?: string[]
+  preserveSourceTags?: boolean
+  customMetadata?: KeyValuePair[]
+}
+
+// A single row in the custom metadata key-value editor
+export interface KeyValuePair {
+  key: string
+  value: string
 }
 
 export interface SelectedMigrationOptionsType {
@@ -79,7 +89,6 @@ export interface SelectedMigrationOptionsType {
   cutoverEndTime: boolean
   postMigrationScript: boolean
   useGPU?: boolean
-  useFlavorless?: boolean
   periodicSyncEnabled?: boolean
   postMigrationAction?: {
     suffix?: boolean
@@ -108,6 +117,7 @@ export interface MigrationFormDrawerProps {
   onClose: () => void
   reloadMigrations?: () => void
   onSuccess?: (message: string) => void
+  retryConfig?: RetryMigrationConfig
 }
 
 // ---------------------------------------------------------------------------
@@ -145,10 +155,11 @@ export interface RollingFormParams extends Record<string, unknown> {
     moveToFolder?: boolean
   }
   useGPU?: boolean
-  useFlavorless?: boolean
   disconnectSourceNetwork?: boolean
   fallbackToDHCP?: boolean
   networkPersistence?: boolean
+  preserveSourceTags?: boolean
+  customMetadata?: KeyValuePair[]
 }
 
 export interface NetworkAndStorageMappingStepProps {
@@ -169,8 +180,7 @@ export interface NetworkAndStorageMappingStepProps {
   stepNumber?: string
   loading?: boolean
   showHeader?: boolean
-  selectedVMs?: VmData[]
-  openstackCredentials?: OpenstackCreds
+  subnetWarnings?: Record<string, string>
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +296,7 @@ export interface CanonicalVM {
   vmKey?: string
   vmid?: string
   labels?: Record<string, string>
-  disks?: string[]
+  disks?: VMwareDiskEntry[]
   vmWareMachineName?: string
 }
 
@@ -312,6 +322,12 @@ export interface VmsSelectionStepProps {
   showHeader?: boolean
   /** VM names to pre-select once the list loads (used by the bucket editor). */
   initialSelectedVmNames?: string[]
+  // When set, the table shows only this VM (by name) and treats it as not migrated.
+  retryVmName?: string
+  // Prefilled VmData from useRetryPrefill (carries preserveIp/preserveMac/networkInterfaces
+  // from the original plan). Merged into vmsWithFlavor so the "Assign IP" dialog shows
+  // the user's previous configuration instead of raw VMware machine data.
+  retryPrefillVm?: VmData
 
   // Rolling-mode props
   vmsWithAssignments?: VM[]
@@ -333,7 +349,7 @@ export interface VmsSelectionStepProps {
 // ---------------------------------------------------------------------------
 
 export interface MigrationOptionsPropsInterface {
-  params: FormValues & { useFlavorless?: boolean; useGPU?: boolean }
+  params: FormValues & { useGPU?: boolean }
   onChange: (key: string) => (value: unknown) => void
   openstackCredentials?: OpenstackCreds
   selectedMigrationOptions: SelectedMigrationOptionsType
@@ -347,6 +363,7 @@ export interface MigrationOptionsPropsInterface {
   getErrorsUpdater: (key: string | number) => (value: string) => void
   stepNumber: string
   showHeader?: boolean
+  hasSubnetMismatch?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +376,9 @@ declare module '@mui/x-data-grid' {
     onDeleteSelected: () => void
     onBulkAdminCutover: () => void
     numEligibleForCutover: number
+    onBulkRetry: () => void
+    numEligibleForRetry: number
+    isBulkRetryLoading: boolean
     refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
     onStatusFilterChange: (filter: string) => void
     currentStatusFilter: string
@@ -375,6 +395,9 @@ export interface CustomToolbarProps extends GridToolbarProps {
   onDeleteSelected: () => void
   onBulkAdminCutover: () => void
   numEligibleForCutover: number
+  onBulkRetry: () => void
+  numEligibleForRetry: number
+  isBulkRetryLoading: boolean
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
   onStatusFilterChange: (filter: string) => void
   currentStatusFilter: string

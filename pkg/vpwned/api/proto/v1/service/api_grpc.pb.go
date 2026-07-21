@@ -11,6 +11,7 @@ package service
 
 import (
 	context "context"
+	httpbody "google.golang.org/genproto/googleapis/api/httpbody"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -939,7 +940,9 @@ const (
 	VailbreakProxy_ValidateOpenstackIp_FullMethodName             = "/api.VailbreakProxy/ValidateOpenstackIp"
 	VailbreakProxy_RevalidateCredentials_FullMethodName           = "/api.VailbreakProxy/RevalidateCredentials"
 	VailbreakProxy_InjectEnvVariables_FullMethodName              = "/api.VailbreakProxy/InjectEnvVariables"
+	VailbreakProxy_ApplyTimeSettings_FullMethodName               = "/api.VailbreakProxy/ApplyTimeSettings"
 	VailbreakProxy_CheckNetworkSubnetCompatibility_FullMethodName = "/api.VailbreakProxy/CheckNetworkSubnetCompatibility"
+	VailbreakProxy_GetDebugBundle_FullMethodName                  = "/api.VailbreakProxy/GetDebugBundle"
 )
 
 // VailbreakProxyClient is the client API for VailbreakProxy service.
@@ -949,7 +952,12 @@ type VailbreakProxyClient interface {
 	ValidateOpenstackIp(ctx context.Context, in *ValidateOpenstackIpRequest, opts ...grpc.CallOption) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(ctx context.Context, in *RevalidateCredentialsRequest, opts ...grpc.CallOption) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(ctx context.Context, in *InjectEnvVariablesRequest, opts ...grpc.CallOption) (*InjectEnvVariablesResponse, error)
+	ApplyTimeSettings(ctx context.Context, in *ApplyTimeSettingsRequest, opts ...grpc.CallOption) (*ApplyTimeSettingsResponse, error)
 	CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error)
+	// GetDebugBundle returns a downloadable .tar.gz debug bundle for a
+	// migration: pod stdout/stderr logs, related Kubernetes resource YAMLs
+	// and debug logs from /var/log/pf9.
+	GetDebugBundle(ctx context.Context, in *GetDebugBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[httpbody.HttpBody], error)
 }
 
 type vailbreakProxyClient struct {
@@ -990,6 +998,16 @@ func (c *vailbreakProxyClient) InjectEnvVariables(ctx context.Context, in *Injec
 	return out, nil
 }
 
+func (c *vailbreakProxyClient) ApplyTimeSettings(ctx context.Context, in *ApplyTimeSettingsRequest, opts ...grpc.CallOption) (*ApplyTimeSettingsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ApplyTimeSettingsResponse)
+	err := c.cc.Invoke(ctx, VailbreakProxy_ApplyTimeSettings_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *vailbreakProxyClient) CheckNetworkSubnetCompatibility(ctx context.Context, in *CheckNetworkSubnetCompatibilityRequest, opts ...grpc.CallOption) (*CheckNetworkSubnetCompatibilityResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CheckNetworkSubnetCompatibilityResponse)
@@ -1000,6 +1018,25 @@ func (c *vailbreakProxyClient) CheckNetworkSubnetCompatibility(ctx context.Conte
 	return out, nil
 }
 
+func (c *vailbreakProxyClient) GetDebugBundle(ctx context.Context, in *GetDebugBundleRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[httpbody.HttpBody], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &VailbreakProxy_ServiceDesc.Streams[0], VailbreakProxy_GetDebugBundle_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GetDebugBundleRequest, httpbody.HttpBody]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type VailbreakProxy_GetDebugBundleClient = grpc.ServerStreamingClient[httpbody.HttpBody]
+
 // VailbreakProxyServer is the server API for VailbreakProxy service.
 // All implementations must embed UnimplementedVailbreakProxyServer
 // for forward compatibility.
@@ -1007,7 +1044,12 @@ type VailbreakProxyServer interface {
 	ValidateOpenstackIp(context.Context, *ValidateOpenstackIpRequest) (*ValidateOpenstackIpResponse, error)
 	RevalidateCredentials(context.Context, *RevalidateCredentialsRequest) (*RevalidateCredentialsResponse, error)
 	InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error)
+	ApplyTimeSettings(context.Context, *ApplyTimeSettingsRequest) (*ApplyTimeSettingsResponse, error)
 	CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error)
+	// GetDebugBundle returns a downloadable .tar.gz debug bundle for a
+	// migration: pod stdout/stderr logs, related Kubernetes resource YAMLs
+	// and debug logs from /var/log/pf9.
+	GetDebugBundle(*GetDebugBundleRequest, grpc.ServerStreamingServer[httpbody.HttpBody]) error
 	mustEmbedUnimplementedVailbreakProxyServer()
 }
 
@@ -1027,8 +1069,14 @@ func (UnimplementedVailbreakProxyServer) RevalidateCredentials(context.Context, 
 func (UnimplementedVailbreakProxyServer) InjectEnvVariables(context.Context, *InjectEnvVariablesRequest) (*InjectEnvVariablesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method InjectEnvVariables not implemented")
 }
+func (UnimplementedVailbreakProxyServer) ApplyTimeSettings(context.Context, *ApplyTimeSettingsRequest) (*ApplyTimeSettingsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ApplyTimeSettings not implemented")
+}
 func (UnimplementedVailbreakProxyServer) CheckNetworkSubnetCompatibility(context.Context, *CheckNetworkSubnetCompatibilityRequest) (*CheckNetworkSubnetCompatibilityResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CheckNetworkSubnetCompatibility not implemented")
+}
+func (UnimplementedVailbreakProxyServer) GetDebugBundle(*GetDebugBundleRequest, grpc.ServerStreamingServer[httpbody.HttpBody]) error {
+	return status.Error(codes.Unimplemented, "method GetDebugBundle not implemented")
 }
 func (UnimplementedVailbreakProxyServer) mustEmbedUnimplementedVailbreakProxyServer() {}
 func (UnimplementedVailbreakProxyServer) testEmbeddedByValue()                        {}
@@ -1105,6 +1153,24 @@ func _VailbreakProxy_InjectEnvVariables_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VailbreakProxy_ApplyTimeSettings_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyTimeSettingsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VailbreakProxyServer).ApplyTimeSettings(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VailbreakProxy_ApplyTimeSettings_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VailbreakProxyServer).ApplyTimeSettings(ctx, req.(*ApplyTimeSettingsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckNetworkSubnetCompatibilityRequest)
 	if err := dec(in); err != nil {
@@ -1122,6 +1188,17 @@ func _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler(srv interface{}, ct
 	}
 	return interceptor(ctx, in, info, handler)
 }
+
+func _VailbreakProxy_GetDebugBundle_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GetDebugBundleRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(VailbreakProxyServer).GetDebugBundle(m, &grpc.GenericServerStream[GetDebugBundleRequest, httpbody.HttpBody]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type VailbreakProxy_GetDebugBundleServer = grpc.ServerStreamingServer[httpbody.HttpBody]
 
 // VailbreakProxy_ServiceDesc is the grpc.ServiceDesc for VailbreakProxy service.
 // It's only intended for direct use with grpc.RegisterService,
@@ -1143,11 +1220,21 @@ var VailbreakProxy_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _VailbreakProxy_InjectEnvVariables_Handler,
 		},
 		{
+			MethodName: "ApplyTimeSettings",
+			Handler:    _VailbreakProxy_ApplyTimeSettings_Handler,
+		},
+		{
 			MethodName: "CheckNetworkSubnetCompatibility",
 			Handler:    _VailbreakProxy_CheckNetworkSubnetCompatibility_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "GetDebugBundle",
+			Handler:       _VailbreakProxy_GetDebugBundle_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "sdk/proto/v1/api.proto",
 }
 

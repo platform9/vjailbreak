@@ -1,5 +1,19 @@
 {
+  "env": {
+    "GRAPHIFY_NO_BACKUP": "1"
+  },
   "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"systemMessage\": \"CLAUDE.md COMPLIANCE CHECKLIST:\\n1. Unit tests written for EVERY Go file touched? (not just new files)\\n2. If function had external deps: extracted pure helper + tested it?\\n3. No hand-edits to deploy/installer.yaml or zz_generated.deepcopy.go?\\n4. Edited api/v1alpha1/ types? Ran make generate inside k8s/migration/?\\n5. Self-audit: tested every modified or added function?\"}'",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",

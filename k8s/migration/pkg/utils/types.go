@@ -83,6 +83,12 @@ type RollingMigartionValidationConfig struct {
 	CheckESXiInMAAS bool `json:"checkESXiInMAAS"` // Check if the ESXi host is in MAAS
 	// CheckPCDHasClusterConfigured checks if the PCD has at-least one Cluster configured
 	CheckPCDHasClusterConfigured bool `json:"checkPCDHasClusterConfigured"` // Check if the PCD has at-least one Cluster configured
+	// MigrationVMNames is a runtime-only set of VM display names that are part of the
+	// migration plan. These VMs are expected to be powered off (cold migration) and must
+	// be skipped during the CheckVMsAreNotBlockedForMigration check — they will not be
+	// vMotioned off the host; instead they will be migrated via disk copy.
+	// Not populated from ConfigMap; set in code by ValidateRollingMigrationPlan.
+	MigrationVMNames map[string]struct{} `json:"-"`
 }
 
 // vmError represents a thread-safe error collection

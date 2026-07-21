@@ -76,6 +76,11 @@ type VMInfo struct {
 	GuestNetworks []GuestNetwork `json:"guestNetworks,omitempty"`
 	// GPU contains information about GPU devices attached to the VM
 	GPU GPUInfo `json:"gpu,omitempty"`
+	// Tags maps vSphere tag category names to a comma-separated list of the
+	// tag names attached to the VM in that category (e.g. "env" -> "production")
+	Tags map[string]string `json:"tags,omitempty"`
+	// CustomAttributes maps vSphere custom attribute names to their values for the VM
+	CustomAttributes map[string]string `json:"customAttributes,omitempty"`
 }
 
 // Disk represents a virtual disk attached to a virtual machine

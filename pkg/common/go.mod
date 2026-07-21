@@ -3,9 +3,11 @@ module github.com/platform9/vjailbreak/pkg/common
 go 1.24.10
 
 require (
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/pkg/errors v0.9.1
 	github.com/platform9/vjailbreak/k8s/migration v0.0.0-20260223101627-bea2b6892624
+	github.com/sirupsen/logrus v1.9.3
 	github.com/vmware/govmomi v0.51.0
 	golang.org/x/net v0.47.0
 	k8s.io/api v0.33.3
@@ -36,6 +38,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gophercloud/gophercloud v1.14.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
@@ -64,7 +67,6 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

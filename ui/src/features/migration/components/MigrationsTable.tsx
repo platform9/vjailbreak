@@ -1,16 +1,14 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import MigrationIcon from '@mui/icons-material/SwapHoriz'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
-import ListAltIcon from '@mui/icons-material/ListAlt'
-import { LogsDrawer } from '.'
-import { Migration, Phase } from '../api/migrations'
-import MigrationDetailModal from 'src/components/migrations/MigrationDetailModal'
+import { Phase } from '../api/migrations'
 import MigrationProgress from '../components/MigrationProgress'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
 import { TriggerAdminCutoverButton } from '.'
@@ -23,7 +21,7 @@ import { useMigrationFormActions } from '../context/MigrationFormContext'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 import type { CustomToolbarProps, MigrationsTableProps } from '../types'
-import { TooltipContent, ClickableTableCell } from 'src/components'
+import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 import { STATUS_ORDER } from '../constants'
 import { getProgressText, IN_PROGRESS_PHASES } from '../utils/migrationTableUtils'
@@ -45,6 +43,9 @@ const CustomToolbar = ({
   onDeleteSelected,
   onBulkAdminCutover,
   numEligibleForCutover,
+  onBulkRetry,
+  numEligibleForRetry,
+  isBulkRetryLoading,
   refetchMigrations,
   onStatusFilterChange,
   currentStatusFilter,
@@ -78,6 +79,20 @@ const CustomToolbar = ({
               sx={{ height: 40 }}
             >
               Trigger Cutover ({numEligibleForCutover})
+            </Button>
+          )}
+
+          {numEligibleForRetry > 0 && (
+            <Button
+              data-testid="bulk-retry-button"
+              variant="outlined"
+              color="primary"
+              startIcon={<ReplayIcon />}
+              onClick={onBulkRetry}
+              disabled={isBulkRetryLoading}
+              sx={{ height: 40 }}
+            >
+              Retry Selected ({numEligibleForRetry})
             </Button>
           )}
         </>
@@ -124,6 +139,7 @@ export default function MigrationsTable({
   loading = false
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
+  const navigate = useNavigate()
 
   const { data: vmwareCreds } = useVmwareCredentialsQuery(undefined, {
     staleTime: 0,
@@ -150,23 +166,11 @@ export default function MigrationsTable({
   const [isBulkCutoverLoading, setIsBulkCutoverLoading] = useState(false)
   const [bulkCutoverDialogOpen, setBulkCutoverDialogOpen] = useState(false)
   const [bulkCutoverError, setBulkCutoverError] = useState<string | null>(null)
-  const [migrationDetailModalOpen, setMigrationDetailModalOpen] = useState(false)
-  const [selectedMigrationDetail, setSelectedMigrationDetail] = useState<Migration | null>(null)
+  const [isBulkRetryLoading, setIsBulkRetryLoading] = useState(false)
+  const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false)
+  const [bulkRetryError, setBulkRetryError] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
-  const [logsDrawerOpen, setLogsDrawerOpen] = useState(false)
-  const [selectedPod, setSelectedPod] = useState<{
-    name: string
-    namespace: string
-    migrationName?: string
-    migrationPhase?: Phase
-  } | null>(null)
-
-  const logsDrawerMigrationPhase = useMemo(() => {
-    if (!logsDrawerOpen || !selectedPod?.migrationName) return selectedPod?.migrationPhase
-    const current = migrations.find((m) => m.metadata?.name === selectedPod.migrationName)
-    return current?.status?.phase ?? selectedPod?.migrationPhase
-  }, [logsDrawerOpen, migrations, selectedPod?.migrationName, selectedPod?.migrationPhase])
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
@@ -234,7 +238,7 @@ export default function MigrationsTable({
       {
         field: 'name',
         headerName: 'Name',
-        flex: 0.7,
+        flex: 1.2,
         valueGetter: (_, row) => row.spec?.vmName,
         renderCell: (params) => {
           const vmName = params.row?.spec?.vmName || '-'
@@ -267,6 +271,11 @@ export default function MigrationsTable({
             Phase.AwaitingDataCopyStart,
             Phase.CopyingBlocks,
             Phase.CopyingChangedBlocks,
+            Phase.SnapshottingSourceVM,
+            Phase.AttachingDisksToProxy,
+            Phase.IdentifyingBlockDevices,
+            Phase.HotAddTransferInProgress,
+            Phase.HotAddCleanup,
             Phase.ConvertingDisk,
             Phase.AwaitingCutOverStartTime,
             Phase.AwaitingAdminCutOver,
@@ -319,15 +328,21 @@ export default function MigrationsTable({
                   />
                 </Tooltip>
               )}
-              <ClickableTableCell
-                tooltipTitle={tooltipTitle}
-                onClick={() => {
-                  params.row.setSelectedMigrationDetail?.(params.row)
-                  params.row.setMigrationDetailModalOpen?.(true)
-                }}
-              >
-                {displayVmName}
-              </ClickableTableCell>
+              <Tooltip title={tooltipTitle} arrow>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: 'primary.main',
+                    cursor: 'pointer',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  {displayVmName}
+                </Typography>
+              </Tooltip>
             </Box>
           )
         }
@@ -336,7 +351,7 @@ export default function MigrationsTable({
         field: 'status',
         headerName: 'Status',
         valueGetter: (_, row) => row?.status?.phase || 'Pending',
-        flex: 0.5,
+        flex: 0.8,
         sortComparator: (v1, v2) => {
           const order1 = STATUS_ORDER[v1] ?? Number.MAX_SAFE_INTEGER
           const order2 = STATUS_ORDER[v2] ?? Number.MAX_SAFE_INTEGER
@@ -347,13 +362,13 @@ export default function MigrationsTable({
         field: 'agent',
         headerName: 'Agent',
         valueGetter: (_, row) => row.status?.agentName,
-        flex: 1
+        flex: 0.8
       },
       {
         field: 'timeElapsed',
         headerName: 'Time Elapsed',
         valueGetter: (_, row) => calculateTimeElapsed(row.metadata?.creationTimestamp, row.status),
-        flex: 0.8,
+        flex: 0.5,
         renderCell: (params) => {
           const createdAt = formatDateTime(params.row.metadata?.creationTimestamp)
           const tooltip = createdAt === '-' ? 'Created at: N/A' : `Created at: ${createdAt}`
@@ -392,19 +407,60 @@ export default function MigrationsTable({
           const currentDisk = params.row?.status?.currentDisk
           const totalDisks = params.row?.status?.totalDisks
           const syncWarningMessage = params.row?.status?.syncWarningMessage
+          const migrationName = params.row?.metadata?.name
+
+          {/* const isCopyPhase = [
+            Phase.CopyingBlocks,
+            Phase.CopyingChangedBlocks,
+            Phase.ConvertingDisk,
+            Phase.AwaitingDataCopyStart
+          ].includes(phase)
+          const isValidating = phase === Phase.Validating
+
+          const diskNum = currentDisk != null ? parseInt(currentDisk, 10) : null
+          const diskProgress =
+            diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
+
+          const progressVariant: 'indeterminate' | 'determinate' | undefined =
+            isCopyPhase && diskProgress !== null
+              ? 'determinate'
+              : isCopyPhase || isValidating
+                ? 'indeterminate'
+                : undefined
+
+          const progressValue = diskProgress ?? 0
+          const barColor = syncWarningMessage ? 'warning' : 'primary'
+          */}
+
           return conditions ? (
-            <MigrationProgress
-              phase={phase}
-              progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
-              syncWarningMessage={syncWarningMessage}
-            />
+            <Box
+              sx={{ cursor: 'pointer', width: '100%', py: 0.25 }}
+              onClick={() => {
+                if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
+              }}
+            >
+              <MigrationProgress
+                phase={phase}
+                progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+                syncWarningMessage={syncWarningMessage}
+              />
+              {/* {progressVariant && (
+                <LinearProgress
+                  variant={progressVariant}
+                  value={progressValue}
+                  color={barColor as 'primary' | 'success' | 'warning'}
+                  sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
+                />
+              )} */}
+            </Box>
           ) : null
         }
       },
       {
         field: 'actions',
         headerName: 'Actions',
-        flex: 1,
+        flex: 0.4,
+        minWidth: 90,
         renderCell: (params) => {
           const phase = params.row?.status?.phase
           const initiateCutover = params.row?.spec?.initiateCutover
@@ -414,39 +470,36 @@ export default function MigrationsTable({
           const showRetryButton = phase === Phase.Failed
           const isRetryDisabled = retryable === false
 
-          const handleRetry = async () => {
+          // Opens the migration form in retry mode, pre-populated with the failed
+          // migration's configuration. The form triggers the actual retry.
+          const handleRetry = () => {
             if (!migrationName || !namespace) return
-            try {
-              await deleteMigration(migrationName, namespace)
-              params.row.refetchMigrations?.()
-            } catch (error) {
-              console.error('Failed retry:', error)
-            }
+            openMigrationForm('standard', {
+              migrationName,
+              namespace,
+              planName: params.row?.spec?.migrationPlan || params.row?.metadata?.labels?.migrationplan || '',
+              vmName: params.row?.spec?.vmName || ''
+            })
           }
 
           const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
 
           return (
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {params.row.spec?.podRef && (
-                <Tooltip title="View pod logs">
-                  <IconButton
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      params.row.setSelectedPod({
-                        name: params.row.spec.podRef,
-                        namespace: params.row.metadata?.namespace || '',
-                        migrationName: params.row.metadata?.name || '',
-                        migrationPhase: params.row.status?.phase
-                      })
-                      params.row.setLogsDrawerOpen(true)
-                    }}
-                    size="small"
-                  >
-                    <ListAltIcon />
-                  </IconButton>
-                </Tooltip>
-              )}
+            <Box
+              sx={{ display: 'flex', gap: 0.5, alignItems: 'center', height: '100%' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Tooltip title={'Delete migration'}>
+                <IconButton
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    params.row.onDelete(params.row.metadata?.name)
+                  }}
+                  size="small"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
               {showAdminCutover && (
                 <TriggerAdminCutoverButton
                   migrationName={migrationName}
@@ -484,23 +537,12 @@ export default function MigrationsTable({
                   </span>
                 </Tooltip>
               )}
-              <Tooltip title={'Delete migration'}>
-                <IconButton
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    params.row.onDelete(params.row.metadata?.name)
-                  }}
-                  size="small"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Tooltip>
             </Box>
           )
         }
       }
     ]
-  }, [destinationByPlan, pulse, duplicateVmNames])
+  }, [destinationByPlan, pulse, duplicateVmNames, openMigrationForm])
 
   const selectedMigrations = useMemo(
     () => migrations?.filter((m) => selectedRows.includes(m.metadata?.name)) || [],
@@ -513,6 +555,16 @@ export default function MigrationsTable({
       ),
     [selectedMigrations]
   )
+
+  const eligibleForRetry = useMemo(
+    () =>
+      selectedMigrations.filter(
+        (m) => m.status?.phase === Phase.Failed && (m.status as { retryable?: boolean })?.retryable !== false
+      ),
+    [selectedMigrations]
+  )
+  const allSelectedRetryable =
+    selectedMigrations.length > 0 && eligibleForRetry.length === selectedMigrations.length
 
   const handleDeleteSelected = useCallback(() => {
     if (onDeleteSelected) {
@@ -561,6 +613,29 @@ export default function MigrationsTable({
     }
   }, [isBulkCutoverLoading])
 
+  const handleBulkRetry = useCallback(async () => {
+    if (eligibleForRetry.length === 0) return
+    setBulkRetryError(null)
+    setIsBulkRetryLoading(true)
+    try {
+      await Promise.allSettled(
+        eligibleForRetry.map((m) =>
+          deleteMigration(
+            m.metadata?.name || '',
+            (m.metadata?.namespace as string | undefined) || 'migration-system'
+          )
+        )
+      )
+      await refetchMigrations()
+      setSelectedRows([])
+      setBulkRetryDialogOpen(false)
+    } catch (err) {
+      setBulkRetryError(err instanceof Error ? err.message : 'Failed to retry migrations')
+    } finally {
+      setIsBulkRetryLoading(false)
+    }
+  }, [eligibleForRetry, refetchMigrations])
+
   const hasSelectionActions = onDeleteSelected !== undefined && onDeleteMigration !== undefined
 
   const migrationsWithActions = useMemo(
@@ -568,21 +643,9 @@ export default function MigrationsTable({
       filteredMigrations?.map((migration) => ({
         ...migration,
         onDelete: onDeleteMigration,
-        refetchMigrations,
-        setSelectedPod,
-        setLogsDrawerOpen,
-        setMigrationDetailModalOpen,
-        setSelectedMigrationDetail
+        refetchMigrations
       })) || [],
-    [
-      filteredMigrations,
-      onDeleteMigration,
-      refetchMigrations,
-      setLogsDrawerOpen,
-      setMigrationDetailModalOpen,
-      setSelectedMigrationDetail,
-      setSelectedPod
-    ]
+    [filteredMigrations, onDeleteMigration, refetchMigrations]
   )
 
   return (
@@ -625,6 +688,9 @@ export default function MigrationsTable({
                 onDeleteSelected: handleDeleteSelected,
                 onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
                 numEligibleForCutover: eligibleForCutover.length,
+                onBulkRetry: () => setBulkRetryDialogOpen(true),
+                numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
+                isBulkRetryLoading,
                 refetchMigrations,
                 onStatusFilterChange: setStatusFilter,
                 currentStatusFilter: statusFilter,
@@ -639,7 +705,48 @@ export default function MigrationsTable({
         getRowId={(row) => row.metadata?.name}
         loading={loading}
         emptyMessage="No migrations available"
+        onRowClick={(params) => {
+          const migName = params.row?.metadata?.name
+          if (migName) navigate(`/dashboard/migrations/${migName}`)
+        }}
+        sx={{ '& .MuiDataGrid-row': { cursor: 'pointer' } }}
       />
+
+      <Dialog
+        open={bulkRetryDialogOpen}
+        onClose={() => { if (!isBulkRetryLoading) { setBulkRetryDialogOpen(false); setBulkRetryError(null) } }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ px: 3, pt: 3, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ReplayIcon color="primary" fontSize="small" />
+          {`Retry ${eligibleForRetry.length} migration${eligibleForRetry.length !== 1 ? 's' : ''}?`}
+        </DialogTitle>
+        <DialogContent sx={{ px: 3, pb: 2 }}>
+          <DialogContentText>
+            {`This will retry ${eligibleForRetry.length} migration object${eligibleForRetry.length !== 1 ? 's' : ''} without changing their configurations. Source VMs will not be modified.`}
+          </DialogContentText>
+          {bulkRetryError && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setBulkRetryError(null)}>
+              {bulkRetryError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1 }}>
+          <Button onClick={() => { setBulkRetryDialogOpen(false); setBulkRetryError(null) }} disabled={isBulkRetryLoading}>
+            Cancel
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={handleBulkRetry}
+            disabled={isBulkRetryLoading}
+            data-testid="confirm-bulk-retry-button"
+          >
+            {isBulkRetryLoading ? 'Retrying…' : 'Retry'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <ConfirmationDialog
         open={bulkCutoverDialogOpen}
@@ -665,26 +772,6 @@ export default function MigrationsTable({
         onConfirm={handleBulkAdminCutover}
         errorMessage={bulkCutoverError}
         onErrorChange={setBulkCutoverError}
-      />
-
-      <LogsDrawer
-        open={logsDrawerOpen}
-        onClose={() => setLogsDrawerOpen(false)}
-        podName={selectedPod?.name || ''}
-        namespace={selectedPod?.namespace || ''}
-        migrationName={selectedPod?.migrationName || ''}
-        migrationPhase={logsDrawerMigrationPhase}
-      />
-
-      <MigrationDetailModal
-        open={migrationDetailModalOpen}
-        migration={selectedMigrationDetail}
-        onClose={() => setMigrationDetailModalOpen(false)}
-        isDuplicate={
-          selectedMigrationDetail
-            ? duplicateVmNames.has(selectedMigrationDetail.spec?.vmName || '')
-            : false
-        }
       />
     </>
   )

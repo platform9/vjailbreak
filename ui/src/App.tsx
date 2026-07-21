@@ -19,11 +19,15 @@ import ImageProfilesPage from './features/imageProfiles/pages/ImageProfilesPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
-import { MigrationFormContext } from './features/migration/context/MigrationFormContext'
+import {
+  MigrationFormContext,
+  RetryMigrationConfig
+} from './features/migration/context/MigrationFormContext'
 import VmCredentialsPage from './features/credentials/pages/VmCredentialsPage'
 import PcdCredentialsPage from './features/credentials/pages/PcdCredentialsPage'
 import ProxyVMsPage from './features/proxyvms/pages/ProxyVMsPage'
 import InventoryPage from './features/inventory/pages/InventoryPage'
+import MigrationDetailPage from './features/migration/pages/MigrationDetailPage'
 
 const AppFrame = styled('div')(() => ({
   position: 'relative',
@@ -121,6 +125,7 @@ function App() {
   const appContentRef = useRef<HTMLDivElement | null>(null)
   const [openMigrationForm, setOpenMigrationForm] = useState(false)
   const [migrationType, setMigrationType] = useState('standard')
+  const [retryConfig, setRetryConfig] = useState<RetryMigrationConfig | undefined>(undefined)
   const [joyrideRun, setJoyrideRun] = useState(false)
   const [joyrideSnoozed, setJoyrideSnoozed] = useState(false)
   const [joyrideReady, setJoyrideReady] = useState(false)
@@ -362,9 +367,10 @@ function App() {
     }
   }
 
-  const handleOpenMigrationForm = (open, type = 'standard') => {
+  const handleOpenMigrationForm = (open, type = 'standard', retry?: RetryMigrationConfig) => {
     setOpenMigrationForm(open)
     setMigrationType(type)
+    setRetryConfig(retry)
   }
 
   const handleSuccess = (message: string) => {
@@ -410,15 +416,19 @@ function App() {
       <AppBar hide={hideAppbar} />
       <MigrationFormContext.Provider
         value={{
-          openMigrationForm: (type) => handleOpenMigrationForm(true, type)
+          openMigrationForm: (type, retry) => handleOpenMigrationForm(true, type, retry)
         }}
       >
         <AppContent ref={appContentRef}>
           {openMigrationForm && migrationType === 'standard' && (
             <MigrationFormDrawer
               open
-              onClose={() => setOpenMigrationForm(false)}
+              onClose={() => {
+                setOpenMigrationForm(false)
+                setRetryConfig(undefined)
+              }}
               onSuccess={handleSuccess}
+              retryConfig={retryConfig}
             />
           )}
           {openMigrationForm && migrationType === 'rolling' && (
@@ -430,6 +440,7 @@ function App() {
               <Route index element={<DashboardIndexRedirect />} />
               <Route path="migrations" element={<MigrationsPage />} />
               <Route path="inventory" element={<InventoryPage />} />
+              <Route path="migrations/:migrationName" element={<MigrationDetailPage />} />
               <Route path="agents" element={<AgentsPage />} />
               <Route
                 path="credentials"
