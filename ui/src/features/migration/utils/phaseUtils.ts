@@ -48,6 +48,7 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
     case Phase.ConvertingDisk:
       return 4
     case Phase.Succeeded:
+    case Phase.DataCopied:
       return 5
     case Phase.Failed: {
       const validatedOk = conditions.some((c) => c.type === 'Validated' && c.status === 'True')
@@ -183,7 +184,7 @@ export function derivePhaseStates(
     ? Math.max(rawIndex, options.minDesignIndex)
     : rawIndex
   const failed = isFailed(phase as Phase)
-  const succeeded = phase === Phase.Succeeded
+  const succeeded = phase === Phase.Succeeded || phase === Phase.DataCopied
 
   return DESIGN_PHASE_DEFS.map((_, i): PhaseState => {
     if (succeeded) {
@@ -254,7 +255,7 @@ export function derivePhaseStates(
  */
 export function getActivePhasIndex(migration: Migration): number {
   const phase = migration.status?.phase
-  if (!phase || phase === Phase.Succeeded) return -1
+  if (!phase || phase === Phase.Succeeded || phase === Phase.DataCopied) return -1
   const conditions = migration.status?.conditions || []
   return getDesignIndex(phase as Phase, conditions)
 }
@@ -287,6 +288,7 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     case Phase.AwaitingAdminCutOver:  return 'Awaiting Admin Cutover'
     case Phase.AwaitingCutOverStartTime: return 'Awaiting Cutover Window'
     case Phase.Succeeded:             return 'Succeeded'
+    case Phase.DataCopied:            return 'Data Copied'
     case Phase.Failed:                return 'Failed'
     case Phase.Unknown:               return 'Unknown'
     default:                          return String(phase ?? 'Unknown')
@@ -297,7 +299,8 @@ export type PhaseColorKey = 'info' | 'success' | 'error' | 'warning' | 'default'
 
 export function getPhaseColorKey(phase: Phase | string | undefined): PhaseColorKey {
   switch (phase) {
-    case Phase.Succeeded:             return 'success'
+    case Phase.Succeeded:
+    case Phase.DataCopied:            return 'success'
     case Phase.Failed:
     case Phase.ValidationFailed:      return 'error'
     case Phase.AwaitingAdminCutOver:

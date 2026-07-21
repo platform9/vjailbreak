@@ -70,6 +70,7 @@ export interface MigrationStrategy {
   dataCopyStart?: string
   vmCutoverStart?: string
   vmCutoverEnd?: string
+  dataOnly?: boolean
 }
 
 export interface RollingMigrationPlanStatus {
