@@ -348,7 +348,8 @@ export function useRollingFormSubmit({
             params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
             params.cutoverEndTime && {
               vmCutoverEnd: params.cutoverEndTime
-            })
+            }),
+          ...(params.dataOnly ? { dataOnly: true } : {})
         },
         migrationTemplate: migrationTemplateResponse.metadata.name,
         namespace: VJAILBREAK_DEFAULT_NAMESPACE,

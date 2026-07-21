@@ -77,6 +77,7 @@ export interface MigrationStrategy {
   performHealthChecks?: boolean
   healthCheckPort?: string
   disconnectSourceNetwork?: boolean
+  dataOnly?: boolean
 }
 
 export interface Status {

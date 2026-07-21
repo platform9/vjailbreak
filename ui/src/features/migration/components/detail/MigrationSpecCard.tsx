@@ -1,4 +1,4 @@
-import { Box, Typography } from '@mui/material'
+import { Box, Chip, Divider, Typography } from '@mui/material'
 import { KeyValueGrid, KeyValueItem } from 'src/components/design-system/ui'
 import { Migration } from '../../api/migrations'
 import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResourcesQuery'
@@ -35,6 +35,14 @@ export default function MigrationSpecCard({ migration, resources }: MigrationSpe
     (resources?.migrationTemplate?.spec as any)?.storageMapping ||
     '—'
 
+  const stagedVolumeIDs: string[] = Array.isArray(
+    (status as any)?.stagedVolumeIDs
+  )
+    ? ((status as any).stagedVolumeIDs as unknown[])
+        .map((v) => String(v).trim())
+        .filter(Boolean)
+    : []
+
   const items: KeyValueItem[] = [
     { label: 'Migration name', value: metadata?.name },
     { label: 'VM name',        value: spec?.vmName as string | undefined },
@@ -66,6 +74,27 @@ export default function MigrationSpecCard({ migration, resources }: MigrationSpe
         Migration spec
       </Typography>
       <KeyValueGrid items={items} labelWidth={180} mdGrids={1} />
+
+      {stagedVolumeIDs.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <Divider sx={{ mb: 1.5 }} />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            Staged Volume IDs
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+            {stagedVolumeIDs.map((id) => (
+              <Chip
+                key={id}
+                label={id}
+                size="small"
+                variant="outlined"
+                color="info"
+                sx={{ fontFamily: '"Fira Code", monospace', fontSize: '0.75rem' }}
+              />
+            ))}
+          </Box>
+        </Box>
+      )}
     </Box>
   )
 }

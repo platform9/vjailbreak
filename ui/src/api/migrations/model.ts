@@ -138,6 +138,7 @@ export enum Phase {
   AwaitingCutOverStartTime = 'AwaitingCutOverStartTime',
   AwaitingAdminCutOver = 'AwaitingAdminCutOver',
   Succeeded = 'Succeeded',
+  DataCopied = 'DataCopied',
   Failed = 'Failed',
   Unknown = 'Unknown'
 }

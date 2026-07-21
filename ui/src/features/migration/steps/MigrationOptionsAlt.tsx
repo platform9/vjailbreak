@@ -10,6 +10,7 @@ import {
   Tooltip,
   Typography
 } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import customTypography from '../../../theme/typography'
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
@@ -684,6 +685,50 @@ export default function MigrationOptionsAlt({
 
         <SectionBlock>
           <SectionHeaderRow>
+            <Typography variant="subtitle2">Migration mode</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Control whether an OpenStack VM is created after disk copy
+            </Typography>
+          </SectionHeaderRow>
+          <Divider />
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Data only (no VM creation)"
+                control={
+                  <Checkbox
+                    checked={params?.dataOnly || false}
+                    onChange={(e) => {
+                      onChange('dataOnly')(e.target.checked)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Copies and converts disks to Cinder volumes without creating an OpenStack VM.
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
+
+          {params?.dataOnly && (
+            <Alert
+              severity="info"
+              sx={{
+                mt: 0,
+                bgcolor: (theme) => alpha(theme.palette.info.main, 0.08),
+                border: '1px solid',
+                borderColor: 'info.light',
+              }}
+            >
+              Converted Cinder volumes will be staged in OpenStack. No VM will be created.
+            </Alert>
+          )}
+        </SectionBlock>
+
+        <SectionBlock>
+          <SectionHeaderRow>
             <Typography variant="subtitle2">Network and IP behavior</Typography>
             <Typography variant="caption" color="text.secondary">
               Reduce IP conflicts and handle edge cases
@@ -704,6 +749,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.disconnectSourceNetwork || false}
+                    disabled={params?.dataOnly || false}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('disconnectSourceNetwork')(!params?.disconnectSourceNetwork)
@@ -725,7 +771,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
-                    disabled={hasL2Network}
+                    disabled={hasL2Network || (params?.dataOnly || false)}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('fallbackToDHCP')(!params?.fallbackToDHCP)
@@ -746,7 +792,7 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
-                    disabled={disableNetworkPersistence}
+                    disabled={disableNetworkPersistence || (params?.dataOnly || false)}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('networkPersistence')(!params?.networkPersistence)
