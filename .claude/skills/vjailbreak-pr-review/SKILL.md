@@ -235,6 +235,10 @@ if [ ! -f "$PR_DIR/eval_metadata.json" ]; then
 JSONEOF
 fi
 
+# Kill any existing viewer before launching new one
+pkill -f "generate_review.py" 2>/dev/null || true
+sleep 1
+
 # Launch eval viewer scoped to this PR only
 EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
 VIEWER_WORKSPACE=$(mktemp -d)
