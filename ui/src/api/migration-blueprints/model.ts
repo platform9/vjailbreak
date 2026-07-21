@@ -42,6 +42,8 @@ export interface MigrationBlueprintSpec {
   description?: string
   vmwareRef?: string
   pcdRef?: string
+  vmwareClusterName?: string
+  noVMwareClusterFilter?: boolean
   targetPCDClusterName?: string
   networkMappings?: Network[]
   storageMappings?: Storage[]

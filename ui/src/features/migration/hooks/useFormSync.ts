@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useWatch, UseFormReturn } from 'react-hook-form'
 import type { FormValues, SelectedMigrationOptionsType, MigrationDrawerRHFValues } from '../types'
 
@@ -36,6 +36,8 @@ export function useFormSync({
     name: 'postMigrationActionFolderName'
   })
 
+  const suppressEchoRef = useRef(false)
+
   // params → RHF
   useEffect(() => {
     const nextSecurityGroups = params.securityGroups ?? []
@@ -56,28 +58,39 @@ export function useFormSync({
     const currentPostMigrationActionFolderName =
       form.getValues('postMigrationActionFolderName') ?? ''
 
+    let changed = false
+
     if (!stringArrayEqual(currentSecurityGroups, nextSecurityGroups)) {
       form.setValue('securityGroups', nextSecurityGroups)
+      changed = true
     }
     if (currentServerGroup !== nextServerGroup) {
       form.setValue('serverGroup', nextServerGroup)
+      changed = true
     }
 
     if (currentDataCopyStartTime !== nextDataCopyStartTime) {
       form.setValue('dataCopyStartTime', nextDataCopyStartTime)
+      changed = true
     }
     if (currentCutoverStartTime !== nextCutoverStartTime) {
       form.setValue('cutoverStartTime', nextCutoverStartTime)
+      changed = true
     }
     if (currentCutoverEndTime !== nextCutoverEndTime) {
       form.setValue('cutoverEndTime', nextCutoverEndTime)
+      changed = true
     }
     if (currentPostMigrationActionSuffix !== nextPostMigrationActionSuffix) {
       form.setValue('postMigrationActionSuffix', nextPostMigrationActionSuffix)
+      changed = true
     }
     if (currentPostMigrationActionFolderName !== nextPostMigrationActionFolderName) {
       form.setValue('postMigrationActionFolderName', nextPostMigrationActionFolderName)
+      changed = true
     }
+
+    if (changed) suppressEchoRef.current = true
   }, [
     form,
     params.securityGroups,
@@ -90,6 +103,7 @@ export function useFormSync({
 
   // RHF → params
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const nextDataCopyStartTime = (rhfDataCopyStartTime ?? '') as string
     if ((params.dataCopyStartTime ?? '') !== nextDataCopyStartTime) {
       getParamsUpdater('dataCopyStartTime')(nextDataCopyStartTime)
@@ -97,6 +111,7 @@ export function useFormSync({
   }, [getParamsUpdater, params.dataCopyStartTime, rhfDataCopyStartTime])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const nextCutoverStartTime = (rhfCutoverStartTime ?? '') as string
     if ((params.cutoverStartTime ?? '') !== nextCutoverStartTime) {
       getParamsUpdater('cutoverStartTime')(nextCutoverStartTime)
@@ -104,6 +119,7 @@ export function useFormSync({
   }, [getParamsUpdater, params.cutoverStartTime, rhfCutoverStartTime])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const nextCutoverEndTime = (rhfCutoverEndTime ?? '') as string
     if ((params.cutoverEndTime ?? '') !== nextCutoverEndTime) {
       getParamsUpdater('cutoverEndTime')(nextCutoverEndTime)
@@ -111,6 +127,7 @@ export function useFormSync({
   }, [getParamsUpdater, params.cutoverEndTime, rhfCutoverEndTime])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const nextSuffix = String(rhfPostMigrationActionSuffix ?? '')
     const normalized = nextSuffix.trim() ? nextSuffix.trim() : ''
     const current = params.postMigrationAction?.suffix ?? ''
@@ -132,6 +149,7 @@ export function useFormSync({
   ])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const nextFolderName = String(rhfPostMigrationActionFolderName ?? '')
     const normalized = nextFolderName.trim() ? nextFolderName.trim() : ''
     const current = params.postMigrationAction?.folderName ?? ''
@@ -153,6 +171,7 @@ export function useFormSync({
   ])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const next = (rhfSecurityGroups ?? []) as string[]
     if (!stringArrayEqual(params.securityGroups ?? [], next)) {
       getParamsUpdater('securityGroups')(next)
@@ -160,9 +179,14 @@ export function useFormSync({
   }, [params.securityGroups, rhfSecurityGroups, getParamsUpdater])
 
   useEffect(() => {
+    if (suppressEchoRef.current) return
     const next = (rhfServerGroup ?? '') as string
     if ((params.serverGroup ?? '') !== next) {
       getParamsUpdater('serverGroup')(next)
     }
   }, [params.serverGroup, rhfServerGroup, getParamsUpdater])
+
+  useEffect(() => {
+    suppressEchoRef.current = false
+  })
 }

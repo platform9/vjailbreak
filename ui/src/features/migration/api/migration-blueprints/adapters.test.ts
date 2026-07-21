@@ -17,11 +17,28 @@ const makeBlueprint = (overrides: Partial<MigrationBlueprint['spec']> = {}): Mig
     displayName: 'Production RHEL · East',
     description: 'Standard hot migration',
     vmwareRef: 'vcenter-east-creds',
+    vmwareClusterName: 'cluster-east-a',
     pcdRef: 'pcd-east-1-creds',
     targetPCDClusterName: 'cluster-prod-a',
     networkMappings: [{ source: 'vmnet-prod', target: 'net-prod-east-a' }],
     storageMappings: [{ source: 'east-nvme-ds01', target: 'ceph-nvme-east' }],
-    migrationStrategy: { type: 'hot' },
+    arrayCredsMappings: [{ source: 'east-nvme-ds01', target: 'pure-array-1' }],
+    storageCopyMethod: 'normal',
+    proxyVMRef: { name: 'proxy-vm-1' },
+    migrationStrategy: { type: 'hot', disconnectSourceNetwork: true },
+    securityGroups: ['default', 'web'],
+    serverGroup: 'sg-east',
+    fallbackToDHCP: true,
+    firstBootScript: 'echo hi',
+    advancedOptions: {
+      networkPersistence: true,
+      removeVMwareTools: true,
+      imageProfiles: ['profile-a'],
+      periodicSyncInterval: '30m',
+      periodicSyncEnabled: true,
+      acknowledgeNetworkConflictRisk: true
+    },
+    postMigrationAction: { suffix: '-migrated', renameVm: true },
     osFamily: 'linuxGuest',
     useGPUFlavor: false,
     ...overrides
@@ -37,14 +54,67 @@ describe('blueprintToSavedTemplate', () => {
       name: 'production-rhel-east',
       displayName: 'Production RHEL · East',
       sourceVCenter: 'vcenter-east-creds',
+      sourceCluster: 'cluster-east-a',
       destination: 'pcd-east-1-creds',
       targetCluster: 'cluster-prod-a',
       dataCopyMethod: 'hot',
       cutoverOption: CUTOVER_TYPES.IMMEDIATE,
       osFamily: 'linuxGuest',
-      useGPU: false
+      useGPU: false,
+      arrayCredsMappings: [{ source: 'east-nvme-ds01', target: 'pure-array-1' }],
+      storageCopyMethod: 'normal',
+      proxyVMRef: 'proxy-vm-1',
+      disconnectSourceNetwork: true,
+      securityGroups: ['default', 'web'],
+      serverGroup: 'sg-east',
+      fallbackToDHCP: true,
+      firstBootScript: 'echo hi',
+      networkPersistence: true,
+      removeVMwareTools: true,
+      imageProfiles: ['profile-a'],
+      periodicSyncInterval: '30m',
+      periodicSyncEnabled: true,
+      acknowledgeNetworkConflictRisk: true,
+      postMigrationAction: { suffix: '-migrated', renameVm: true }
     })
     expect(result.spec).toBe(blueprint.spec)
+  })
+
+  it('defaults advanced-option fields when advancedOptions is absent', () => {
+    const blueprint = makeBlueprint()
+    delete blueprint.spec.advancedOptions
+    delete blueprint.spec.arrayCredsMappings
+    delete blueprint.spec.proxyVMRef
+
+    const result = blueprintToSavedTemplate(blueprint)
+    expect(result).toMatchObject({
+      arrayCredsMappings: [],
+      proxyVMRef: '',
+      networkPersistence: false,
+      removeVMwareTools: false,
+      imageProfiles: [],
+      periodicSyncInterval: '',
+      periodicSyncEnabled: false,
+      acknowledgeNetworkConflictRisk: false
+    })
+  })
+
+  it('reads a scheduled data copy start time from the strategy', () => {
+    const result = blueprintToSavedTemplate(
+      makeBlueprint({
+        migrationStrategy: { type: 'hot', dataCopyStart: '2026-08-01T10:00:00Z' }
+      })
+    )
+    expect(result.dataCopyStartTime).toBe('2026-08-01T10:00:00Z')
+  })
+
+  it('ignores the k8s zero-time sentinel for dataCopyStartTime', () => {
+    const result = blueprintToSavedTemplate(
+      makeBlueprint({
+        migrationStrategy: { type: 'hot', dataCopyStart: '0001-01-01T00:00:00Z' }
+      })
+    )
+    expect(result.dataCopyStartTime).toBe('')
   })
 
   it('derives admin-initiated cutover from the strategy', () => {
@@ -94,6 +164,7 @@ describe('savedTemplateInputToBlueprintSpec', () => {
   const baseInput: SaveAsTemplateInput = {
     displayName: 'Test Template',
     sourceVCenter: 'vcenter.example.com',
+    sourceCluster: 'cluster-a-source',
     destination: 'pcd-1',
     targetCluster: 'cluster-a',
     networkMappings: [],
@@ -107,10 +178,16 @@ describe('savedTemplateInputToBlueprintSpec', () => {
     expect(spec).toMatchObject({
       displayName: 'Test Template',
       vmwareRef: 'vcenter.example.com',
+      vmwareClusterName: 'cluster-a-source',
       pcdRef: 'pcd-1',
       targetPCDClusterName: 'cluster-a',
       migrationStrategy: { type: 'hot', adminInitiatedCutOver: false }
     })
+  })
+
+  it('omits vmwareClusterName when sourceCluster is blank', () => {
+    const spec = savedTemplateInputToBlueprintSpec({ ...baseInput, sourceCluster: '' })
+    expect(spec.vmwareClusterName).toBeUndefined()
   })
 
   it('sets adminInitiatedCutOver when cutoverOption is admin-initiated', () => {
@@ -129,6 +206,72 @@ describe('savedTemplateInputToBlueprintSpec', () => {
     })
     expect(spec.description).toBeUndefined()
     expect(spec.osFamily).toBeUndefined()
+  })
+
+  it('maps security groups, server group, and disconnectSourceNetwork', () => {
+    const spec = savedTemplateInputToBlueprintSpec({
+      ...baseInput,
+      securityGroups: ['default', 'web'],
+      serverGroup: 'sg-east',
+      disconnectSourceNetwork: true
+    })
+    expect(spec.securityGroups).toEqual(['default', 'web'])
+    expect(spec.serverGroup).toBe('sg-east')
+    expect(spec.migrationStrategy?.disconnectSourceNetwork).toBe(true)
+  })
+
+  it('bundles advanced options into a single advancedOptions object', () => {
+    const spec = savedTemplateInputToBlueprintSpec({
+      ...baseInput,
+      networkPersistence: true,
+      removeVMwareTools: true,
+      imageProfiles: ['profile-a'],
+      periodicSyncInterval: '30m',
+      periodicSyncEnabled: true,
+      acknowledgeNetworkConflictRisk: true
+    })
+    expect(spec.advancedOptions).toEqual({
+      networkPersistence: true,
+      removeVMwareTools: true,
+      imageProfiles: ['profile-a'],
+      periodicSyncInterval: '30m',
+      periodicSyncEnabled: true,
+      acknowledgeNetworkConflictRisk: true
+    })
+  })
+
+  it('omits advancedOptions entirely when no advanced option is set', () => {
+    const spec = savedTemplateInputToBlueprintSpec(baseInput)
+    expect(spec.advancedOptions).toBeUndefined()
+  })
+
+  it('maps a scheduled data copy start time into the strategy', () => {
+    const spec = savedTemplateInputToBlueprintSpec({
+      ...baseInput,
+      dataCopyStartTime: '2026-08-01T10:00:00Z'
+    })
+    expect(spec.migrationStrategy?.dataCopyStart).toBe('2026-08-01T10:00:00Z')
+  })
+
+  it('omits dataCopyStart when no start time was scheduled', () => {
+    const spec = savedTemplateInputToBlueprintSpec(baseInput)
+    expect(spec.migrationStrategy?.dataCopyStart).toBeUndefined()
+  })
+
+  it('maps proxyVMRef, arrayCredsMappings, storageCopyMethod, firstBootScript, and postMigrationAction', () => {
+    const spec = savedTemplateInputToBlueprintSpec({
+      ...baseInput,
+      proxyVMRef: 'proxy-vm-1',
+      arrayCredsMappings: [{ source: 'ds-1', target: 'array-1' }],
+      storageCopyMethod: 'HotAdd',
+      firstBootScript: 'echo hi',
+      postMigrationAction: { suffix: '-migrated', renameVm: true }
+    })
+    expect(spec.proxyVMRef).toEqual({ name: 'proxy-vm-1' })
+    expect(spec.arrayCredsMappings).toEqual([{ source: 'ds-1', target: 'array-1' }])
+    expect(spec.storageCopyMethod).toBe('HotAdd')
+    expect(spec.firstBootScript).toBe('echo hi')
+    expect(spec.postMigrationAction).toEqual({ suffix: '-migrated', renameVm: true })
   })
 })
 

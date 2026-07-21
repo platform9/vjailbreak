@@ -82,7 +82,7 @@ export default function MigrationFormDrawer({
   const isRetryMode = Boolean(retryConfig)
   const navigate = useNavigate()
   const { params, getParamsUpdater, updateParams } = useParams<FormValues>(defaultValues)
-  const { pcdData } = useClusterData()
+  const { pcdData, sourceData } = useClusterData()
   const { reportError } = useErrorHandler({ component: 'MigrationForm' })
   const { track } = useAmplitude({ component: 'MigrationForm' })
   // Theses are the errors that will be displayed on the form
@@ -104,6 +104,8 @@ export default function MigrationFormDrawer({
   const { data: settingsConfigMap } = useSettingsConfigMapQuery()
   const networkPersistenceSeedRef = useRef(false)
 
+  const skipDefaultSeeding = isRetryMode || Boolean(templatePrefill)
+
   // Seed networkPersistence from the global default once per open session.
   // Reset the flag when the drawer closes so the next open starts fresh.
   useEffect(() => {
@@ -111,12 +113,13 @@ export default function MigrationFormDrawer({
       networkPersistenceSeedRef.current = false
       return
     }
+    if (skipDefaultSeeding) return
     if (networkPersistenceSeedRef.current) return
     if (!settingsConfigMap) return
     networkPersistenceSeedRef.current = true
     const raw = settingsConfigMap.data?.DEFAULT_NETWORK_PERSISTENCE
     updateParams({ networkPersistence: raw === 'true' })
-  }, [open, settingsConfigMap, updateParams])
+  }, [open, settingsConfigMap, updateParams, skipDefaultSeeding])
 
   const form = useForm<MigrationDrawerRHFValues, any, MigrationDrawerRHFValues>({
     defaultValues: {
@@ -176,24 +179,59 @@ export default function MigrationFormDrawer({
     open: open && !isRetryMode,
     templatePrefill,
     pcdData,
+    sourceData,
+    currentPcdCluster: params.pcdCluster,
+    currentVmwareCluster: params.vmwareCluster,
     updateParams,
     updateSelectedOptions: updateSelectedMigrationOptionsBulk
   })
 
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const canSaveAsTemplate = !isRetryMode && vmwareCredsValidated && openstackCredsValidated
+
+  const selectedVmwareClusterName = useMemo(() => {
+    if (!params.vmwareCluster) return ''
+    const credName = params.vmwareCluster.split(':')[0]
+    const sourceItem = sourceData.find((item) => item.credName === credName)
+    const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === params.vmwareCluster)
+    return clusterObj?.name || ''
+  }, [sourceData, params.vmwareCluster])
+
   const buildSaveTemplateInput = useCallback(
     (fields: { displayName: string; description?: string }): SaveAsTemplateInput => ({
       ...fields,
       sourceVCenter:
         vmwareCredentials?.metadata?.name || params.vmwareCreds?.existingCredName || '',
+      sourceCluster: selectedVmwareClusterName,
       destination:
         openstackCredentials?.metadata?.name || params.openstackCreds?.existingCredName || '',
       targetCluster: targetPCDClusterName || '',
       networkMappings: params.networkMappings || [],
       storageMappings: params.storageMappings || [],
+      arrayCredsMappings: params.arrayCredsMappings || [],
       dataCopyMethod: (params.dataCopyMethod || 'cold') as SaveAsTemplateInput['dataCopyMethod'],
+      dataCopyStartTime: selectedMigrationOptions.dataCopyStartTime
+        ? params.dataCopyStartTime
+        : undefined,
+      storageCopyMethod: params.storageCopyMethod,
+      proxyVMRef: params.proxyVMRef,
       cutoverOption: params.cutoverOption || CUTOVER_TYPES.IMMEDIATE,
+      disconnectSourceNetwork: params.disconnectSourceNetwork || false,
+      fallbackToDHCP: params.fallbackToDHCP || false,
+      securityGroups: params.securityGroups || [],
+      serverGroup: params.serverGroup || '',
+      firstBootScript: selectedMigrationOptions.postMigrationScript
+        ? params.postMigrationScript
+        : undefined,
+      networkPersistence: params.networkPersistence,
+      removeVMwareTools: params.removeVMwareTools,
+      imageProfiles: params.imageProfiles || [],
+      periodicSyncInterval: params.periodicSyncInterval,
+      periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
+      acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk,
+      postMigrationAction: selectedMigrationOptions.postMigrationAction
+        ? params.postMigrationAction
+        : undefined,
       osFamily: params.osFamily,
       useGPU: params.useGPU || false
     }),
@@ -204,11 +242,31 @@ export default function MigrationFormDrawer({
       params.openstackCreds,
       params.networkMappings,
       params.storageMappings,
+      params.arrayCredsMappings,
       params.dataCopyMethod,
+      params.dataCopyStartTime,
+      params.storageCopyMethod,
+      params.proxyVMRef,
       params.cutoverOption,
+      params.disconnectSourceNetwork,
+      params.fallbackToDHCP,
+      params.securityGroups,
+      params.serverGroup,
+      params.postMigrationScript,
+      params.networkPersistence,
+      params.removeVMwareTools,
+      params.imageProfiles,
+      params.periodicSyncInterval,
+      params.acknowledgeNetworkConflictRisk,
+      params.postMigrationAction,
       params.osFamily,
       params.useGPU,
-      targetPCDClusterName
+      selectedMigrationOptions.postMigrationScript,
+      selectedMigrationOptions.periodicSyncEnabled,
+      selectedMigrationOptions.postMigrationAction,
+      selectedMigrationOptions.dataCopyStartTime,
+      targetPCDClusterName,
+      selectedVmwareClusterName
     ]
   )
 
@@ -711,6 +769,7 @@ export default function MigrationFormDrawer({
                     stepNumber="5"
                     showHeader={false}
                     hasSubnetMismatch={hasSubnetMismatch}
+                    skipDefaultSeeding={skipDefaultSeeding}
                   />
                 </SurfaceCard>
               </Box>

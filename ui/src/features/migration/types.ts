@@ -72,6 +72,8 @@ export interface FormValues extends Record<string, unknown> {
   networkPersistence?: boolean
   removeVMwareTools?: boolean
   imageProfiles?: string[]
+  periodicSyncInterval?: string
+  acknowledgeNetworkConflictRisk?: boolean
 }
 
 export interface SelectedMigrationOptionsType {
@@ -354,6 +356,11 @@ export interface MigrationOptionsPropsInterface {
   stepNumber: string
   showHeader?: boolean
   hasSubnetMismatch?: boolean
+  // True while a template/retry prefill is populating the form. Async global-default
+  // effects must skip entirely in this window rather than race the prefill on load-order — settings and
+  // prefill can each resolve first depending on network timing, so "only seed if unset"
+  // isn't reliable when both fire in the same initial commit.
+  skipDefaultSeeding?: boolean
 }
 
 // ---------------------------------------------------------------------------
