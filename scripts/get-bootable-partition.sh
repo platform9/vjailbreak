@@ -3,6 +3,7 @@
 # Prints the correct BIOS boot disk (the one containing GRUB MBR)
 # Works with LVM and /boot on a separate disk.
 # Assumes we are running inside a guestfish-mounted environment
+exec 3>&1 1>&2
 
 # Step 1: Identify all disks in guest
 # List block devices (assuming /dev/vda, /dev/sda, etc. are available)
@@ -99,4 +100,7 @@ if [ -z "$bootdisk" ]; then
 fi
 
 echo "[DEBUG] Result: bootdisk=$bootdisk" >&2
-echo "$bootdisk"
+
+# The one and only write to the caller's stdout channel; all diagnostics above
+# went to stderr (see 'exec 3>&1 1>&2' at the top).
+echo "$bootdisk" >&3
