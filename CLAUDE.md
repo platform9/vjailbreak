@@ -163,7 +163,7 @@ kubectl -n migration-system logs <migration-name>-v2v-helper
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/003-hot-add-proxy/plan.md
+at specs/2120-migration-templates/plan.md
 <!-- SPECKIT END -->
 
 ## graphify

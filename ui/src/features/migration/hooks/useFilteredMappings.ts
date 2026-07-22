@@ -20,6 +20,35 @@ interface UseFilteredMappingsParams {
   onChange: (key: string) => (value: unknown) => void
 }
 
+// An empty source or target list means either side's data has not loaded yet
+// (e.g. VMs not selected yet so vmwareNetworks/vmWareStorage is empty, or
+// OpenStack creds still loading) — filtering now would wipe valid mappings
+// (e.g. ones prefilled from a template or a retry) before both sides are ready.
+export function filterMappingsBySourceAndTarget(
+  mappings: ResourceMap[] | undefined,
+  sourceList: string[],
+  targetList: string[]
+): ResourceMap[] {
+  if (sourceList.length === 0 || targetList.length === 0) {
+    return mappings || []
+  }
+  return (mappings || []).filter(
+    (mapping) => sourceList.includes(mapping.source) && targetList.includes(mapping.target)
+  )
+}
+
+// Treats "never set" (undefined) the same as "already empty" ([]) so that reconciling
+// a fresh/still-prefilling form (current undefined, filtered []) is never mistaken for
+// a real prune and doesn't fire a write. See useFilteredMappings' network effect for
+// why a phantom write here is dangerous (races an async prefill and can permanently
+// stomp it).
+export function mappingsNeedReconcile(
+  filtered: ResourceMap[],
+  current: ResourceMap[] | undefined
+): boolean {
+  return filtered.length !== (current || []).length
+}
+
 export function useFilteredMappings({
   params,
   vmwareNetworks,
@@ -33,35 +62,23 @@ export function useFilteredMappings({
 }: UseFilteredMappingsParams) {
   const removedAutoArrayCredsSourcesRef = useRef<Set<string>>(new Set())
 
-  // An empty target list means the destination data has not loaded yet — filtering
-  // against it would wipe valid mappings (e.g. ones prefilled for a retry) before the
-  // OpenStack credentials finish loading.
-  const filteredNetworkMappings = useMemo(() => {
-    if (openstackNetworkNames.length === 0) return params.networkMappings || []
-    return (params.networkMappings || []).filter(
-      (mapping) =>
-        vmwareNetworks.includes(mapping.source) && openstackNetworkNames.includes(mapping.target)
-    )
-  }, [params.networkMappings, vmwareNetworks, openstackNetworkNames])
+  const filteredNetworkMappings = useMemo(
+    () => filterMappingsBySourceAndTarget(params.networkMappings, vmwareNetworks, openstackNetworkNames),
+    [params.networkMappings, vmwareNetworks, openstackNetworkNames]
+  )
 
-  const filteredStorageMappings = useMemo(() => {
-    if (openstackStorage.length === 0) return params.storageMappings || []
-    return (params.storageMappings || []).filter(
-      (mapping) =>
-        vmWareStorage.includes(mapping.source) && openstackStorage.includes(mapping.target)
-    )
-  }, [params.storageMappings, vmWareStorage, openstackStorage])
+  const filteredStorageMappings = useMemo(
+    () => filterMappingsBySourceAndTarget(params.storageMappings, vmWareStorage, openstackStorage),
+    [params.storageMappings, vmWareStorage, openstackStorage]
+  )
 
-  const filteredArrayCredsMappings = useMemo(() => {
-    if (arrayCredsNames.length === 0) return params.arrayCredsMappings || []
-    return (params.arrayCredsMappings || []).filter(
-      (mapping) =>
-        vmWareStorage.includes(mapping.source) && arrayCredsNames.includes(mapping.target)
-    )
-  }, [params.arrayCredsMappings, vmWareStorage, arrayCredsNames])
+  const filteredArrayCredsMappings = useMemo(
+    () => filterMappingsBySourceAndTarget(params.arrayCredsMappings, vmWareStorage, arrayCredsNames),
+    [params.arrayCredsMappings, vmWareStorage, arrayCredsNames]
+  )
 
   useEffect(() => {
-    if (filteredNetworkMappings.length !== params.networkMappings?.length) {
+    if (mappingsNeedReconcile(filteredNetworkMappings, params.networkMappings)) {
       onChange('networkMappings')(filteredNetworkMappings)
     }
   }, [filteredNetworkMappings, onChange, params.networkMappings])
@@ -69,7 +86,7 @@ export function useFilteredMappings({
   useEffect(() => {
     if (
       storageCopyMethod === 'normal' &&
-      filteredStorageMappings.length !== params.storageMappings?.length
+      mappingsNeedReconcile(filteredStorageMappings, params.storageMappings)
     ) {
       onChange('storageMappings')(filteredStorageMappings)
     }
@@ -78,7 +95,7 @@ export function useFilteredMappings({
   useEffect(() => {
     if (
       storageCopyMethod === 'StorageAcceleratedCopy' &&
-      filteredArrayCredsMappings.length !== params.arrayCredsMappings?.length
+      mappingsNeedReconcile(filteredArrayCredsMappings, params.arrayCredsMappings)
     ) {
       onChange('arrayCredsMappings')(filteredArrayCredsMappings)
     }

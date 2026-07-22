@@ -1,11 +1,15 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { VmData } from './api/migration-templates/model'
-import type { RetryMigrationConfig } from './context/MigrationFormContext'
+import type {
+  MigrationFormTemplateMode,
+  RetryMigrationConfig
+} from './context/MigrationFormContext'
+import type { SavedTemplate } from './api/migration-blueprints/types'
 import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
-import type { GridRowSelectionModel, GridToolbarProps } from '@mui/x-data-grid'
+import type { GridRowSelectionModel } from '@mui/x-data-grid'
 import type { ErrorContext } from 'src/services/errorReporting'
 
 // ---------------------------------------------------------------------------
@@ -73,6 +77,8 @@ export interface FormValues extends Record<string, unknown> {
   imageProfiles?: string[]
   preserveSourceTags?: boolean
   customMetadata?: KeyValuePair[]
+  periodicSyncInterval?: string
+  acknowledgeNetworkConflictRisk?: boolean
 }
 
 // A single row in the custom metadata key-value editor
@@ -118,6 +124,8 @@ export interface MigrationFormDrawerProps {
   reloadMigrations?: () => void
   onSuccess?: (message: string) => void
   retryConfig?: RetryMigrationConfig
+  templatePrefill?: SavedTemplate
+  templateMode?: MigrationFormTemplateMode
 }
 
 // ---------------------------------------------------------------------------
@@ -362,49 +370,16 @@ export interface MigrationOptionsPropsInterface {
   stepNumber: string
   showHeader?: boolean
   hasSubnetMismatch?: boolean
+  // True while a template/retry prefill is populating the form. Async global-default
+  // effects must skip entirely in this window rather than race the prefill on load-order — settings and
+  // prefill can each resolve first depending on network timing, so "only seed if unset"
+  // isn't reliable when both fire in the same initial commit.
+  skipDefaultSeeding?: boolean
 }
 
 // ---------------------------------------------------------------------------
 // MigrationsTable types
 // ---------------------------------------------------------------------------
-
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    numSelected: number
-    onDeleteSelected: () => void
-    onBulkAdminCutover: () => void
-    numEligibleForCutover: number
-    onBulkRetry: () => void
-    numEligibleForRetry: number
-    isBulkRetryLoading: boolean
-    refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
-    onStatusFilterChange: (filter: string) => void
-    currentStatusFilter: string
-    onDateFilterChange: (filter: string) => void
-    currentDateFilter: string
-    onStartMigration: () => void
-    startMigrationDisabled: boolean
-    startMigrationDisabledReason: string
-  }
-}
-
-export interface CustomToolbarProps extends GridToolbarProps {
-  numSelected: number
-  onDeleteSelected: () => void
-  onBulkAdminCutover: () => void
-  numEligibleForCutover: number
-  onBulkRetry: () => void
-  numEligibleForRetry: number
-  isBulkRetryLoading: boolean
-  refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
-  onStatusFilterChange: (filter: string) => void
-  currentStatusFilter: string
-  onDateFilterChange: (filter: string) => void
-  currentDateFilter: string
-  onStartMigration: () => void
-  startMigrationDisabled: boolean
-  startMigrationDisabledReason: string
-}
 
 export interface MigrationsTableProps {
   migrations: Migration[]
@@ -412,4 +387,16 @@ export interface MigrationsTableProps {
   onDeleteSelected?: (migrations: Migration[]) => void
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
   loading?: boolean
+  // Search/status/date filtering now lives inline with the page's tabs (see
+  // MigrationsPage) rather than in a toolbar rendered inside this table. Optional —
+  // embedded read-only usages (e.g. the rolling-migration drawer) don't need filtering
+  // and can omit them entirely.
+  searchValue?: string
+  statusFilter?: string
+  dateFilter?: string
+  // DOM node to portal the bulk-actions bar (Delete/Cutover/Retry Selected) into —
+  // lets MigrationsPage render it inline before the search bar instead of on its
+  // own row above the grid, while this component keeps owning the selection state.
+  // Omit to fall back to rendering the bar in its own row above the grid.
+  bulkActionsContainer?: HTMLElement | null
 }

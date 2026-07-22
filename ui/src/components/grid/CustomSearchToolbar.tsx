@@ -1,7 +1,8 @@
-import { Box, IconButton, Tooltip, Typography, Menu, MenuItem } from '@mui/material'
+import { Box, IconButton, InputAdornment, TextField, Tooltip, Typography, Menu, MenuItem } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import { GridToolbarQuickFilter } from '@mui/x-data-grid'
 import {
+  Search as SearchIcon,
   RefreshRounded,
   FilterList as FilterListIcon,
   CalendarToday as CalendarIcon,
@@ -13,6 +14,12 @@ const spinAnimation = keyframes`
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 `
+
+// Exported so consumers that implement their own date-range filtering (the actual
+// "is this row within N days" logic lives with the data, not here) share the exact
+// same set of option labels instead of re-typing them.
+// eslint-disable-next-line react-refresh/only-export-components
+export const DATE_FILTER_OPTIONS = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days'] as const
 
 interface CustomSearchToolbarProps {
   title?: string
@@ -26,6 +33,11 @@ interface CustomSearchToolbarProps {
   statusFilterOptions?: string[]
   onDateFilterChange?: (filter: string) => void
   currentDateFilter?: string
+  // When set, the search field is a plain controlled TextField instead of
+  // GridToolbarQuickFilter — lets this toolbar be used outside a DataGrid (e.g. sitting
+  // inline with page tabs), with the caller owning the filtering.
+  searchValue?: string
+  onSearchChange?: (value: string) => void
 }
 
 const CustomSearchToolbar = ({
@@ -39,15 +51,16 @@ const CustomSearchToolbar = ({
   currentStatusFilter = 'All',
   statusFilterOptions = ['All', 'In Progress', 'Succeeded', 'Failed'],
   onDateFilterChange,
-  currentDateFilter = 'All Time'
+  currentDateFilter = 'All Time',
+  searchValue,
+  onSearchChange
 }: CustomSearchToolbarProps) => {
+  const isStandaloneSearch = Boolean(onSearchChange)
   const [statusAnchorEl, setStatusAnchorEl] = useState<null | HTMLElement>(null)
   const [dateAnchorEl, setDateAnchorEl] = useState<null | HTMLElement>(null)
 
   const statusMenuOpen = Boolean(statusAnchorEl)
   const dateMenuOpen = Boolean(dateAnchorEl)
-
-  const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days']
 
   const isDateFilterActive = currentDateFilter !== 'All Time'
   const isStatusFilterActive = currentStatusFilter !== 'All'
@@ -79,16 +92,35 @@ const CustomSearchToolbar = ({
       {title && <Typography variant="h6">{title}</Typography>}
       <Box sx={{ marginLeft: 'auto', display: 'flex', gap: 1, alignItems: 'center' }}>
         <Box sx={{ maxWidth: maxSearchWidth, width: '100%' }}>
-          <div>
-            <GridToolbarQuickFilter
+          {isStandaloneSearch ? (
+            <TextField
               placeholder={placeholder}
-              sx={{
-                '& .MuiInputBase-input': {
-                  textOverflow: 'ellipsis'
-                }
+              value={searchValue}
+              onChange={(event) => onSearchChange?.(event.target.value)}
+              size="small"
+              variant="standard"
+              fullWidth
+              InputProps={{
+                sx: { '& .MuiInputBase-input': { textOverflow: 'ellipsis' } },
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon fontSize="small" color="action" />
+                  </InputAdornment>
+                )
               }}
             />
-          </div>
+          ) : (
+            <div>
+              <GridToolbarQuickFilter
+                placeholder={placeholder}
+                sx={{
+                  '& .MuiInputBase-input': {
+                    textOverflow: 'ellipsis'
+                  }
+                }}
+              />
+            </div>
+          )}
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
           {onRefresh && (
@@ -119,7 +151,7 @@ const CustomSearchToolbar = ({
                     Clear filter
                   </MenuItem>
                 )}
-                {dateFilterOptions.map((option) => (
+                {DATE_FILTER_OPTIONS.map((option) => (
                   <MenuItem
                     key={option}
                     selected={option === currentDateFilter}

@@ -108,12 +108,18 @@ export default function SecurityGroupAndServerGroup({
   useEffect(() => {
     if (loadingProfiles) return
     if (selectedImageProfiles.length === 0) return
+    // Applicability is VM-OS-family gated (hasWindowsVMSelected/hasLinuxVMSelected), which
+    // is undetermined — not "neither" — before any VM is selected (e.g. right after
+    // applying a saved template, which intentionally doesn't restore VM selection). Pruning
+    // here would permanently wipe a real, saved profile choice before the user even gets to
+    // pick VMs. Only prune once VM selection is actually known.
+    if (!params?.vms || params.vms.length === 0) return
     const applicableNames = new Set(applicableProfiles.map((p) => p.metadata?.name))
     const pruned = selectedImageProfiles.filter((name) => applicableNames.has(name))
     if (pruned.length !== selectedImageProfiles.length) {
       onChange('imageProfiles')(pruned)
     }
-  }, [applicableProfiles, selectedImageProfiles, loadingProfiles, onChange])
+  }, [applicableProfiles, selectedImageProfiles, loadingProfiles, onChange, params?.vms])
 
   return (
     <Box>

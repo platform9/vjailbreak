@@ -38,7 +38,10 @@ interface UseMigrationFormSubmitParams {
   setVmwareCredentials: React.Dispatch<React.SetStateAction<VMwareCreds | undefined>>
   setOpenstackCredentials: React.Dispatch<React.SetStateAction<OpenstackCreds | undefined>>
   getFieldErrorsUpdater: (key: string) => (value: string) => void
-  reportError: (error: Error, options?: { context?: string; metadata?: Record<string, unknown> }) => void
+  reportError: (
+    error: Error,
+    options?: { context?: string; metadata?: Record<string, unknown> }
+  ) => void
   track: (event: string, properties?: Record<string, unknown>) => void
   queryClient: QueryClient
   navigate: NavigateFunction
@@ -48,10 +51,14 @@ interface UseMigrationFormSubmitParams {
   networkMappingRequired: boolean
 }
 
+interface HandleCloseOptions {
+  preserveCredentials?: boolean
+}
+
 interface UseMigrationFormSubmitResult {
   submitting: boolean
   handleSubmit: () => Promise<void>
-  handleClose: () => Promise<void>
+  handleClose: (options?: HandleCloseOptions) => Promise<void>
 }
 
 export function useMigrationFormSubmit({
@@ -498,7 +505,7 @@ export function useMigrationFormSubmit({
     navigate
   ])
 
-  const handleClose = useCallback(async () => {
+  const handleClose = useCallback(async (options?: HandleCloseOptions) => {
     try {
       setMigrationTemplate(undefined)
       setVmwareCredentials(undefined)
@@ -513,6 +520,8 @@ export function useMigrationFormSubmit({
       if (migrationTemplate?.metadata?.name) {
         await deleteMigrationTemplate(migrationTemplate.metadata.name)
       }
+
+      if (options?.preserveCredentials) return
 
       if (vmwareCredentials?.metadata?.name && !params.vmwareCreds?.existingCredName) {
         await deleteVmwareCredentials(vmwareCredentials.metadata.name)

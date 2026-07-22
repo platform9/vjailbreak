@@ -1,6 +1,8 @@
 import { createContext, useContext } from 'react'
+import type { SavedTemplate } from '../api/migration-blueprints/types'
 
 type MigrationFormType = 'standard' | 'rolling'
+export type MigrationFormTemplateMode = 'create' | 'edit'
 
 export interface RetryMigrationConfig {
   migrationName: string
@@ -10,7 +12,12 @@ export interface RetryMigrationConfig {
 }
 
 export interface MigrationFormContextValue {
-  openMigrationForm: (type: MigrationFormType, retryConfig?: RetryMigrationConfig) => void
+  openMigrationForm: (
+    type: MigrationFormType,
+    retryConfig?: RetryMigrationConfig,
+    templatePrefill?: SavedTemplate,
+    templateMode?: MigrationFormTemplateMode
+  ) => void
 }
 
 export const MigrationFormContext = createContext<MigrationFormContextValue | undefined>(undefined)

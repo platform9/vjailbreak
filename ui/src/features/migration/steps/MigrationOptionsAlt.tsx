@@ -86,7 +86,8 @@ export default function MigrationOptionsAlt({
   getErrorsUpdater,
   stepNumber,
   showHeader = true,
-  hasSubnetMismatch = false
+  hasSubnetMismatch = false,
+  skipDefaultSeeding = false
 }: MigrationOptionsPropsInterface) {
   const { setValue } = useFormContext()
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
@@ -157,12 +158,30 @@ export default function MigrationOptionsAlt({
         ? `// WINDOWS-SCRIPT:\nWrite-Host "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n// WINDOWS-SCRIPT:\nWrite-Host "Script 2"\nthrow "Intentional failure"\n${NEXT_SCRIPT_DELIMITER}\nWrite-Host "Script 3 runs even if script 2 fails"`
         : `#!/bin/bash\necho "Script 1"\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 2 will fail"\nfalse\n${NEXT_SCRIPT_DELIMITER}\n#!/bin/bash\necho "Script 3 runs even if script 2 fails"`
 
-  // Iniitialize fields
+  // Initialize fields to global defaults — but never during a template/retry prefill
+  // session (skipDefaultSeeding), and only when nothing has already set a real value
+  // otherwise. globalConfigMap loads asynchronously and this component mounts in the
+  // same initial commit as the prefill effect in MigrationForm.tsx, so "only seed if
+  // unset" alone isn't reliable — whichever of the two effects happens to commit first
+  // wins, and that ordering isn't something to depend on. skipDefaultSeeding removes
+  // the race entirely instead of trying to win it.
   useEffect(() => {
+    if (skipDefaultSeeding) return
+    if (params?.dataCopyMethod) return
     const defaultMethod = globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD || 'cold'
     onChange('dataCopyMethod')(defaultMethod)
+  }, [
+    globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD,
+    onChange,
+    params?.dataCopyMethod,
+    skipDefaultSeeding
+  ])
+
+  useEffect(() => {
+    if (skipDefaultSeeding) return
+    if (params?.cutoverOption) return
     onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
-  }, [globalConfigMap?.data?.DEFAULT_MIGRATION_METHOD, onChange])
+  }, [onChange, params?.cutoverOption, skipDefaultSeeding])
 
   useEffect(() => {
     if (!isStorageAcceleratedCopy) return
@@ -201,9 +220,20 @@ export default function MigrationOptionsAlt({
     }
   }, [isHotAdd, onChange])
 
+  // Fallback to 'cold' here is fine for rendering (a harmless flash before the real
+  // value lands), but treating "not yet resolved" as "genuinely cold" would be wrong
+  // for the destructive clearing effect below.
   const isPowerOffThenCopy = (params?.dataCopyMethod || 'cold') === 'cold'
 
   useEffect(() => {
+    // dataCopyMethod starts undefined and only becomes a real value once a prefill
+    // (template/retry) or the default-seeding effect commits it. Without this guard,
+    // isPowerOffThenCopy reads as true during that brief unresolved window — since the
+    // fallback above treats "unset" the same as "cold" — and this effect would wipe
+    // periodicSyncInterval/cutoverStartTime/cutoverEndTime before the prefilled value
+    // ever had a chance to land, with nothing to restore them once dataCopyMethod
+    // resolves to 'hot' afterward (this effect only clears, it never un-clears).
+    if (params?.dataCopyMethod === undefined) return
     if (!isPowerOffThenCopy) return
 
     if (selectedMigrationOptions.cutoverOption) {
@@ -219,6 +249,7 @@ export default function MigrationOptionsAlt({
     onChange('cutoverEndTime')('')
   }, [
     isPowerOffThenCopy,
+    params?.dataCopyMethod,
     selectedMigrationOptions.cutoverOption,
     selectedMigrationOptions.periodicSyncEnabled,
     onChange,
@@ -275,7 +306,8 @@ export default function MigrationOptionsAlt({
 
               {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available.
+                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods
+                  are not available.
                 </Alert>
               )}
               <OptionRow>
@@ -298,9 +330,14 @@ export default function MigrationOptionsAlt({
                       />
                     }
                   />
-                  <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
+                  <OptionHelp variant="caption">
+                    Choose cold, hot or mock migration behavior.
+                  </OptionHelp>
                 </OptionLeft>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }} data-testid="data-copy-method-container">
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}
+                  data-testid="data-copy-method-container"
+                >
                   <Select
                     size="small"
                     disabled={!selectedMigrationOptions.dataCopyMethod && !isHotAdd}
@@ -761,7 +798,6 @@ export default function MigrationOptionsAlt({
               </OptionLeft>
               <Box />
             </OptionRow>
-
           </SectionBlock>
         ) : null}
 

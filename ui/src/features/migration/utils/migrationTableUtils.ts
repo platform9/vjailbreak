@@ -1,3 +1,4 @@
+import type { DATE_FILTER_OPTIONS } from 'src/components/grid'
 import { Condition, Phase } from '../api/migrations'
 
 export const PHASE_STEPS: Record<string, number> = {
@@ -19,8 +20,12 @@ export const PHASE_STEPS: Record<string, number> = {
   [Phase.ValidationFailed]: 11
 }
 
+export const AWAITING_ACTION_PHASES: Phase[] = [
+  Phase.AwaitingAdminCutOver,
+  Phase.AwaitingCutOverStartTime
+]
+
 export const IN_PROGRESS_PHASES: Phase[] = [
-  Phase.Pending,
   Phase.Validating,
   Phase.AwaitingDataCopyStart,
   Phase.CopyingBlocks,
@@ -30,10 +35,71 @@ export const IN_PROGRESS_PHASES: Phase[] = [
   Phase.IdentifyingBlockDevices,
   Phase.HotAddTransferInProgress,
   Phase.HotAddCleanup,
-  Phase.ConvertingDisk,
-  Phase.AwaitingCutOverStartTime,
-  Phase.AwaitingAdminCutOver
+  Phase.ConvertingDisk
 ]
+
+export type MigrationStatusCategory =
+  | 'inProgress'
+  | 'awaitingAction'
+  | 'pending'
+  | 'succeeded'
+  | 'failed'
+
+// Buckets a migration's phase into the 5 summary categories shown on the Migrations
+// page stat cards; also drives the "click to filter" status filter on the table.
+export function getMigrationStatusCategory(phase: Phase | undefined): MigrationStatusCategory {
+  if (!phase || phase === Phase.Pending) return 'pending'
+  if (phase === Phase.Succeeded) return 'succeeded'
+  if (phase === Phase.Failed || phase === Phase.ValidationFailed) return 'failed'
+  if (AWAITING_ACTION_PHASES.includes(phase)) return 'awaitingAction'
+  return 'inProgress'
+}
+
+export const STATUS_FILTER_OPTIONS = [
+  'All',
+  'In Progress',
+  'Awaiting Action',
+  'Pending',
+  'Succeeded',
+  'Failed'
+] as const
+
+export const STATUS_FILTER_TO_CATEGORY: Record<string, MigrationStatusCategory> = {
+  'In Progress': 'inProgress',
+  'Awaiting Action': 'awaitingAction',
+  Pending: 'pending',
+  Succeeded: 'succeeded',
+  Failed: 'failed'
+}
+
+// Keyed off CustomSearchToolbar's DATE_FILTER_OPTIONS (type-only import — no runtime
+// dependency) so the option labels can't drift out of sync between the toolbar UI and
+// the actual filtering logic. 'All Time' is intentionally absent: it means "no filter".
+type DateFilterOption = Exclude<(typeof DATE_FILTER_OPTIONS)[number], 'All Time'>
+
+const DATE_FILTER_WINDOW_MS: Record<DateFilterOption, number> = {
+  'Last 24 hours': 24 * 60 * 60 * 1000,
+  'Last 7 days': 7 * 24 * 60 * 60 * 1000,
+  'Last 30 days': 30 * 24 * 60 * 60 * 1000
+}
+
+// Drives the migrations table's "filter by creation date" toolbar control.
+// `now` is injectable so callers/tests don't depend on the real clock. The API client
+// types creationTimestamp as `Date`, but it's really JSON — accept both.
+export function matchesDateFilter(
+  creationTimestamp: string | Date | undefined,
+  filter: string,
+  now: number = Date.now()
+): boolean {
+  const windowMs = (DATE_FILTER_WINDOW_MS as Record<string, number>)[filter]
+  if (!windowMs) return true // 'All Time' (or an unrecognized filter) — no filtering
+
+  if (!creationTimestamp) return false
+  const createdAt = new Date(creationTimestamp).getTime()
+  if (Number.isNaN(createdAt)) return false
+
+  return now - createdAt <= windowMs
+}
 
 export const getProgressText = (
   phase: Phase | undefined,

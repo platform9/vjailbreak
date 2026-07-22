@@ -3,6 +3,7 @@ import { useQuery, UseQueryResult } from '@tanstack/react-query'
 
 import { getMigrationPlan } from 'src/api/migration-plans/migrationPlans'
 import { getMigrationTemplate } from 'src/api/migration-templates/migrationTemplates'
+import type { MigrationTemplateStatus } from 'src/api/migration-templates/model'
 import { getOpenstackCredentialsList } from 'src/api/openstack-creds/openstackCreds'
 import { getPCDClusters } from 'src/api/pcd-clusters/pcdClusters'
 import type { Migration } from './migrations'
@@ -10,6 +11,10 @@ import type { Migration } from './migrations'
 export type MigrationPlanDestination = {
   destinationCluster: string
   destinationTenant: string
+  sourceVmwareRef: string
+  sourceDatacenter: string
+  destinationOpenstackRef: string
+  vmOsByName: Record<string, string>
 }
 
 export type MigrationPlanDestinationsByKey = Record<string, MigrationPlanDestination>
@@ -164,7 +169,25 @@ export const useMigrationPlanDestinationsQuery = (
           const templateSpec = (template?.spec as any) || {}
           const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
           const destinationTenant = resolveDestinationTenant(namespace, destinationCluster)
-          return [key, { destinationCluster, destinationTenant }] as const
+          const sourceVmwareRef = (templateSpec?.source?.vmwareRef as string) || 'N/A'
+          const sourceDatacenter = (templateSpec?.source?.datacenter as string) || 'N/A'
+          const destinationOpenstackRef = (templateSpec?.destination?.openstackRef as string) || 'N/A'
+          const templateStatus = template?.status as MigrationTemplateStatus | undefined
+          const vmOsByName: Record<string, string> = {}
+          for (const vm of templateStatus?.vmware || []) {
+            if (vm?.name && vm?.osFamily) vmOsByName[String(vm.name)] = String(vm.osFamily)
+          }
+          return [
+            key,
+            {
+              destinationCluster,
+              destinationTenant,
+              sourceVmwareRef,
+              sourceDatacenter,
+              destinationOpenstackRef,
+              vmOsByName
+            }
+          ] as const
         })
       )
 
