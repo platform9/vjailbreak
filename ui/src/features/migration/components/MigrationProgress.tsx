@@ -21,17 +21,9 @@ interface MigrationProgressProps {
   phase: Phase
   progressText: string
   syncWarningMessage?: string
-  failureReason?: string
 }
 
-export default function MigrationProgress({
-  progressText,
-  phase,
-  syncWarningMessage,
-  failureReason
-}: MigrationProgressProps) {
-  const isFailed = phase === Phase.Failed || phase === Phase.ValidationFailed
-  const tooltipText = isFailed && failureReason ? failureReason : progressText
+export default function MigrationProgress({ progressText, phase, syncWarningMessage }: MigrationProgressProps) {
   const statusIcon = useMemo(() => {
     // Show warning icon if sync is in warning state (non-empty warning message)
     if (syncWarningMessage) {
@@ -68,7 +60,7 @@ export default function MigrationProgress({
     <>
       <ProgressContainer data-testid="migration-progress-cell">
         {statusIcon}
-        <Tooltip title={tooltipText} arrow>
+        <Tooltip title={progressText} arrow>
           <Typography
             variant="body2"
             sx={{

@@ -240,9 +240,6 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
 	}
 
-	// Extract a concise failure root cause from events now that the phase is settled
-	r.ExtractFailureReason(migration, filteredEvents)
-
 	// Record migration start if this is a new migration (hasn't been started in metrics yet)
 	// Check if migration was just created (within last minute) and oldStatus phase is empty or Pending
 	isNewMigration := time.Since(migration.CreationTimestamp.Time) < time.Minute &&
@@ -665,42 +662,3 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 	}
 }
 
-// ExtractFailureReason extracts a concise, human-readable root cause from
-// the migration pod's failure events (e.g. "Failed to migrate VM: failed to
-// convert disks: ... virt-v2v-in-place: error: not enough free space ...")
-// and surfaces it on Migration.Status.FailureReason for prominent display,
-// independent of the full event history already shown in the events tab.
-// Only populated while the migration is in the Failed phase; cleared
-// otherwise (e.g. on retry).
-func (r *MigrationReconciler) ExtractFailureReason(migration *vjailbreakv1alpha1.Migration, events *corev1.EventList) {
-	migration.Status.FailureReason = ""
-	if migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseFailed {
-		return
-	}
-
-	// Events are sorted newest first; the most recent failure event holds
-	// the final, most complete error chain.
-	for i := range events.Items {
-		msg := strings.TrimSpace(events.Items[i].Message)
-		if !strings.Contains(msg, constants.EventMessageMigrationFailed) && !strings.Contains(msg, constants.EventMessageFailed) {
-			continue
-		}
-
-		// Strip the generic "Trying to perform cleanup" boilerplate that
-		// gets appended to the actual error by migobj.cleanup(), so only
-		// the root cause remains.
-		if idx := strings.Index(msg, ". "+constants.EventMessageMigrationFailed); idx != -1 {
-			msg = msg[:idx]
-		} else {
-			msg = strings.TrimSuffix(msg, constants.EventMessageMigrationFailed)
-		}
-		msg = strings.TrimSpace(msg)
-		msg = strings.TrimSuffix(msg, ".")
-		msg = strings.TrimSpace(msg)
-
-		if msg != "" {
-			migration.Status.FailureReason = msg
-			return
-		}
-	}
-}
