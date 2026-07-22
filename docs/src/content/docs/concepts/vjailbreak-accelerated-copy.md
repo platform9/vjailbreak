@@ -1,9 +1,11 @@
 ---
-title: Hot-Add Proxy Migration
+title: vJailbreak Accelerated Copy
 description: High-performance VM migration using a Proxy VM for direct disk attachment and NBD-based data transfer
 ---
 
-Hot-Add Proxy is an advanced data copy method that attaches source VM disks directly to a dedicated Proxy VM and streams the data over NBD (Network Block Device) to the destination. Instead of copying data over the NFC protocol from ESXi, this method leverages vCenter's disk-attach capability to transfer data at near-disk speeds without requiring shared storage arrays.
+vJailbreak Accelerated Copy is an advanced data copy method that attaches source VM disks directly to a dedicated Proxy VM and streams the data over NBD (Network Block Device) to the destination. Instead of copying data over the NFC protocol from ESXi, this method leverages vCenter's disk-attach capability to transfer data at near-disk speeds without requiring shared storage arrays.
+
+> **Underlying feature:** vJailbreak Accelerated Copy is powered by VMware's **hot-add** disk transport mechanism to attach source disks to the Proxy VM.
 
 ## Overview
 
@@ -11,7 +13,7 @@ Hot-Add Proxy is an advanced data copy method that attaches source VM disks dire
 
 Traditional vJailbreak migrations copy VM disk data from VMware ESXi hosts to PCD Cinder volumes over the network using the NFC (Network File Copy) protocol, limited to approximately **1 Gbps per VMDK**.
 
-Hot-Add Proxy bypasses this limitation by:
+vJailbreak Accelerated Copy bypasses this limitation by:
 
 1. Powering off the source VM and then taking a snapshot
 2. Attaching the frozen snapshot disks directly to a Proxy VM running in vCenter
@@ -58,7 +60,7 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 
 vJailbreak can deploy and register the Proxy VM in a single step directly from the UI:
 
-1. Navigate to **Hot-Add Proxy** in the left sidebar
+1. Navigate to **vJailbreak Accelerated Copy** in the left sidebar
 2. Click **Add Proxy VM** and select **Deploy a new vJailbreak Proxy VM**
 3. Select your VMware credentials and fill in the deployment target (datacenter, datastore, network, and optionally a cluster or host)
 4. Enter a unique VM name and click **Deploy & Register VM**
@@ -176,7 +178,7 @@ ssh-copy-id -i proxy_vm_key.pub root@<proxy-vm-ip>
 
 Once the Proxy VM is set up and the SSH key is ready:
 
-1. In the vJailbreak UI, navigate to **Hot-Add Proxy** in the left sidebar
+1. In the vJailbreak UI, navigate to **vJailbreak Accelerated Copy** in the left sidebar
 2. Click **Add Proxy VM**
 3. Fill in the form:
    - **Name**: A unique identifier for this Proxy VM
@@ -198,13 +200,13 @@ The Proxy VM status will update to **Ready** once all checks pass. Any failed ch
 If verification fails, address the reported issue (e.g., install missing utilities, fix SSH access) and click **Retry** to re-run the validation without re-entering the form.
 :::
 
-## Using Hot-Add in a Migration
+## Using vJailbreak Accelerated Copy in a Migration
 
 ### Step 1: Create a Migration
 
 1. Navigate to the **Migrations** page and click **New Migration**
 2. Fill out the migration form with source VM and target configuration
-3. For the **Data Copy Method**, select **Hot Add**
+3. For the **Data Copy Method**, select **vJailbreak Accelerated Copy**
 
 ### Step 2: Select Proxy VM
 
@@ -222,11 +224,11 @@ The selected Proxy VM must be in **Ready** state before the migration can procee
 
 ## Migration Workflow
 
-When Hot-Add is selected, the migration follows this workflow:
+When vJailbreak Accelerated Copy is selected, the migration follows this workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Hot-Add Proxy Copy Flow                    │
+│                vJailbreak Accelerated Copy Flow                 │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. Validate Prerequisites                                      │
