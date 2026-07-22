@@ -7,7 +7,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import DnsOutlinedIcon from '@mui/icons-material/DnsOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
-import SettingsSuggestOutlinedIcon from '@mui/icons-material/SettingsSuggestOutlined'
+import SettingsOutlined from '@mui/icons-material/SettingsOutlined'
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined'
 import { ActionButton, DrawerShell } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
@@ -33,7 +33,15 @@ export interface TemplateDetailDrawerProps {
   onEdit: (template: SavedTemplate) => void
 }
 
-function SectionBlock({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
+function SectionBlock({
+  icon,
+  title,
+  children
+}: {
+  icon: ReactNode
+  title: string
+  children: ReactNode
+}) {
   return (
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1 }}>
@@ -284,7 +292,10 @@ export default function TemplateDetailDrawer({
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-          <SectionBlock icon={<DnsOutlinedIcon fontSize="small" color="action" />} title="Source & destination">
+          <SectionBlock
+            icon={<DnsOutlinedIcon fontSize="small" color="action" />}
+            title="Source & destination"
+          >
             <DetailRow label="Source credentials" value={template.sourceVCenter} />
             <DetailRow label="Destination credentials" value={template.destination} />
             <DetailRow label="Tenant" value={tenantProject || '—'} />
@@ -337,7 +348,7 @@ export default function TemplateDetailDrawer({
           </SectionBlock>
 
           <SectionBlock
-            icon={<SettingsSuggestOutlinedIcon fontSize="small" color="action" />}
+            icon={<SettingsOutlined fontSize="small" color="action" />}
             title="Advanced options"
           >
             {advancedOptionRows.length === 0 ? (

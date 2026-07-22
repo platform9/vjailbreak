@@ -306,7 +306,8 @@ export default function MigrationOptionsAlt({
 
               {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
                 <Alert severity="info" sx={{ mt: 1 }}>
-                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods are not available.
+                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods
+                  are not available.
                 </Alert>
               )}
               <OptionRow>
@@ -328,9 +329,14 @@ export default function MigrationOptionsAlt({
                       />
                     }
                   />
-                  <OptionHelp variant="caption">Choose cold or warm migration behavior.</OptionHelp>
+                  <OptionHelp variant="caption">
+                    Choose cold, hot or mock migration behavior.
+                  </OptionHelp>
                 </OptionLeft>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }} data-testid="data-copy-method-container">
+                <Box
+                  sx={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%' }}
+                  data-testid="data-copy-method-container"
+                >
                   <Select
                     size="small"
                     disabled={!selectedMigrationOptions.dataCopyMethod && !isHotAdd}
@@ -779,7 +785,6 @@ export default function MigrationOptionsAlt({
               </OptionLeft>
               <Box />
             </OptionRow>
-
           </SectionBlock>
         ) : null}
 
