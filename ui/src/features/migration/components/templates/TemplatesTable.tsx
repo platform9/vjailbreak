@@ -18,8 +18,13 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
-import { dataCopyMethodChipSx, DATA_COPY_METHOD_LABEL } from '../../utils/templateLabels'
+import {
+  dataCopyMethodChipSx,
+  DATA_COPY_METHOD_LABEL,
+  sourceClusterLabel
+} from '../../utils/templateLabels'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
+import { useSourceClusterNameLookup } from '../../hooks/useSourceClusterNameLookup'
 import DeleteTemplateDialog from './DeleteTemplateDialog'
 import TemplateTypeAvatar from './TemplateTypeAvatar'
 
@@ -39,6 +44,7 @@ export default function TemplatesTable({
   const [deleteTarget, setDeleteTarget] = useState<SavedTemplate | null>(null)
   const cloneMutation = useCloneTemplate()
   const deleteMutation = useDeleteTemplate()
+  const clusterNameLookup = useSourceClusterNameLookup()
 
   const handleDeleteConfirmed = async () => {
     if (!deleteTarget) return
@@ -62,7 +68,12 @@ export default function TemplatesTable({
           <TableBody>
             {templates.map((template) => {
               const mappingCount = template.networkMappings.length + template.storageMappings.length
-              const subtitleLine = [template.sourceCluster, template.targetCluster].filter(Boolean).join(' · ')
+              const subtitleLine = [
+                sourceClusterLabel(template.sourceCluster, clusterNameLookup),
+                template.targetCluster
+              ]
+                .filter(Boolean)
+                .join(' · ')
               return (
                 <TableRow
                   key={template.name}

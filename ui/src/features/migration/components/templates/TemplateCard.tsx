@@ -9,9 +9,11 @@ import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import {
   cutoverOptionLabel,
   dataCopyMethodChipSx,
-  DATA_COPY_METHOD_LABEL
+  DATA_COPY_METHOD_LABEL,
+  sourceClusterLabel
 } from '../../utils/templateLabels'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
+import { useSourceClusterNameLookup } from '../../hooks/useSourceClusterNameLookup'
 import DeleteTemplateDialog from './DeleteTemplateDialog'
 import TemplateTypeAvatar from './TemplateTypeAvatar'
 
@@ -27,7 +29,13 @@ export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const cloneMutation = useCloneTemplate()
   const deleteMutation = useDeleteTemplate()
-  const subtitleLine = [template.sourceCluster, template.targetCluster].filter(Boolean).join(' · ')
+  const clusterNameLookup = useSourceClusterNameLookup()
+  const subtitleLine = [
+    sourceClusterLabel(template.sourceCluster, clusterNameLookup),
+    template.targetCluster
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const handleDeleteConfirmed = async () => {
     await deleteMutation.mutateAsync(template.name)

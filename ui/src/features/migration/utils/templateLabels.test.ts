@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { CUTOVER_TYPES } from '../constants'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
-import { buildAdvancedOptionRows, cutoverOptionLabel, DATA_COPY_METHOD_LABEL } from './templateLabels'
+import {
+  buildAdvancedOptionRows,
+  cutoverOptionLabel,
+  DATA_COPY_METHOD_LABEL,
+  sourceClusterLabel
+} from './templateLabels'
 
 const makeTemplate = (overrides: Partial<SavedTemplate> = {}): SavedTemplate => ({
   name: 'template',
@@ -40,6 +45,40 @@ describe('DATA_COPY_METHOD_LABEL', () => {
     expect(DATA_COPY_METHOD_LABEL.hot).toBe('Hot')
     expect(DATA_COPY_METHOD_LABEL.cold).toBe('Cold')
     expect(DATA_COPY_METHOD_LABEL.mock).toBe('Mock')
+  })
+})
+
+describe('sourceClusterLabel', () => {
+  it('passes through undefined/empty unchanged', () => {
+    expect(sourceClusterLabel(undefined)).toBeUndefined()
+    expect(sourceClusterLabel('')).toBe('')
+  })
+
+  it('collapses the standalone-host placeholder to "No cluster"', () => {
+    expect(sourceClusterLabel('no-cluster-prison-cebef')).toBe('No cluster')
+    expect(sourceClusterLabel('NO-CLUSTER-abc-12345')).toBe('No cluster')
+  })
+
+  it('strips a trailing 5-char k8s-object-name hash from a real cluster name', () => {
+    expect(sourceClusterLabel('prod-cluster-a3f9c')).toBe('prod-cluster')
+  })
+
+  it('leaves an already-clean cluster name unchanged', () => {
+    expect(sourceClusterLabel('prod-cluster')).toBe('prod-cluster')
+  })
+
+  it('prefers a live lookup match over string cleanup, since the datacenter cannot be reliably split off', () => {
+    expect(
+      sourceClusterLabel('prod-cluster-prison-a3f9c', { 'prod-cluster-prison-a3f9c': 'prod-cluster' })
+    ).toBe('prod-cluster')
+    expect(
+      sourceClusterLabel('no-cluster-prison-cebef', { 'no-cluster-prison-cebef': 'NO CLUSTER' })
+    ).toBe('NO CLUSTER')
+  })
+
+  it('falls back to string cleanup when the raw name has no lookup match', () => {
+    expect(sourceClusterLabel('prod-cluster-prison-a3f9c', {})).toBe('prod-cluster-prison')
+    expect(sourceClusterLabel('prod-cluster-prison-a3f9c', { other: 'x' })).toBe('prod-cluster-prison')
   })
 })
 

@@ -199,7 +199,11 @@ export default function MigrationFormDrawer({
     const credName = params.vmwareCluster.split(':')[0]
     const sourceItem = sourceData.find((item) => item.credName === credName)
     const clusterObj = sourceItem?.clusters.find((cluster) => cluster.id === params.vmwareCluster)
-    return clusterObj?.name || ''
+    // displayName (cluster.spec.name) is the human-readable vCenter cluster name;
+    // `.name` is the k8s object's metadata.name, which for VMs on a standalone ESXi
+    // host (no real vCenter cluster) is a generated "no-cluster-<datacenter>-<hash>"
+    // placeholder — not something to persist into a saved template.
+    return clusterObj?.displayName || clusterObj?.name || ''
   }, [sourceData, params.vmwareCluster])
 
   const buildSaveTemplateInput = useCallback(

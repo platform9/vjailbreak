@@ -51,6 +51,27 @@ export function storageCopyMethodLabel(storageCopyMethod: string | undefined): s
   return STORAGE_COPY_METHOD_OPTIONS.find((opt) => opt.value === storageCopyMethod)?.label
 }
 
+// Templates saved before MigrationForm started preferring the vCenter cluster's
+// display name persisted the k8s object's raw metadata.name instead — for VMs on a
+// standalone ESXi host (no real vCenter cluster) that's a generated
+// "no-cluster-<datacenter>-<hash>" placeholder, and even a real cluster's raw name
+// has "-<datacenter>-<hash>" appended (see pkg/common/utils/k8scompat.go and
+// GetClusterK8sID). The datacenter can't be reliably split back out of that string
+// alone (it may itself contain hyphens), so `clusterNameLookup` — built by
+// useSourceClusterNameLookup from the live VMwareCluster list — is checked first;
+// only when the raw name isn't found there (e.g. its source cluster/cred no longer
+// exists) do we fall back to best-effort string cleanup.
+export function sourceClusterLabel(
+  sourceCluster: string | undefined,
+  clusterNameLookup?: Record<string, string>
+): string | undefined {
+  if (!sourceCluster) return sourceCluster
+  const resolved = clusterNameLookup?.[sourceCluster]
+  if (resolved) return resolved
+  if (sourceCluster.toLowerCase().startsWith('no-cluster')) return 'No cluster'
+  return sourceCluster.replace(/-[0-9a-f]{5}$/i, '')
+}
+
 export interface AdvancedOptionRow {
   label: string
   value: string

@@ -43,8 +43,12 @@ export function useApplyTemplatePrefill({
     const pcd = pcdData.find((p) => p.name === templatePrefill.targetCluster)
 
     const sourceItem = sourceData.find((item) => item.credName === templatePrefill.sourceVCenter)
+    // Match against displayName first (what newly-saved templates store) and fall
+    // back to the raw k8s object name for templates saved before that fix.
     const vmwareClusterId = sourceItem?.clusters.find(
-      (cluster) => cluster.name === templatePrefill.sourceCluster
+      (cluster) =>
+        cluster.displayName === templatePrefill.sourceCluster ||
+        cluster.name === templatePrefill.sourceCluster
     )?.id
 
     updateParams({
@@ -123,7 +127,9 @@ export function useApplyTemplatePrefill({
         (item) => item.credName === templatePrefill.sourceVCenter
       )
       const match = sourceItem?.clusters.find(
-        (cluster) => cluster.name === templatePrefill.sourceCluster
+        (cluster) =>
+          cluster.displayName === templatePrefill.sourceCluster ||
+          cluster.name === templatePrefill.sourceCluster
       )
       if (match) updateParams({ vmwareCluster: match.id })
     }
