@@ -25,6 +25,8 @@ import { STATUS_ORDER } from '../constants'
 import {
   getProgressText,
   getMigrationStatusCategory,
+  matchesDateFilter,
+  STATUS_FILTER_OPTIONS,
   STATUS_FILTER_TO_CATEGORY
 } from '../utils/migrationTableUtils'
 
@@ -48,8 +50,12 @@ const CustomToolbar = ({
   onBulkRetry,
   numEligibleForRetry,
   isBulkRetryLoading,
-  filteredCount,
-  totalCount
+  currentDateFilter,
+  onDateFilterChange,
+  currentStatusFilter,
+  onStatusFilterChange,
+  onRefresh,
+  isRefreshing
 }: CustomToolbarProps) => {
   const search = (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
@@ -93,17 +99,20 @@ const CustomToolbar = ({
           )}
         </>
       ) : null}
-      <CustomSearchToolbar placeholder="Search VM, tenant, OS..." />
+      <CustomSearchToolbar
+        placeholder="Search VM, tenant, OS..."
+        onRefresh={onRefresh}
+        isRefreshing={isRefreshing}
+        currentDateFilter={currentDateFilter}
+        onDateFilterChange={onDateFilterChange}
+        currentStatusFilter={currentStatusFilter}
+        onStatusFilterChange={onStatusFilterChange}
+        statusFilterOptions={[...STATUS_FILTER_OPTIONS]}
+      />
     </Box>
   )
 
-  const actions = (
-    <Typography variant="body2" color="text.secondary" data-testid="migrations-showing-count">
-      Showing {filteredCount} of {totalCount}
-    </Typography>
-  )
-
-  return <ListingToolbar search={search} actions={actions} />
+  return <ListingToolbar search={search} />
 }
 
 export default function MigrationsTable({
@@ -111,8 +120,7 @@ export default function MigrationsTable({
   onDeleteMigration,
   onDeleteSelected,
   refetchMigrations,
-  loading = false,
-  statusFilter: statusFilterProp
+  loading = false
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
   const navigate = useNavigate()
@@ -124,20 +132,33 @@ export default function MigrationsTable({
   const [isBulkRetryLoading, setIsBulkRetryLoading] = useState(false)
   const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false)
   const [bulkRetryError, setBulkRetryError] = useState<string | null>(null)
-  const statusFilter = statusFilterProp ?? 'All'
+  const [dateFilter, setDateFilter] = useState('All Time')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
   }, [])
 
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await refetchMigrations()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [refetchMigrations])
+
   const filteredMigrations = useMemo(() => {
     if (!migrations) return []
 
     const category = STATUS_FILTER_TO_CATEGORY[statusFilter]
-    if (!category) return migrations
 
-    return migrations.filter((m) => getMigrationStatusCategory(m.status?.phase) === category)
-  }, [migrations, statusFilter])
+    return migrations.filter((m) => {
+      if (category && getMigrationStatusCategory(m.status?.phase) !== category) return false
+      return matchesDateFilter(m.metadata?.creationTimestamp, dateFilter)
+    })
+  }, [migrations, statusFilter, dateFilter])
 
   const destinationByPlanQuery = useMigrationPlanDestinationsQuery(filteredMigrations)
 
@@ -695,23 +716,27 @@ export default function MigrationsTable({
           // Pass CustomToolbar directly (stable module-level reference) to prevent DataGrid
           // from unmounting/remounting the toolbar on every MigrationsTable re-render.
           // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
-          toolbar: hasSelectionActions ? CustomToolbar : undefined
+          // Always mounted — search/refresh/filter are independent of bulk-selection
+          // capability; the bulk-action buttons inside gate themselves on numSelected.
+          toolbar: CustomToolbar
         }}
         slotProps={{
-          toolbar: hasSelectionActions
-            ? ({
-                numSelected: selectedRows.length,
-                onDeleteSelected: handleDeleteSelected,
-                onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
-                numEligibleForCutover: eligibleForCutover.length,
-                onBulkRetry: () => setBulkRetryDialogOpen(true),
-                numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
-                isBulkRetryLoading,
-                filteredCount: filteredMigrations.length,
-                totalCount: migrations?.length || 0
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              } as any)
-            : {}
+          toolbar: {
+            numSelected: selectedRows.length,
+            onDeleteSelected: handleDeleteSelected,
+            onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
+            numEligibleForCutover: eligibleForCutover.length,
+            onBulkRetry: () => setBulkRetryDialogOpen(true),
+            numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
+            isBulkRetryLoading,
+            currentDateFilter: dateFilter,
+            onDateFilterChange: setDateFilter,
+            currentStatusFilter: statusFilter,
+            onStatusFilterChange: setStatusFilter,
+            onRefresh: handleRefresh,
+            isRefreshing
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any
         }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}

@@ -3,13 +3,11 @@ import { Box, Tab, Tabs, Typography, Button } from '@mui/material'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import Tooltip from '@mui/material/Tooltip'
-import RefreshRoundedIcon from '@mui/icons-material/RefreshRounded'
 import AddIcon from '@mui/icons-material/Add'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 import { useMigrationsQuery } from '../hooks/useMigrationsQuery'
 import { Migration } from '../api/migrations'
 import MigrationsTable from '../components/MigrationsTable'
-import MigrationsSummaryStats from '../components/MigrationsSummaryStats'
 import DeleteMigrationDialog from '../components/DeleteMigrationDialog'
 import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
 import { useMigrationTemplatesQuery } from '../hooks/useMigrationTemplatesQuery'
@@ -22,12 +20,48 @@ import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredenti
 
 type MigrationsPageTab = 'migrations' | 'templates'
 
+// Tab label with a small count "pill" — filled primary when its tab is active,
+// muted/outlined when inactive, matching the Tab's own selected/unselected color.
+function TabLabelWithCount({
+  label,
+  count,
+  active
+}: {
+  label: string
+  count: number
+  active: boolean
+}) {
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <span>{label}</span>
+      <Box
+        component="span"
+        sx={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minWidth: 20,
+          height: 20,
+          px: 0.5,
+          borderRadius: 10,
+          fontSize: '0.7rem',
+          fontWeight: 700,
+          lineHeight: 1,
+          bgcolor: active ? 'primary.main' : 'action.selected',
+          color: active ? 'primary.contrastText' : 'text.secondary'
+        }}
+      >
+        {count}
+      </Box>
+    </Box>
+  )
+}
+
 export default function MigrationsPage() {
   const [activeTab, setActiveTab] = useState<MigrationsPageTab>('migrations')
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [openSnackbar, setOpenSnackbar] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('All')
   const { data: templates = [] } = useMigrationTemplatesQuery()
   const { openMigrationForm } = useMigrationFormActions()
 
@@ -143,14 +177,9 @@ export default function MigrationsPage() {
         }}
       >
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-            <Typography variant="h4" component="h1" data-testid="migrations-page-title">
-              {activeTab === 'migrations' ? 'Migrations' : 'Migration Templates'}
-            </Typography>
-            <Typography variant="h6" color="text.secondary">
-              {activeTab === 'migrations' ? migrationsCount : templates.length}
-            </Typography>
-          </Box>
+          <Typography variant="h4" component="h1" data-testid="migrations-page-title">
+            {activeTab === 'migrations' ? 'Migrations' : 'Migration Templates'}
+          </Typography>
           {activeTab === 'migrations' ? (
             <Typography variant="body2" color="text.secondary">
               Lift VMware VMs into Private Cloud Director.{' '}
@@ -165,38 +194,26 @@ export default function MigrationsPage() {
             </Typography>
           ) : (
             <Typography variant="body2" color="text.secondary">
-              Save and reuse migration configurations across the team.
+              Save and reuse migration configurations.
             </Typography>
           )}
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
           {activeTab === 'migrations' ? (
-            <>
-              <Tooltip title="Refresh">
+            <Tooltip title={startMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
+              <span>
                 <Button
-                  variant="outlined"
-                  startIcon={<RefreshRoundedIcon />}
-                  onClick={() => refetchMigrations()}
-                  data-testid="migrations-page-refresh-button"
+                  variant="contained"
+                  color="primary"
+                  startIcon={<AddIcon />}
+                  onClick={() => openMigrationForm('standard')}
+                  disabled={startMigrationDisabled}
+                  data-testid="start-migration-button"
                 >
-                  Refresh
+                  Start Migration
                 </Button>
-              </Tooltip>
-              <Tooltip title={startMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
-                <span>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={<AddIcon />}
-                    onClick={() => openMigrationForm('standard')}
-                    disabled={startMigrationDisabled}
-                    data-testid="start-migration-button"
-                  >
-                    Start Migration
-                  </Button>
-                </span>
-              </Tooltip>
-            </>
+              </span>
+            </Tooltip>
           ) : (
             <Tooltip title={startMigrationDisabled ? startMigrationDisabledReason : ''} arrow>
               <span>
@@ -222,9 +239,25 @@ export default function MigrationsPage() {
           onChange={(_event, value: MigrationsPageTab) => setActiveTab(value)}
           data-testid="migrations-page-tabs"
         >
-          <Tab label="Migrations" value="migrations" data-testid="migrations-page-tab-migrations" />
           <Tab
-            label={`Templates ${templates.length}`}
+            label={
+              <TabLabelWithCount
+                label="Migrations"
+                count={migrationsCount}
+                active={activeTab === 'migrations'}
+              />
+            }
+            value="migrations"
+            data-testid="migrations-page-tab-migrations"
+          />
+          <Tab
+            label={
+              <TabLabelWithCount
+                label="Templates"
+                count={templates.length}
+                active={activeTab === 'templates'}
+              />
+            }
             value="templates"
             data-testid="migrations-page-tab-templates"
           />
@@ -232,21 +265,13 @@ export default function MigrationsPage() {
       </Box>
 
       {activeTab === 'migrations' ? (
-        <>
-          <MigrationsSummaryStats
-            counts={summaryCounts}
-            activeFilter={statusFilter}
-            onFilterChange={setStatusFilter}
-          />
-          <MigrationsTable
-            refetchMigrations={refetchMigrations}
-            migrations={migrations || []}
-            onDeleteMigration={handleDeleteClick}
-            onDeleteSelected={handleDeleteSelected}
-            loading={isMigrationsLoading}
-            statusFilter={statusFilter}
-          />
-        </>
+        <MigrationsTable
+          refetchMigrations={refetchMigrations}
+          migrations={migrations || []}
+          onDeleteMigration={handleDeleteClick}
+          onDeleteSelected={handleDeleteSelected}
+          loading={isMigrationsLoading}
+        />
       ) : (
         <TemplatesTabPanel onUseTemplate={handleUseTemplate} onEditTemplate={handleEditTemplate} />
       )}

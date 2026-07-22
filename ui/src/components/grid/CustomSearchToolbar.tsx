@@ -14,6 +14,12 @@ const spinAnimation = keyframes`
   to { transform: rotate(360deg); }
 `
 
+// Exported so consumers that implement their own date-range filtering (the actual
+// "is this row within N days" logic lives with the data, not here) share the exact
+// same set of option labels instead of re-typing them.
+// eslint-disable-next-line react-refresh/only-export-components
+export const DATE_FILTER_OPTIONS = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days'] as const
+
 interface CustomSearchToolbarProps {
   title?: string
   onRefresh?: () => void
@@ -46,8 +52,6 @@ const CustomSearchToolbar = ({
 
   const statusMenuOpen = Boolean(statusAnchorEl)
   const dateMenuOpen = Boolean(dateAnchorEl)
-
-  const dateFilterOptions = ['All Time', 'Last 24 hours', 'Last 7 days', 'Last 30 days']
 
   const isDateFilterActive = currentDateFilter !== 'All Time'
   const isStatusFilterActive = currentStatusFilter !== 'All'
@@ -119,7 +123,7 @@ const CustomSearchToolbar = ({
                     Clear filter
                   </MenuItem>
                 )}
-                {dateFilterOptions.map((option) => (
+                {DATE_FILTER_OPTIONS.map((option) => (
                   <MenuItem
                     key={option}
                     selected={option === currentDateFilter}
