@@ -20,14 +20,6 @@ import {
   MOCK_VMWARE_MACHINES_LIST,
 } from './helpers/migration.fixtures'
 
-// GH #2176 follow-up — same root cause as the Tags & Metadata toggle (see
-// tags-metadata.spec.ts TAGS-005): a click landing right after a cluster Select's
-// menu closes also shifts DOM focus onto the click target, which desyncs React's
-// controlled-checkbox change tracking and silently reverts the native `checked`
-// flip before onChange fires. Whichever Migration Options toggle the user reaches
-// first after selecting clusters needed two clicks to enable; every toggle after
-// that worked normally. Fixed by driving all Migration Options checkboxes off
-// onClick (invert current state) instead of onChange/e.target.checked.
 async function mockFormApis(page: Page) {
   await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST_EMPTY)
   await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
