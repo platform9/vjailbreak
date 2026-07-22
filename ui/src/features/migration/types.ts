@@ -394,4 +394,9 @@ export interface MigrationsTableProps {
   searchValue?: string
   statusFilter?: string
   dateFilter?: string
+  // DOM node to portal the bulk-actions bar (Delete/Cutover/Retry Selected) into —
+  // lets MigrationsPage render it inline before the search bar instead of on its
+  // own row above the grid, while this component keeps owning the selection state.
+  // Omit to fall back to rendering the bar in its own row above the grid.
+  bulkActionsContainer?: HTMLElement | null
 }

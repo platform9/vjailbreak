@@ -5,6 +5,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { CommonDataGrid } from 'src/components/grid'
 import { Phase } from '../api/migrations'
@@ -48,7 +49,8 @@ export default function MigrationsTable({
   loading = false,
   searchValue = '',
   statusFilter = 'All',
-  dateFilter = 'All Time'
+  dateFilter = 'All Time',
+  bulkActionsContainer = null
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
   const navigate = useNavigate()
@@ -615,48 +617,58 @@ export default function MigrationsTable({
 
   const numEligibleForRetry = allSelectedRetryable ? eligibleForRetry.length : 0
 
+  const bulkActionsBar = selectedRows.length > 0 && (
+    <Box
+      sx={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: 1.5,
+        ...(bulkActionsContainer ? {} : { mb: 1.5 })
+      }}
+    >
+      <Button
+        data-testid="delete-selected-button"
+        variant="outlined"
+        color="error"
+        startIcon={<DeleteIcon />}
+        onClick={handleDeleteSelected}
+        sx={{ height: 40 }}
+      >
+        Delete Selected ({selectedRows.length})
+      </Button>
+
+      {eligibleForCutover.length > 0 && (
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<PlayArrowIcon />}
+          onClick={() => setBulkCutoverDialogOpen(true)}
+          sx={{ height: 40 }}
+        >
+          Trigger Cutover ({eligibleForCutover.length})
+        </Button>
+      )}
+
+      {numEligibleForRetry > 0 && (
+        <Button
+          data-testid="bulk-retry-button"
+          variant="outlined"
+          color="primary"
+          startIcon={<ReplayIcon />}
+          onClick={() => setBulkRetryDialogOpen(true)}
+          disabled={isBulkRetryLoading}
+          sx={{ height: 40 }}
+        >
+          Retry Selected ({numEligibleForRetry})
+        </Button>
+      )}
+    </Box>
+  )
+
   return (
     <>
-      {selectedRows.length > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-          <Button
-            data-testid="delete-selected-button"
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={handleDeleteSelected}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({selectedRows.length})
-          </Button>
-
-          {eligibleForCutover.length > 0 && (
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<PlayArrowIcon />}
-              onClick={() => setBulkCutoverDialogOpen(true)}
-              sx={{ height: 40 }}
-            >
-              Trigger Cutover ({eligibleForCutover.length})
-            </Button>
-          )}
-
-          {numEligibleForRetry > 0 && (
-            <Button
-              data-testid="bulk-retry-button"
-              variant="outlined"
-              color="primary"
-              startIcon={<ReplayIcon />}
-              onClick={() => setBulkRetryDialogOpen(true)}
-              disabled={isBulkRetryLoading}
-              sx={{ height: 40 }}
-            >
-              Retry Selected ({numEligibleForRetry})
-            </Button>
-          )}
-        </Box>
-      )}
+      {bulkActionsContainer ? createPortal(bulkActionsBar, bulkActionsContainer) : bulkActionsBar}
 
       <CommonDataGrid
         data-testid="migrations-table"

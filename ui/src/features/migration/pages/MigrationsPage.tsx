@@ -69,6 +69,10 @@ export default function MigrationsPage() {
   const [statusFilter, setStatusFilter] = useState('All')
   const [dateFilter, setDateFilter] = useState('All Time')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [bulkActionsContainer, setBulkActionsContainer] = useState<HTMLDivElement | null>(null)
+  const bulkActionsSlotRef = useCallback((node: HTMLDivElement | null) => {
+    setBulkActionsContainer(node)
+  }, [])
   const [templateQuery, setTemplateQuery] = useState('')
   const [templateCopyMethodFilter, setTemplateCopyMethodFilter] =
     useState<TemplateCopyMethodFilter>('all')
@@ -296,19 +300,25 @@ export default function MigrationsPage() {
         </Tabs>
 
         {activeTab === 'migrations' ? (
-          <CustomSearchToolbar
-            placeholder="Search VM, tenant, OS..."
-            searchValue={searchValue}
-            onSearchChange={setSearchValue}
-            onRefresh={handleRefresh}
-            isRefreshing={isRefreshing}
-            currentDateFilter={dateFilter}
-            onDateFilterChange={setDateFilter}
-            currentStatusFilter={statusFilter}
-            onStatusFilterChange={setStatusFilter}
-            statusFilterOptions={[...STATUS_FILTER_OPTIONS]}
-            maxSearchWidth={220}
-          />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+            {/* Portal target for MigrationsTable's bulk-actions bar (Delete/Cutover/Retry
+                Selected) — keeps that state and logic owned by the table while letting it
+                render here, before the search bar, instead of on its own row above the grid. */}
+            <Box ref={bulkActionsSlotRef} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }} />
+            <CustomSearchToolbar
+              placeholder="Search VM, tenant, OS..."
+              searchValue={searchValue}
+              onSearchChange={setSearchValue}
+              onRefresh={handleRefresh}
+              isRefreshing={isRefreshing}
+              currentDateFilter={dateFilter}
+              onDateFilterChange={setDateFilter}
+              currentStatusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
+              statusFilterOptions={[...STATUS_FILTER_OPTIONS]}
+              maxSearchWidth={220}
+            />
+          </Box>
         ) : (
           <TemplatesToolbar
             query={templateQuery}
@@ -329,6 +339,7 @@ export default function MigrationsPage() {
           migrations={migrations || []}
           onDeleteMigration={handleDeleteClick}
           onDeleteSelected={handleDeleteSelected}
+          bulkActionsContainer={bulkActionsContainer}
           loading={isMigrationsLoading}
           searchValue={searchValue}
           statusFilter={statusFilter}

@@ -70,7 +70,7 @@ export default function TemplatesToolbar({
         data-testid="templates-search"
         size="small"
         variant="standard"
-        sx={{ width: '100%', maxWidth: 220 }}
+        sx={{ width: '100%', maxWidth: 220, minWidth: 0 }}
         InputProps={{
           sx: { '& .MuiInputBase-input': { textOverflow: 'ellipsis' } },
           startAdornment: (
@@ -86,6 +86,7 @@ export default function TemplatesToolbar({
           size="small"
           onClick={(event) => setFilterAnchorEl(event.currentTarget)}
           data-testid="templates-type-filter"
+          sx={{ flexShrink: 0 }}
         >
           <FilterListIcon color={isTypeFilterActive ? 'primary' : 'inherit'} />
         </IconButton>
@@ -109,7 +110,7 @@ export default function TemplatesToolbar({
         ))}
       </Menu>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
         <Typography variant="body2" color="text.secondary">
           Sort
         </Typography>
@@ -132,6 +133,7 @@ export default function TemplatesToolbar({
         exclusive
         value={view}
         onChange={(_event, next) => next && onViewChange(next)}
+        sx={{ flexShrink: 0 }}
       >
         <ToggleButton value="grid" data-testid="templates-view-grid">
           <GridViewIcon fontSize="small" />

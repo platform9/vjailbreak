@@ -12,7 +12,6 @@ import {
   DATA_COPY_METHOD_LABEL
 } from '../../utils/templateLabels'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
-import { useTemplateTenantLookup } from '../../hooks/useTemplateTenantLookup'
 import DeleteTemplateDialog from './DeleteTemplateDialog'
 import TemplateTypeAvatar from './TemplateTypeAvatar'
 
@@ -28,9 +27,7 @@ export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const cloneMutation = useCloneTemplate()
   const deleteMutation = useDeleteTemplate()
-  const tenantByDestination = useTemplateTenantLookup()
-  const tenantProject = tenantByDestination[template.destination]
-  const subtitleLine = [tenantProject, template.targetCluster].filter(Boolean).join(' · ')
+  const subtitleLine = [template.sourceCluster, template.targetCluster].filter(Boolean).join(' · ')
 
   const handleDeleteConfirmed = async () => {
     await deleteMutation.mutateAsync(template.name)
