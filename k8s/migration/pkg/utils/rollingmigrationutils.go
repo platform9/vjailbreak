@@ -592,7 +592,9 @@ func convertBatchToMigrationPlan(ctx context.Context, scope *scope.ClusterMigrat
 				MigrationTemplate: rollingMigrationPlan.Spec.MigrationTemplate,
 				MigrationStrategy: rollingMigrationPlan.Spec.MigrationStrategy,
 				// Copy advanced options if needed
-				AdvancedOptions: rollingMigrationPlan.Spec.AdvancedOptions,
+				AdvancedOptions:    rollingMigrationPlan.Spec.AdvancedOptions,
+				PreserveSourceTags: rollingMigrationPlan.Spec.PreserveSourceTags,
+				CustomMetadata:     rollingMigrationPlan.Spec.CustomMetadata,
 			},
 			// Include VM batch as a single group for migration
 			VirtualMachines: [][]string{batch},

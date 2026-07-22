@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useParams from 'src/hooks/useParams'
 import MigrationOptions from '../steps/MigrationOptionsAlt'
+import TagsAndMetadataSection from '../steps/TagsAndMetadataSection'
 import NetworkAndStorageMappingStep from '../steps/NetworkAndStorageMappingStep'
 import SecurityGroupAndServerGroupStep from '../steps/SecurityGroupAndServerGroup'
 import SourceDestinationClusterSelection from '../steps/SourceDestinationClusterSelection'
@@ -70,7 +71,7 @@ const defaultMigrationOptions = {
   }
 }
 
-const defaultValues: Partial<FormValues> = {}
+const defaultValues: Partial<FormValues> = { removeVMwareTools: true }
 
 export default function MigrationFormDrawer({
   open,
@@ -316,12 +317,14 @@ export default function MigrationFormDrawer({
   const section2Ref = useRef<HTMLDivElement | null>(null)
   const section3Ref = useRef<HTMLDivElement | null>(null)
   const section4Ref = useRef<HTMLDivElement | null>(null)
+  const tagsMetadataRef = useRef<HTMLDivElement | null>(null)
   const section5Ref = useRef<HTMLDivElement | null>(null)
   const reviewRef = useRef<HTMLDivElement | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<string>('source-destination')
 
   const [touchedSections, setTouchedSections] = useState({
-    options: false
+    options: false,
+    tagsMetadata: false
   })
 
   const markTouched = useCallback(
@@ -334,7 +337,8 @@ export default function MigrationFormDrawer({
   useEffect(() => {
     if (!open) return
     setTouchedSections({
-      options: false
+      options: false,
+      tagsMetadata: false
     })
   }, [open])
 
@@ -422,6 +426,7 @@ export default function MigrationFormDrawer({
       'select-vms': section2Ref,
       'map-resources': section3Ref,
       security: section4Ref,
+      'tags-metadata': tagsMetadataRef,
       options: section5Ref
     }
 
@@ -439,6 +444,7 @@ export default function MigrationFormDrawer({
       { ref: section2Ref, id: 'select-vms' },
       { ref: section3Ref, id: 'map-resources' },
       { ref: section4Ref, id: 'security' },
+      { ref: tagsMetadataRef, id: 'tags-metadata' },
       { ref: section5Ref, id: 'options' }
     ],
     setActiveSectionId
@@ -783,7 +789,31 @@ export default function MigrationFormDrawer({
               </Box>
               <Divider />
 
-              {/* Step 5 */}
+              {/* Step 5 — Tags & Metadata */}
+              <Box
+                ref={tagsMetadataRef}
+                data-testid="migration-form-step-tags-metadata"
+                onChangeCapture={() => markTouched('tagsMetadata')}
+                onClickCapture={() => markTouched('tagsMetadata')}
+              >
+                <SurfaceCard
+                  variant="section"
+                  title="Tags & Metadata"
+                  subtitle="Carry organizational context from VMware to the migrated VMs"
+                  data-testid="migration-form-tags-metadata-card"
+                >
+                  <TagsAndMetadataSection
+                    vms={params?.vms ?? []}
+                    preserveSourceTags={Boolean(params?.preserveSourceTags)}
+                    customMetadata={params?.customMetadata || []}
+                    onChange={getParamsUpdater}
+                    showHeader={false}
+                  />
+                </SurfaceCard>
+              </Box>
+              <Divider />
+
+              {/* Step 6 — Migration Options */}
               <Box
                 ref={section5Ref}
                 data-testid="migration-form-step-options"
@@ -806,10 +836,9 @@ export default function MigrationFormDrawer({
                     updateSelectedMigrationOptions={updateSelectedMigrationOptions}
                     errors={fieldErrors}
                     getErrorsUpdater={getFieldErrorsUpdater}
-                    stepNumber="5"
+                    stepNumber="6"
                     showHeader={false}
                     hasSubnetMismatch={hasSubnetMismatch}
-                    skipDefaultSeeding={skipDefaultSeeding}
                   />
                 </SurfaceCard>
               </Box>

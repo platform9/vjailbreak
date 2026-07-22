@@ -6,6 +6,7 @@ export CONTROLLER_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-controller:${TAG}
 export V2V_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-v2v:${TAG}
 export VPWNED_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-vpwned:${TAG}
 export UI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ui:${TAG}
+export AI_IMG ?= ${REGISTRY}/${REPO}/vjailbreak-ai:${TAG}
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
 ENVTEST_K8S_VERSION = 1.30.0
@@ -138,11 +139,14 @@ build-installer: setup-hooks manifests generate kustomize ## Generate a consolid
 	$(KUSTOMIZE) build config/default > dist/install.yaml
 	printf '\n---\n' >> dist/install.yaml
 	sed 's|$${UI_IMG}|$(UI_IMG)|g' ../../ui/deploy/ui.yaml >> dist/install.yaml
+	printf '\n---\n' >> dist/install.yaml
+	sed 's|$${AI_IMG}|$(AI_IMG)|g' ../../vjailbreak-ai/deploy/vjailbreak-ai.yaml >> dist/install.yaml
 	cp dist/install.yaml ../../deploy/installer.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/' > ../../deploy/00crds.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-controller-manager/ {print}' > ../../deploy/05controller-deployment.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-vpwned-sdk/ {print}' > ../../deploy/06vpwned-deployment.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ui/ {print}' > ../../deploy/07ui-deployment.yaml
+	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ai/ {print}' > ../../deploy/08vjailbreak-ai-deployment.yaml
 
 ##@ Deployment
 

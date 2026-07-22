@@ -73,5 +73,9 @@ export const retryProxyVMVerification = async (
       annotations: { 'vjailbreak.k8s.pf9.io/force-reconcile': String(Date.now()) }
     }
   }
-  return axios.patch<ProxyVM>({ endpoint, data: patch })
+  return axios.patch<ProxyVM>({
+    endpoint,
+    data: patch,
+    config: { headers: { 'Content-Type': 'application/merge-patch+json' } }
+  })
 }

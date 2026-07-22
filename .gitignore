@@ -23,3 +23,5 @@ proto_dependencies
 ui/test-results/*
 ui/playwright-report/*
 ui/coverage/*
+graphify-out/
+review_pr*/

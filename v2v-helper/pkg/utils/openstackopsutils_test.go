@@ -11,6 +11,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 )
 
@@ -53,6 +54,53 @@ func TestIsHotplugFlavor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := IsHotplugFlavor(tt.flavor); got != tt.want {
 				t.Errorf("IsHotplugFlavor(%+v) = %v, want %v", tt.flavor, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHotplugMetadata verifies the server metadata built for hotplug
+// (flavorless) provisioning.
+func TestHotplugMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		cpu      int32
+		memoryMB int32
+		want     map[string]string
+	}{
+		{
+			name:     "typical small VM",
+			cpu:      1,
+			memoryMB: 2048,
+			want: map[string]string{
+				"HOTPLUG_CPU":        "1",
+				"HOTPLUG_MEMORY":     "2048",
+				"HOTPLUG_CPU_MAX":    "2",
+				"HOTPLUG_MEMORY_MAX": "4096",
+			},
+		},
+		{
+			name:     "larger VM",
+			cpu:      8,
+			memoryMB: 16384,
+			want: map[string]string{
+				"HOTPLUG_CPU":        "8",
+				"HOTPLUG_MEMORY":     "16384",
+				"HOTPLUG_CPU_MAX":    "16",
+				"HOTPLUG_MEMORY_MAX": "32768",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HotplugMetadata(tt.cpu, tt.memoryMB)
+			if len(got) != len(tt.want) {
+				t.Fatalf("HotplugMetadata(%d, %d) has %d keys, want %d: %v", tt.cpu, tt.memoryMB, len(got), len(tt.want), got)
+			}
+			for k, want := range tt.want {
+				if got[k] != want {
+					t.Errorf("HotplugMetadata(%d, %d)[%q] = %q, want %q", tt.cpu, tt.memoryMB, k, got[k], want)
+				}
 			}
 		})
 	}
@@ -164,6 +212,64 @@ func newTestBlockStorageClient(srv *httptest.Server, httpClient *http.Client) *g
 	return &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		ResourceBase:   srv.URL + "/",
+	}
+}
+
+// newTestNetworkingClient builds a gophercloud ServiceClient pointed at srv
+// for use as OpenStackClients.NetworkingClient.
+func newTestNetworkingClient(srv *httptest.Server) *gophercloud.ServiceClient {
+	return &gophercloud.ServiceClient{
+		ProviderClient: &gophercloud.ProviderClient{TokenID: "test-token", Throwaway: true},
+		ResourceBase:   srv.URL + "/v2.0/",
+	}
+}
+
+// TestGetCreateOpts_NilIPEntries_L2NetworkWithNoSubnets reproduces a panic:
+// when ipEntries is nil (e.g. preserveIP=false + fallbackToDHCP=true routes
+// here to let OpenStack auto-allocate an IP) and the target network is an
+// L2-only "simple_network" with zero subnets, GetCreateOpts's nil branch used
+// to unconditionally index network.Subnets[0] and crash the migration with an
+// index-out-of-range panic. L2 networks are explicitly allowed to have no
+// subnets (see the guard in ValidateAndCreatePort), so this is a reachable
+// case, not a hypothetical one.
+func TestGetCreateOpts_NilIPEntries_L2NetworkWithNoSubnets(t *testing.T) {
+	const networkID = "net-l2-no-subnets"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/networks/"+networkID) {
+			body := map[string]any{
+				"network": map[string]any{
+					"id":   networkID,
+					"tags": []string{"simple_network"},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(body)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	client := &OpenStackClients{NetworkingClient: newTestNetworkingClient(srv)}
+	network := &networks.Network{ID: networkID, Subnets: []string{}}
+	gatewayIP := map[string]string{}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("GetCreateOpts panicked on an L2 network with no subnets: %v", r)
+		}
+	}()
+
+	createOpts, err := client.GetCreateOpts(t.Context(), network, "aa:bb:cc:dd:ee:ff", nil, "test-vm", nil, gatewayIP)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if createOpts.FixedIPs != nil {
+		t.Fatalf("expected no FixedIPs to be set, got: %+v", createOpts.FixedIPs)
+	}
+	if _, ok := gatewayIP["aa:bb:cc:dd:ee:ff"]; ok {
+		t.Fatalf("expected no gateway to be recorded for a subnet-less L2 network, got: %v", gatewayIP)
 	}
 }
 

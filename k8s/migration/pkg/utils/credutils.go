@@ -677,6 +677,25 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 		allVMs = append(allVMs, vms...)
 	}
 
+	// Batch-fetch attached vSphere tags for all VMs in one vAPI call. A nil map
+	// means the tagging service was unreachable; previously discovered tags are
+	// then preserved instead of being wiped.
+	var vmTagsByRef map[string]map[string]string
+	vmwareCredsInfo, err := GetVMwareCredentialsFromSecret(ctx, scope.Client, scope.VMwareCreds.Spec.SecretRef.Name)
+	if err != nil {
+		log.Error(err, "failed to get vCenter credentials for tag discovery, skipping tags")
+	} else {
+		vmRefs := make([]types.ManagedObjectReference, 0, len(allVMs))
+		for _, vm := range allVMs {
+			vmRefs = append(vmRefs, vm.Reference())
+		}
+		vmTagsByRef, err = FetchAttachedTagsForVMs(ctx, c, vmwareCredsInfo.Username, vmwareCredsInfo.Password, vmRefs)
+		if err != nil {
+			log.Error(err, "failed to fetch attached tags for VMs, skipping tags")
+			vmTagsByRef = nil
+		}
+	}
+
 	// Pre-allocate vminfo slice
 	vminfo := make([]vjailbreakv1alpha1.VMInfo, 0, len(allVMs))
 
@@ -697,7 +716,7 @@ func GetAndCreateAllVMs(ctx context.Context, scope *scope.VMwareCredsScope, data
 				}
 			}()
 			vmDatacenter := vmToDatacenter[allVMs[i].Reference().Value]
-			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter)
+			processSingleVM(ctx, scope, allVMs[i], &errMu, &vmErrors, &vminfoMu, &vminfo, c, rdmDiskMap, vmDatacenter, vmTagsByRef)
 		}(i)
 	}
 	// Wait for all VMs to be processed
@@ -1786,7 +1805,7 @@ var rdmSemaphore = &sync.Mutex{}
 // due to complexity, it is marked with a gocyclo linter directive to allow higher cyclomatic complexity.
 //
 //nolint:gocyclo
-func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string) {
+func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *object.VirtualMachine, errMu *sync.Mutex, vmErrors *[]vmError, vminfoMu *sync.Mutex, vminfo *[]vjailbreakv1alpha1.VMInfo, c *vim25.Client, rdmDiskMap *sync.Map, vmDatacenter string, vmTagsByRef map[string]map[string]string) {
 	var vmProps mo.VirtualMachine
 	var datastores []string
 	networks := make([]string, 0, 4)               // Pre-allocate with estimated capacity
@@ -1800,6 +1819,8 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		"runtime",
 		"network",
 		"summary.config.annotation",
+		"customValue",
+		"availableField",
 	}, &vmProps)
 	if err != nil {
 		appendToVMErrorsThreadSafe(errMu, vmErrors, vm.Name(), fmt.Errorf("failed to get VM properties: %w", err))
@@ -2040,6 +2061,15 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 	// Detect GPU usage and count GPUs
 	gpuInfo := CountGPUs(&vmProps)
 
+	// Resolve vSphere tags for this VM. When the tagging service was unreachable
+	// (nil map) keep the tags from the previous scan instead of wiping them.
+	var vmTags map[string]string
+	if vmTagsByRef != nil {
+		vmTags = vmTagsByRef[vm.Reference().Value]
+	} else {
+		vmTags = vmwvm.Spec.VMInfo.Tags
+	}
+
 	currentVM := vjailbreakv1alpha1.VMInfo{
 		Name:              vmProps.Config.Name,
 		VMID:              vm.Reference().Value,
@@ -2057,6 +2087,8 @@ func processSingleVM(ctx context.Context, scope *scope.VMwareCredsScope, vm *obj
 		NetworkInterfaces: nicList,
 		GuestNetworks:     guestNetworks,
 		GPU:               gpuInfo,
+		Tags:              vmTags,
+		CustomAttributes:  ExtractCustomAttributes(&vmProps),
 	}
 	appendToVMInfoThreadSafe(vminfoMu, vminfo, currentVM)
 	err = CreateOrUpdateVMwareMachine(ctx, scope.Client, scope.VMwareCreds, &currentVM, vmDatacenter)

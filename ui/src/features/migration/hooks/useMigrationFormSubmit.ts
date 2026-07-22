@@ -26,6 +26,7 @@ import { getRegionNameForOpenstackRef } from 'src/utils/regionNameResolver'
 import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 import { CUTOVER_TYPES } from '../constants'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
+import { customMetadataToRecord } from '../utils/metadataUtils'
 
 interface UseMigrationFormSubmitParams {
   params: Partial<FormValues>
@@ -313,7 +314,11 @@ export function useMigrationFormSubmit({
         }),
       periodicSyncInterval: params.periodicSyncInterval,
       periodicSyncEnabled: selectedMigrationOptions.periodicSyncEnabled,
-      acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk
+      acknowledgeNetworkConflictRisk: params.acknowledgeNetworkConflictRisk,
+      preserveSourceTags: params.preserveSourceTags || false,
+      ...(customMetadataToRecord(params.customMetadata) && {
+        customMetadata: customMetadataToRecord(params.customMetadata)
+      })
     }
 
     const body = createMigrationPlanJson(migrationFields)

@@ -33,6 +33,10 @@ export interface Spec {
   retry: boolean
   virtualMachines: Array<string[]>
   advancedOptions?: AdvancedOptions
+  // Copies each source VM's vSphere tags and custom attributes to the migrated VM
+  preserveSourceTags?: boolean
+  // Extra instance metadata applied to every migrated VM in the plan
+  customMetadata?: Record<string, string>
 }
 
 export interface AdvancedOptions {

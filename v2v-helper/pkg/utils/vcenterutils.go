@@ -61,6 +61,15 @@ type MigrationParams struct {
 	NetAppFlexVol string
 
 	ImageMetadata map[string]string
+
+	// PreserveSourceTags indicates whether the source VM's vSphere tags and custom
+	// attributes are applied to the target VM as instance metadata.
+	PreserveSourceTags bool
+	// SourceTagsMetadata is the resolved source tag/attribute metadata ("tag:"/"attr:" keys).
+	SourceTagsMetadata map[string]string
+	// CustomMetadata is the user-entered plan-wide instance metadata; its keys win
+	// over colliding SourceTagsMetadata keys.
+	CustomMetadata map[string]string
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -82,6 +91,18 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 	if raw := configMap.Data["IMAGE_METADATA"]; raw != "" {
 		if err := json.Unmarshal([]byte(raw), &imageMetadata); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal IMAGE_METADATA from configmap")
+		}
+	}
+	var sourceTagsMetadata map[string]string
+	if raw := configMap.Data["SOURCE_TAGS_METADATA"]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &sourceTagsMetadata); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal SOURCE_TAGS_METADATA from configmap")
+		}
+	}
+	var customMetadata map[string]string
+	if raw := configMap.Data["CUSTOM_METADATA"]; raw != "" {
+		if err := json.Unmarshal([]byte(raw), &customMetadata); err != nil {
+			return nil, errors.Wrap(err, "failed to unmarshal CUSTOM_METADATA from configmap")
 		}
 	}
 
@@ -124,5 +145,8 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		AcknowledgeNetworkConflictRisk: string(configMap.Data["ACKNOWLEDGE_NETWORK_CONFLICT_RISK"]) == constants.TrueString,
 		NetworkOverrides:               string(configMap.Data["NETWORK_OVERRIDES"]),
 		ImageMetadata:                  imageMetadata,
+		PreserveSourceTags:             string(configMap.Data["PRESERVE_SOURCE_TAGS"]) == constants.TrueString,
+		SourceTagsMetadata:             sourceTagsMetadata,
+		CustomMetadata:                 customMetadata,
 	}, nil
 }

@@ -23,6 +23,7 @@ interface UseRollingFormValidationParams {
     vms: boolean
     mapResources: boolean
     security: boolean
+    tagsMetadata: boolean
     options: boolean
   }
   params: RollingFormParams
@@ -426,6 +427,17 @@ export function useRollingFormValidation({
         status: touchedSections.security ? 'complete' : 'incomplete'
       },
       {
+        id: 'tags-metadata',
+        title: 'Tags & Metadata',
+        description: 'Preserve source tags and custom metadata',
+        status:
+          params.preserveSourceTags ||
+          (params.customMetadata || []).some((row) => row.key.trim() !== '') ||
+          touchedSections.tagsMetadata
+            ? 'complete'
+            : 'incomplete'
+      },
+      {
         id: 'options',
         title: 'Migration Options',
         description: 'Scheduling and advanced behavior',
@@ -475,7 +487,9 @@ export function useRollingFormValidation({
       touchedSections,
       params.disconnectSourceNetwork,
       params.fallbackToDHCP,
-      params.networkPersistence
+      params.networkPersistence,
+      params.preserveSourceTags,
+      params.customMetadata
     ]
   )
 

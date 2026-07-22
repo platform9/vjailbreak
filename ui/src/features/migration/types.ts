@@ -75,8 +75,14 @@ export interface FormValues extends Record<string, unknown> {
   networkPersistence?: boolean
   removeVMwareTools?: boolean
   imageProfiles?: string[]
-  periodicSyncInterval?: string
-  acknowledgeNetworkConflictRisk?: boolean
+  preserveSourceTags?: boolean
+  customMetadata?: KeyValuePair[]
+}
+
+// A single row in the custom metadata key-value editor
+export interface KeyValuePair {
+  key: string
+  value: string
 }
 
 export interface SelectedMigrationOptionsType {
@@ -158,6 +164,8 @@ export interface RollingFormParams extends Record<string, unknown> {
   disconnectSourceNetwork?: boolean
   fallbackToDHCP?: boolean
   networkPersistence?: boolean
+  preserveSourceTags?: boolean
+  customMetadata?: KeyValuePair[]
 }
 
 export interface NetworkAndStorageMappingStepProps {

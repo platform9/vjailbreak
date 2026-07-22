@@ -42,6 +42,7 @@ env:
   V2V_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-v2v-helper
   CONTROLLER_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-controller
   VPWNED_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-vpwned
+  AI_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak-ai
   NIGHTLY_RELEASE: ${{ github.event.inputs.is_nightly }}
   AMPLITUDE_API_KEY: ${{ secrets.AMPLITUDE_API_KEY }}
   BUGSNAG_API_KEY: ${{ secrets.BUGSNAG_API_KEY }}
@@ -63,6 +64,7 @@ jobs:
       controller_img: ${{ steps.set_env.outputs.controller_img }}
       qcow2_img: ${{ steps.set_env.outputs.qcow2_img }}
       vpwned_img: ${{ steps.set_env.outputs.vpwned_img }}
+      ai_img: ${{ steps.set_env.outputs.ai_img }}
 
     steps:
       - name: Checkout repository
@@ -148,6 +150,7 @@ jobs:
           echo "v2v_img=${{ env.V2V_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "controller_img=${{ env.CONTROLLER_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "vpwned_img=${{ env.VPWNED_IMG }}:${TAG}" >> $GITHUB_OUTPUT
+          echo "ai_img=${{ env.AI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "Final tag generated: ${TAG}"
 
   build-ui:
@@ -287,24 +290,57 @@ jobs:
           path: vpwned-image.tar
           retention-days: 1
 
-  push-images:
+  build-vjailbreak-ai:
     runs-on: ubuntu-latest
-    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned]
-    if: |
-      !startsWith(github.head_ref, 'pre-release/') &&
-      needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
-      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
-      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
-      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    
+    if: "!startsWith(github.head_ref, 'pre-release/')"
+    needs: determine-release
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
-          
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set environment variables
+        run: |
+          echo "AI_IMG=${{ needs.determine-release.outputs.ai_img }}" >> $GITHUB_ENV
+
+      - name: Build vjailbreak-ai image
+        run: make vjailbreak-ai
+
+      - name: Save vjailbreak-ai image as tar file
+        run: |
+          docker save ${{ env.AI_IMG }} -o ai-image.tar
+
+      - name: Upload vjailbreak-ai image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-docker-image
+          path: ai-image.tar
+          retention-days: 1
+
+  push-images:
+    runs-on: ubuntu-latest
+    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai]
+    if: |
+      !startsWith(github.head_ref, 'pre-release/') &&
+      needs.determine-release.result == 'success' &&
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
+      (needs.build-vjailbreak-ai.result == 'success' || needs.build-vjailbreak-ai.result == 'skipped') &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
       - name: Login to Docker Hub
         if: ${{ !env.ACT }}
         uses: docker/login-action@v3
@@ -312,7 +348,7 @@ jobs:
           registry: ${{ vars.REGISTRY }}
           username: ${{ secrets.QUAY_ROBOT_USERNAME }}
           password: ${{ secrets.QUAY_ROBOT_PASSWORD }}
-          
+
       - name: Set environment variables
         run: |
           echo "TAG=${{ needs.determine-release.outputs.tag }}" >> $GITHUB_ENV
@@ -321,7 +357,8 @@ jobs:
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
-          
+          echo "AI_IMG=${{ needs.determine-release.outputs.ai_img }}" >> $GITHUB_ENV
+
       - name: Download UI image artifact
         if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
@@ -335,21 +372,28 @@ jobs:
         with:
           name: v2v-docker-image
           path: ./docker-images
-          
+
       - name: Download Controller image artifact
         if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: controller-docker-image
           path: ./docker-images
-          
+
       - name: Download VPWNED image artifact
         if: ${{ !env.ACT }}
         uses: actions/download-artifact@v4
         with:
           name: vpwned-docker-image
           path: ./docker-images
-          
+
+      - name: Download vjailbreak-ai image artifact
+        if: ${{ !env.ACT }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ai-docker-image
+          path: ./docker-images
+
       - name: Load Docker images
         if: ${{ !env.ACT }}
         run: |
@@ -357,33 +401,39 @@ jobs:
           docker load -i ./docker-images/v2v-image.tar
           docker load -i ./docker-images/controller-image.tar
           docker load -i ./docker-images/vpwned-image.tar
-        
+          docker load -i ./docker-images/ai-image.tar
+
       - name: Push UI Image
         if: ${{ !env.ACT }}
         run: docker push ${{ env.UI_IMG }}
-        
+
       - name: Push V2V Helper Image
         if: ${{ !env.ACT }}
         run: docker push ${{ env.V2V_IMG }}
-        
+
       - name: Push Controller Image
         if: ${{ !env.ACT }}
         run: docker push ${{ env.CONTROLLER_IMG }}
-        
+
       - name: Push VPWNED Image
         if: ${{ !env.ACT }}
         run: docker push ${{ env.VPWNED_IMG }}
+
+      - name: Push vjailbreak-ai Image
+        if: ${{ !env.ACT }}
+        run: docker push ${{ env.AI_IMG }}
         
   post-build:
     runs-on: ubuntu-latest
-    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, push-images]
+    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai, push-images]
     if: |
       !startsWith(github.head_ref, 'pre-release/') &&
       needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') && 
-      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') && 
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') && 
-      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') && 
+      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
+      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
+      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
+      (needs.build-vjailbreak-ai.result == 'success' || needs.build-vjailbreak-ai.result == 'skipped') &&
       (needs.push-images.result == 'success')
 
     steps:
@@ -411,6 +461,7 @@ jobs:
           echo "CONTROLLER_IMG=${{ needs.determine-release.outputs.controller_img }}" >> $GITHUB_ENV
           echo "QCOW2_IMG=${{ needs.determine-release.outputs.qcow2_img }}" >> $GITHUB_ENV
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
+          echo "AI_IMG=${{ needs.determine-release.outputs.ai_img }}" >> $GITHUB_ENV
 
           if [[ "${{ needs.determine-release.outputs.is_release }}" == "true" ]]; then
             echo "release_found=true" >> $GITHUB_ENV
@@ -429,6 +480,12 @@ jobs:
         with:
           input: ./ui/deploy/ui.yaml
           output: ./image_builder/deploy/01ui.yaml
+
+      - name: Substitute image tag in vjailbreak-ai manifest
+        uses: danielr1996/envsubst-action@1.0.0
+        with:
+          input: ./vjailbreak-ai/deploy/vjailbreak-ai.yaml
+          output: ./image_builder/deploy/08vjailbreak-ai.yaml
 
       - name: Substitue image tags in version config
         uses: danielr1996/envsubst-action@1.0.0
@@ -603,6 +660,7 @@ jobs:
           path: |
             image_builder/deploy/00controller.yaml
             image_builder/deploy/01ui.yaml
+            image_builder/deploy/08vjailbreak-ai.yaml
             image_builder/deploy/version-config.yaml
             image_builder/deploy/version-checker.yaml
             image_builder/deploy/vjailbreak-settings.yaml
