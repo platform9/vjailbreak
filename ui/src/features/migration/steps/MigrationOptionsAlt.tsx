@@ -318,8 +318,9 @@ export default function MigrationOptionsAlt({
                     control={
                       <Checkbox
                         checked={selectedMigrationOptions.dataCopyMethod}
-                        onChange={(e) => {
-                          const isChecked = e.target.checked
+                        onChange={() => {}}
+                        onClick={() => {
+                          const isChecked = !selectedMigrationOptions.dataCopyMethod
                           updateSelectedMigrationOptions('dataCopyMethod')(isChecked)
                           if (!isChecked) {
                             onChange('dataCopyMethod')('cold')
@@ -377,8 +378,11 @@ export default function MigrationOptionsAlt({
                     control={
                       <Checkbox
                         checked={Boolean(params?.acknowledgeNetworkConflictRisk)}
-                        onChange={(e) => {
-                          onChange('acknowledgeNetworkConflictRisk')(e.target.checked)
+                        onChange={() => {}}
+                        onClick={() => {
+                          onChange('acknowledgeNetworkConflictRisk')(
+                            !params?.acknowledgeNetworkConflictRisk
+                          )
                         }}
                         color="warning"
                         size="small"
@@ -403,8 +407,9 @@ export default function MigrationOptionsAlt({
                     control={
                       <Checkbox
                         checked={selectedMigrationOptions?.dataCopyStartTime}
-                        onChange={(e) => {
-                          const isChecked = e.target.checked
+                        onChange={() => {}}
+                        onClick={() => {
+                          const isChecked = !selectedMigrationOptions?.dataCopyStartTime
                           updateSelectedMigrationOptions('dataCopyStartTime')(isChecked)
                           if (!isChecked) {
                             onChange('dataCopyStartTime')('')
@@ -456,8 +461,9 @@ export default function MigrationOptionsAlt({
                       <Checkbox
                         checked={selectedMigrationOptions.cutoverOption}
                         disabled={isPowerOffThenCopy}
-                        onChange={(e) => {
-                          const isChecked = e.target.checked
+                        onChange={() => {}}
+                        onClick={() => {
+                          const isChecked = !selectedMigrationOptions.cutoverOption
                           updateSelectedMigrationOptions('cutoverOption')(isChecked)
                           if (!isChecked) {
                             onChange('cutoverOption')(CUTOVER_TYPES.IMMEDIATE)
@@ -532,8 +538,9 @@ export default function MigrationOptionsAlt({
                           control={
                             <Checkbox
                               checked={selectedMigrationOptions.periodicSyncEnabled}
-                              onChange={(e) => {
-                                const isChecked = e.target.checked
+                              onChange={() => {}}
+                              onClick={() => {
+                                const isChecked = !selectedMigrationOptions.periodicSyncEnabled
                                 updateSelectedMigrationOptions('periodicSyncEnabled')(isChecked)
                                 if (isChecked) {
                                   onChange('periodicSyncInterval')(
@@ -588,8 +595,9 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.renameVm}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked
+                    onChange={() => {}}
+                    onClick={() => {
+                      const isChecked = !selectedMigrationOptions.postMigrationAction?.renameVm
 
                       setValue(
                         'postMigrationActionSuffix',
@@ -631,8 +639,9 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={!!selectedMigrationOptions.postMigrationAction?.moveToFolder}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked
+                    onChange={() => {}}
+                    onClick={() => {
+                      const isChecked = !selectedMigrationOptions.postMigrationAction?.moveToFolder
 
                       setValue(
                         'postMigrationActionFolderName',
@@ -690,8 +699,9 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.disconnectSourceNetwork || false}
-                    onChange={(e) => {
-                      onChange('disconnectSourceNetwork')(e.target.checked)
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('disconnectSourceNetwork')(!params?.disconnectSourceNetwork)
                     }}
                   />
                 }
@@ -711,8 +721,9 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
                     disabled={hasL2Network}
-                    onChange={(e) => {
-                      onChange('fallbackToDHCP')(e.target.checked)
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('fallbackToDHCP')(!params?.fallbackToDHCP)
                     }}
                   />
                 }
@@ -731,8 +742,9 @@ export default function MigrationOptionsAlt({
                     data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
                     disabled={hasSubnetMismatch}
-                    onChange={(e) => {
-                      onChange('networkPersistence')(e.target.checked)
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('networkPersistence')(!params?.networkPersistence)
                     }}
                   />
                 }
@@ -770,8 +782,9 @@ export default function MigrationOptionsAlt({
                   control={
                     <Checkbox
                       checked={params?.useGPU || false}
-                      onChange={(e) => {
-                        const isChecked = e.target.checked
+                      onChange={() => {}}
+                      onClick={() => {
+                        const isChecked = !params?.useGPU
                         updateSelectedMigrationOptions('useGPU')(isChecked)
                         onChange('useGPU')(isChecked)
                       }}
@@ -804,8 +817,9 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.removeVMwareTools || false}
-                    onChange={(e) => {
-                      onChange('removeVMwareTools')(e.target.checked)
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('removeVMwareTools')(!params?.removeVMwareTools)
                     }}
                   />
                 }
@@ -824,8 +838,9 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
-                    onChange={(e) => {
-                      const isChecked = e.target.checked
+                    onChange={() => {}}
+                    onClick={() => {
+                      const isChecked = !selectedMigrationOptions.postMigrationScript
                       updateSelectedMigrationOptions('postMigrationScript')(isChecked)
                       if (!isChecked) {
                         onChange('postMigrationScript')('')

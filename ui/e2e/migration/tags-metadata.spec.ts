@@ -211,3 +211,28 @@ test.describe('TAGS-004 — section nav completion marking', () => {
     await expect(navItem.locator('svg[data-testid="CheckIcon"]')).toBeVisible()
   })
 })
+
+test.describe('TAGS-005 — GH-2176 regression: single click right after closing cluster selects', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockFormApis(page)
+  })
+
+  test('toggle enables on the first raw click, no extra click needed', async ({ page }) => {
+    await openFormWithClusters(page)
+    await scrollToTagsStep(page)
+
+    const switchRoot = page
+      .locator('[data-testid="preserve-source-tags-toggle"]')
+      .locator('xpath=ancestor::span[contains(@class,"MuiSwitch-root")]')
+    const box = await switchRoot.boundingBox()
+    if (!box) throw new Error('switch not visible')
+    const cx = box.x + box.width / 2
+    const cy = box.y + box.height / 2
+
+    await page.mouse.click(cx, cy)
+    await expect(preserveToggleInput(page)).toBeChecked()
+
+    await page.mouse.click(cx, cy)
+    await expect(preserveToggleInput(page)).not.toBeChecked()
+  })
+})

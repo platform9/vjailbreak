@@ -108,7 +108,8 @@ export default function TagsAndMetadataSection({
             <Switch
               data-testid="preserve-source-tags-toggle"
               checked={preserveSourceTags}
-              onChange={(e) => onChange('preserveSourceTags')(e.target.checked)}
+              onClick={() => onChange('preserveSourceTags')(!preserveSourceTags)}
+              onChange={() => {}}
             />
           }
           label="Preserve VMware tags and custom attributes"
