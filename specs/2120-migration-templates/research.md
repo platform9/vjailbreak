@@ -1,5 +1,11 @@
 # Research: Migration Templates and Saved Configurations
 
+> **⚠ Outcome note (2026-07-20)**: Decisions 1 and 2 below were overridden by backend PR #2158, which
+> shipped a new CRD (`MigrationBlueprint`, no status subresource) instead of extending
+> `MigrationTemplate`. Kept as historical record of the reasoning at the time — see `spec.md`'s
+> "Implementation Reality" for what actually happened and why. Decisions 3–6 (saved-vs-ephemeral
+> distinction is moot now, but the tab/drawer/prefill UI decisions) held up as implemented.
+
 ## Decision 1: Extend the existing `MigrationTemplate` CRD rather than introduce a new CRD
 
 **Decision**: Add saved-template fields directly to `MigrationTemplateSpec`/`MigrationTemplateStatus` in `k8s/migration/api/v1alpha1/migrationtemplate_types.go`, rather than creating e.g. a `SavedMigrationTemplate` CRD.
@@ -8,6 +14,8 @@
 
 **Alternatives considered**:
 - **New CRD** (e.g. `SavedMigrationTemplate`) — cleaner separation between "ephemeral per-session config" and "user-saved template", zero risk of the auto-patch/auto-delete lifecycle ever touching a saved object. Rejected per user direction; the risk is mitigated instead by the `Spec.Saved` guard (Decision 3) rather than by type-level separation. This alternative should be revisited if the `Saved`-guard approach proves fragile in practice (flagged as residual risk in spec.md).
+
+**Outcome**: This is exactly what shipped, just not through this plan — backend PR #2158 introduced `MigrationBlueprint`, a wholly new CRD, for the reason this "alternative" predicted (clean separation, zero risk of touching the ephemeral lifecycle). The `Spec.Saved` guard was never built because it was never needed.
 
 ## Decision 2: Usage counters (`TimesUsed`, `LastUsedAt`) live in a new `Status`, not `Spec`
 
@@ -18,6 +26,8 @@
 **Alternatives considered**:
 - **Counters in `Spec`** — simpler (one PATCH path, no subresource awareness needed in the frontend client) but semantically wrong (mixes desired state with observed state) and would need a new RBAC verb if `ui-manager-role`'s existing `migrationtemplates` (non-status) rule didn't already cover it — it does, but abusing Spec for mutable runtime counters is still poor practice. Rejected.
 
+**Outcome**: Moot — `MigrationBlueprint` shipped with no `Status` field at all, so neither option was available. Usage tracking was dropped from the UI entirely rather than working around the missing subresource client-side.
+
 ## Decision 3: Saved vs. ephemeral distinction via `Spec.Saved bool` + a companion label
 
 **Decision**: `Spec.Saved bool` is the authoritative flag consumed by `useCredentialFetching.ts`/`useMigrationFormSubmit.ts` to skip auto-patch/auto-delete. A companion Kubernetes label `vjailbreak.k8s.pf9.io/saved: "true"` is written at the same time purely to support server-side list filtering.
@@ -27,6 +37,8 @@
 **Alternatives considered**:
 - **Label only, no `Spec.Saved` field** — one less field, but couples correctness to label hygiene (labels are more easily hand-edited/forgotten than a typed spec field validated by the CRD schema). Rejected.
 - **Naming convention** (e.g. all ephemeral templates prefixed `session-`) — brittle, easy to collide with a user-chosen template name; the existing ephemeral templates are already uuid-named specifically to avoid needing a convention. Rejected.
+
+**Outcome**: Moot — since saved templates live in a different CRD (`MigrationBlueprint`) than ephemeral ones (`MigrationTemplate`), there was never anything to distinguish within a single kind. Neither `Spec.Saved` nor the companion label were built.
 
 ## Decision 4: Page-level "Templates" tab uses plain MUI `Tabs`, not `NavTabs`/`SectionNav`
 

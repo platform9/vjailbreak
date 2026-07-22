@@ -4,6 +4,17 @@ description: "Full task list for Migration Templates and Saved Configurations fe
 
 # Tasks: Migration Templates and Saved Configurations
 
+> **⚠ SUPERSEDED / STATUS: feature is implemented, but not via this task list (2026-07-20).**
+> Phase 1 (T001–T005, backend CRD extension) never happened — backend PR #2158 shipped a new CRD,
+> `MigrationBlueprint`, instead of extending `MigrationTemplate`. Every task below that references
+> `ui/src/features/migration/api/migration-templates/` (T006–T008), `patchMigrationTemplateStatus`
+> (T007, T022), `Spec.Saved`-guard logic (T018's parenthetical), or usage counters (T022) describes
+> work that was not (and now cannot be, per the real CRD) done. US1–US5 all shipped in practice, just
+> through `ui/src/features/migration/api/migration-blueprints/` and the component/hook list in
+> `plan.md`'s correction note — read `spec.md`'s "Implementation Reality" first. FR-009 (stale-reference
+> inline warning, referenced in T018/T021) is the one real gap: not implemented. Leaving the checkboxes
+> below unchecked/as-is; they no longer map to real work items.
+
 **Feature**: `2120-migration-templates`
 **Branch**: `2120-migration-templates`
 **Reference patterns**: Proxy VMs list+detail-drawer (`ProxyVMsPage.tsx` + `ProxyVMDetailDrawer.tsx`) · Retry-prefill mapping (`useRetryPrefill.ts`) · Design system (`DrawerShell`, `SurfaceCard`, `KeyValueGrid`, `StatusChip`, `ActionButton`)

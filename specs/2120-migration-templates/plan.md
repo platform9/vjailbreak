@@ -3,6 +3,15 @@
 **Branch**: `2120-migration-templates` | **Date**: 2026-07-15 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `specs/2120-migration-templates/spec.md`
 
+> **⚠ SUPERSEDED (2026-07-20)**: Everything below describes the *original* technical plan —
+> extend `MigrationTemplate` with `Spec.Saved`/`Status.TimesUsed`/`Status.LastUsedAt`. That is **not**
+> what shipped. Backend PR #2158 added a brand-new CRD, `MigrationBlueprint`, with no status
+> subresource — usage tracking was dropped entirely, not implemented differently. Kept below for
+> historical record of the original reasoning. For current ground truth, read `spec.md`'s
+> "Implementation Reality" section, then `data-model.md` and `contracts/crds.md` (both rewritten to
+> match what's real). The "Project Structure" file paths below are also stale — see the correction
+> note inline.
+
 ## Summary
 
 Let operators save a migration's configuration (source/destination, network/storage mappings, copy method, cutover policy, etc.) as a named, reusable **Migration Template**, browse templates from a new "Templates" tab next to "Migrations", and apply ("Use") a template to pre-fill the New Migration drawer. Adds delete/clone lifecycle management.
@@ -57,6 +66,18 @@ specs/2120-migration-templates/
 ```
 
 ### Source Code Changes
+
+> **Correction (2026-07-20)**: the real paths are `k8s/migration/api/v1alpha1/migrationblueprint_types.go`
+> (new file, new CRD — not a modify of `migrationtemplate_types.go`), and on the frontend
+> `ui/src/features/migration/api/migration-blueprints/` (new module: `model.ts` mirror, `adapters.ts`
+> for `blueprintToSavedTemplate`/`savedTemplateInputToBlueprintSpec`/name-sanitizing helpers,
+> `types.ts` for `SavedTemplate`), plus `ui/src/features/migration/hooks/useTemplateLifecycle.ts`
+> (clone/delete mutations), `useTemplateTenantLookup.ts` (live tenant/project resolution),
+> `useMigrationTemplatesQuery.ts`, `useApplyTemplatePrefill.ts`. Components actually built:
+> `TemplatesTabPanel.tsx`, `TemplateCard.tsx`, `TemplatesTable.tsx` (real dense table, not a re-flowed
+> card column), `TemplateTypeAvatar.tsx`, `TemplateDetailDrawer.tsx`, `SaveAsTemplateDialog.tsx`,
+> `DeleteTemplateDialog.tsx` — all under `ui/src/features/migration/components/templates/`. The
+> listing below is the original (wrong) plan, kept for record.
 
 ```text
 # CONTROLLER (k8s/migration/ module)

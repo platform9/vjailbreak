@@ -33,4 +33,6 @@
 
 - All `[NEEDS CLARIFICATION]` markers resolved 2026-07-15 (ownership/visibility model → dropped entirely, no real identity to attach it to; usage-tracking trigger → increments only on successful migration submit, not on "Use template" click).
 - CRD-reuse-vs-new-CRD decision is resolved (per user direction) but flagged as "not yet fully confirmed" — carries residual risk into planning; plan.md should re-validate before schema changes.
+  - **2026-07-20 update**: resolved differently than planned — backend PR #2158 shipped a new CRD (`MigrationBlueprint`) rather than extending `MigrationTemplate`. The usage-tracking clarification above is now moot too: that CRD has no status subresource, so times-used/last-used tracking was dropped entirely rather than implemented per the resolved trigger semantics. See `spec.md`'s "Implementation Reality".
 - Two mockup source images (list page, detail drawer) were reviewed directly and their layout/content is reflected in User Stories 2 and 4 plus FR-003 through FR-006.
+  - **2026-07-20 update**: two more mockup rounds were reviewed during implementation (table/list view, card hover actions, card density/3-per-row grid, pastel copy-method chip styling) — not reflected in the original checklist scope, but implemented; see `spec.md` Implementation Reality for the delta.
