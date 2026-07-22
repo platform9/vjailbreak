@@ -176,6 +176,7 @@ rules:
   - esxisshcreds
   - clustermigrations
   - esximigrations
+  - migrationblueprints
   - migrationplans
   - migrations
   - migrationtemplates
