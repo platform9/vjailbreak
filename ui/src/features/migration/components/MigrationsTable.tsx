@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert } from '@mui/material'
+import { Button, Typography, Box, IconButton, Tooltip, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Alert, LinearProgress } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import ReplayIcon from '@mui/icons-material/Replay'
@@ -22,7 +22,6 @@ import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 import { STATUS_ORDER } from '../constants'
 import {
-  deriveProgressDisplay,
   getProgressText,
   getMigrationStatusCategory,
   matchesDateFilter,
@@ -354,18 +353,55 @@ export default function MigrationsTable({
           const syncWarningMessage = params.row?.status?.syncWarningMessage
           const migrationName = params.row?.metadata?.name
 
-          const display = deriveProgressDisplay(phase, conditions, currentDisk, totalDisks, syncWarningMessage)
+          const isCopyPhase = [
+            Phase.CopyingBlocks,
+            Phase.CopyingChangedBlocks,
+            Phase.ConvertingDisk,
+            Phase.AwaitingDataCopyStart
+          ].includes(phase)
+          const isValidating = phase === Phase.Validating
 
-          return (
+          const diskNum = currentDisk != null ? parseInt(currentDisk, 10) : null
+          const diskProgress =
+            diskNum !== null && totalDisks ? Math.round((diskNum / totalDisks) * 100) : null
+
+          const progressVariant: 'indeterminate' | 'determinate' | undefined =
+            isCopyPhase && diskProgress !== null
+              ? 'determinate'
+              : isCopyPhase || isValidating
+                ? 'indeterminate'
+                : undefined
+
+          const progressValue = diskProgress ?? 0
+          const barColor =
+            phase === Phase.Failed || phase === Phase.ValidationFailed
+              ? 'error'
+              : syncWarningMessage
+                ? 'warning'
+                : 'primary'
+
+          return conditions ? (
             <Box
               sx={{ cursor: 'pointer', width: '100%', py: 0.25 }}
               onClick={() => {
                 if (migrationName) navigate(`/dashboard/migrations/${migrationName}`)
               }}
             >
-              <MigrationProgress display={display} />
+              <MigrationProgress
+                phase={phase}
+                progressText={getProgressText(phase, conditions, currentDisk, totalDisks)}
+                syncWarningMessage={syncWarningMessage}
+              />
+              {(progressVariant || phase === Phase.Failed || phase === Phase.ValidationFailed) && (
+                <LinearProgress
+                  variant={progressVariant ?? 'determinate'}
+                  value={phase === Phase.Failed || phase === Phase.ValidationFailed ? 100 : progressValue}
+                  color={barColor}
+                  sx={{ mt: 0.5, borderRadius: 1, height: 3 }}
+                />
+              )}
             </Box>
-          )
+          ) : null
         }
       },
       {
@@ -637,7 +673,8 @@ export default function MigrationsTable({
           },
           columns: {
             columnVisibilityModel: {
-              createdAt: false
+              createdAt: false,
+              sourceDestination: false
             }
           }
         }}
