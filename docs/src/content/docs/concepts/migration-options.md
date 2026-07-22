@@ -26,7 +26,7 @@ Determines the underlying mechanism used to transfer disk data.
   - ESXi SSH access configured
   - VMs must be powered off during copy (cold migration only)
 
-* **Hot-Add** - Attaches frozen snapshot disks directly to a Proxy VM running in vCenter and streams data over NBD to the destination. Works with any datastore type (NFS, VMFS, vSAN) and does not require a shared storage array. Requires:
+* **vJailbreak Accelerated Copy** - Attaches frozen snapshot disks directly to a Proxy VM running in vCenter (using VMware's hot-add mechanism) and streams data over NBD to the destination. Works with any datastore type (NFS, VMFS, vSAN) and does not require a shared storage array. Requires:
   - A registered Proxy VM in **Ready** state (Linux VM with `qemu-nbd` installed)
   - SSH access from vJailbreak to the Proxy VM
   - VMs must be powered off during copy (cold migration only)
@@ -35,7 +35,7 @@ Determines the underlying mechanism used to transfer disk data.
 Storage-Accelerated Copy can be 10-100x faster than normal copy for large VMs. For a 1 TB disk, normal copy takes ~2.5 hours while Storage-Accelerated Copy can complete in 5-30 minutes.
 :::
 
-See [Hot-Add Proxy Migration](../hot-add-proxy/) for configuration instructions.
+See [vJailbreak Accelerated Copy](../vjailbreak-accelerated-copy/) for configuration instructions.
 
 See [Storage-Accelerated Copy](../storage-accelerated-copy/) for detailed configuration instructions.
 

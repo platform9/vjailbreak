@@ -7,7 +7,7 @@ For frequently asked questions, see [FAQ](../faq/).
 
 ### What access do I need for my vCenter user to be able to perform this migration?
 
-The required privileges depend on which features you use. The base set below is required for all migrations. Additional privileges are listed separately for Hot-Add Proxy and OVA-based Proxy VM deployment.
+The required privileges depend on which features you use. The base set below is required for all migrations. Additional privileges are listed separately for vJailbreak Accelerated Copy and OVA-based Proxy VM deployment.
 
 #### Base Privileges (all migrations)
 
@@ -46,9 +46,9 @@ The required privileges depend on which features you use. The base set below is 
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
-#### Additional Privileges: Hot-Add Proxy Migrations
+#### Additional Privileges: vJailbreak Accelerated Copy Migrations
 
-Required when using the **Hot-Add** storage copy method. vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
+Required when using the **vJailbreak Accelerated Copy** storage copy method (VMware hot-add). vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
 
 | Privilege | Description |
 | --- | --- |

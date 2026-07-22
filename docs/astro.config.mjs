@@ -68,7 +68,7 @@ export default defineConfig({
 						{ label: 'Migration Options', slug: 'concepts/migration-options' },
 						{ label: 'Cluster Conversion', slug: 'concepts/cluster-conversion' },
 						{ label: 'Storage Accelerated Copy', slug: 'concepts/storage-accelerated-copy' },
-						{ label: 'Hot-Add Proxy Migration', slug: 'concepts/hot-add-proxy' },
+						{ label: 'vJailbreak Accelerated Copy', slug: 'concepts/vjailbreak-accelerated-copy' },
 					],
 				},
 				{
