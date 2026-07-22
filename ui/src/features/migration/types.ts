@@ -77,6 +77,8 @@ export interface FormValues extends Record<string, unknown> {
   imageProfiles?: string[]
   preserveSourceTags?: boolean
   customMetadata?: KeyValuePair[]
+  periodicSyncInterval?: string
+  acknowledgeNetworkConflictRisk?: boolean
 }
 
 // A single row in the custom metadata key-value editor
