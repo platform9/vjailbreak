@@ -1,11 +1,12 @@
 import { alpha, type Theme } from '@mui/material/styles'
 import { CUTOVER_TYPES, OS_TYPES_OPTIONS, STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 import type { DataCopyMethod, SavedTemplate } from '../api/migration-blueprints/types'
+import type { TemplateGroupNameLookup } from '../hooks/useTemplateGroupLookup'
 
 export const DATA_COPY_METHOD_LABEL: Record<DataCopyMethod, string> = {
-  hot: 'Hot copy',
-  cold: 'Cold copy',
-  mock: 'Mock copy'
+  hot: 'Hot',
+  cold: 'Cold',
+  mock: 'Mock'
 }
 
 // Palette key per copy method — mirrors the hot/cold/mock dot colors used on the
@@ -17,8 +18,8 @@ export const DATA_COPY_METHOD_CHIP_COLOR: Record<DataCopyMethod, 'warning' | 'in
 }
 
 // Soft pastel chip look (tinted background, saturated text, no border) for the
-// copy-method chip — matches the design's "Hot copy"/"Cold copy" pill styling,
-// as opposed to MUI's solid-filled default Chip colors used elsewhere.
+// migration-mode chip — matches the design's "Hot"/"Cold" pill styling, as
+// opposed to MUI's solid-filled default Chip colors used elsewhere.
 export function dataCopyMethodChipSx(method: DataCopyMethod) {
   const colorKey = DATA_COPY_METHOD_CHIP_COLOR[method]
   return (theme: Theme) => ({
@@ -58,16 +59,25 @@ export interface AdvancedOptionRow {
 // One row per advanced option that's actually set on the template, each carrying its
 // real value (not just the flag name) — powers the "Advanced options" section on the
 // template detail drawer. Options left at their default (false/empty) are omitted so
-// the list only shows what the template actually changes.
-export function buildAdvancedOptionRows(template: SavedTemplate): AdvancedOptionRow[] {
+// the list only shows what the template actually changes. Security/server groups are
+// persisted as ids only, so `groupNames` (per-destination id->name lookup) resolves
+// them to names for display; falls back to the raw id when a name isn't found.
+export function buildAdvancedOptionRows(
+  template: SavedTemplate,
+  groupNames?: TemplateGroupNameLookup
+): AdvancedOptionRow[] {
   const rows: AdvancedOptionRow[] = []
   const postMigrationAction = template.postMigrationAction
 
   if (template.serverGroup) {
-    rows.push({ label: 'Server group', value: template.serverGroup })
+    const name = groupNames?.serverGroups[template.serverGroup] ?? template.serverGroup
+    rows.push({ label: 'Server group', value: name })
   }
   if (template.securityGroups.length > 0) {
-    rows.push({ label: 'Security groups', value: template.securityGroups.join(', ') })
+    const names = template.securityGroups.map(
+      (id) => groupNames?.securityGroups[id] ?? id
+    )
+    rows.push({ label: 'Security groups', value: names.join(', ') })
   }
   if (template.imageProfiles.length > 0) {
     rows.push({ label: 'Image profiles', value: template.imageProfiles.join(', ') })

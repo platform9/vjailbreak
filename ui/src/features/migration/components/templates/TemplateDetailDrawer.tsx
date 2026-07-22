@@ -13,6 +13,7 @@ import { ActionButton, DrawerShell } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import { useCloneTemplate, useDeleteTemplate } from '../../hooks/useTemplateLifecycle'
 import { useTemplateTenantLookup } from '../../hooks/useTemplateTenantLookup'
+import { useTemplateGroupLookup } from '../../hooks/useTemplateGroupLookup'
 import {
   buildAdvancedOptionRows,
   cutoverOptionLabel,
@@ -132,6 +133,7 @@ export default function TemplateDetailDrawer({
   const deleteMutation = useDeleteTemplate()
   const cloneMutation = useCloneTemplate()
   const tenantByDestination = useTemplateTenantLookup()
+  const groupNamesByDestination = useTemplateGroupLookup()
 
   if (!template) return null
 
@@ -149,7 +151,10 @@ export default function TemplateDetailDrawer({
   ]
 
   const copyMethodLabel = storageCopyMethodLabel(template.spec.storageCopyMethod)
-  const advancedOptionRows = buildAdvancedOptionRows(template)
+  const advancedOptionRows = buildAdvancedOptionRows(
+    template,
+    groupNamesByDestination[template.destination]
+  )
 
   const handleClone = async () => {
     await cloneMutation.mutateAsync(template)
@@ -280,9 +285,9 @@ export default function TemplateDetailDrawer({
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
           <SectionBlock icon={<DnsOutlinedIcon fontSize="small" color="action" />} title="Source & destination">
-            <DetailRow label="Source vCenter" value={template.sourceVCenter} />
-            <DetailRow label="Destination" value={template.destination} />
-            <DetailRow label="Tenant / project" value={tenantProject || '—'} />
+            <DetailRow label="Source credentials" value={template.sourceVCenter} />
+            <DetailRow label="Destination credentials" value={template.destination} />
+            <DetailRow label="Tenant" value={tenantProject || '—'} />
             <DetailRow label="Target cluster" value={template.targetCluster} isLast />
           </SectionBlock>
 
@@ -318,7 +323,7 @@ export default function TemplateDetailDrawer({
             title="Migration options"
           >
             <DetailRow
-              label="Copy mode"
+              label="Migration mode"
               value={
                 <Chip
                   size="small"

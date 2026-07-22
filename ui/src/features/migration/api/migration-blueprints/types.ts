@@ -1,7 +1,7 @@
 import type { MigrationBlueprintSpec } from 'src/api/migration-blueprints/model'
 
-// Mirrors FormValues.dataCopyMethod ('hot' | 'cold' | 'mock') — the "Hot copy" / "Cold
-// copy" / "Mock copy" tag shown on each template card.
+// Mirrors FormValues.dataCopyMethod ('hot' | 'cold' | 'mock') — the "Hot" / "Cold"
+// / "Mock" migration-mode tag shown on each template card.
 export type DataCopyMethod = 'hot' | 'cold' | 'mock'
 
 export interface SavedTemplateMapping {

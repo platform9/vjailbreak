@@ -37,9 +37,9 @@ const makeTemplate = (overrides: Partial<SavedTemplate> = {}): SavedTemplate => 
 
 describe('DATA_COPY_METHOD_LABEL', () => {
   it('has a label for every data copy method', () => {
-    expect(DATA_COPY_METHOD_LABEL.hot).toBe('Hot copy')
-    expect(DATA_COPY_METHOD_LABEL.cold).toBe('Cold copy')
-    expect(DATA_COPY_METHOD_LABEL.mock).toBe('Mock copy')
+    expect(DATA_COPY_METHOD_LABEL.hot).toBe('Hot')
+    expect(DATA_COPY_METHOD_LABEL.cold).toBe('Cold')
+    expect(DATA_COPY_METHOD_LABEL.mock).toBe('Mock')
   })
 })
 
@@ -125,6 +125,33 @@ describe('buildAdvancedOptionRows', () => {
       makeTemplate({ postMigrationAction: { moveToFolder: true } })
     )
     expect(withoutFolder).toEqual([{ label: 'Move to folder', value: 'Yes' }])
+  })
+
+  it('resolves server/security group ids to names when a group lookup is given', () => {
+    const rows = buildAdvancedOptionRows(
+      makeTemplate({ serverGroup: 'sg-1', securityGroups: ['group-a', 'group-b'] }),
+      {
+        serverGroups: { 'sg-1': 'anti-affinity-group' },
+        securityGroups: { 'group-a': 'default', 'group-b': 'web-servers' }
+      }
+    )
+
+    expect(rows).toEqual([
+      { label: 'Server group', value: 'anti-affinity-group' },
+      { label: 'Security groups', value: 'default, web-servers' }
+    ])
+  })
+
+  it('falls back to the raw id when a group has no matching name', () => {
+    const rows = buildAdvancedOptionRows(
+      makeTemplate({ serverGroup: 'sg-1', securityGroups: ['group-a'] }),
+      { serverGroups: {}, securityGroups: {} }
+    )
+
+    expect(rows).toEqual([
+      { label: 'Server group', value: 'sg-1' },
+      { label: 'Security groups', value: 'group-a' }
+    ])
   })
 
   it('falls back to "Enabled" for periodic sync when no interval is set', () => {

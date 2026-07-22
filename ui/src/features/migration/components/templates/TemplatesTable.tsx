@@ -56,7 +56,7 @@ export default function TemplatesTable({
             <TableRow>
               <TableCell>Template</TableCell>
               <TableCell>Source → Destination</TableCell>
-              <TableCell>Copy</TableCell>
+              <TableCell>Type</TableCell>
               <TableCell>Mappings</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
