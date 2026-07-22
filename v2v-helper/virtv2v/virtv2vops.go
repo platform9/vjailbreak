@@ -600,8 +600,22 @@ func AddWildcardNetplanForL2(disks []vm.VMDisk, diskPath string) error {
 
 }
 
-func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
-	// Add wildcard to netplan
+// buildWildcardNetplanYAML constructs the netplan YAML written by
+// AddWildcardNetplan, split out as a pure function so the DHCP-vs-static
+// decision can be unit tested without touching a guest disk.
+//
+// For each MAC, entries are partitioned into DHCP-sourced ones (IpEntry.DHCP
+// == true — a live OpenStack/Neutron auto-allocation, e.g. fallback-to-DHCP
+// or a subnet-mismatch DHCP fallback) and static ones (a preserved or
+// user-assigned IP). DHCP-sourced entries get `dhcp4: true` so the guest
+// actually performs a DHCP handshake — pinning that IP as a static address
+// instead would leave some networks unreachable despite Neutron holding the
+// right fixed_ip, since port security on some backends ties the IP-to-port
+// binding to an observed lease, not just a fixed_ip match. Static entries
+// keep the existing `dhcp4: false` + explicit `addresses:` behavior. A MAC
+// with both (uncommon, e.g. one preserved IP plus one DHCP-fallback IP on
+// the same NIC) gets both stanzas together.
+func buildWildcardNetplanYAML(guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) string {
 	macToIPs := ipPerMac
 	macToDNS := make(map[string][]string)
 	if len(guestNetworks) > 0 {
@@ -629,19 +643,35 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 		if len(entries) == 0 {
 			continue
 		}
+		var staticEntries []vm.IpEntry
+		useDHCP := false
+		for _, e := range entries {
+			if e.DHCP {
+				useDHCP = true
+			} else {
+				staticEntries = append(staticEntries, e)
+			}
+		}
+
 		id := fmt.Sprintf("vj%d", idx)
 		b.WriteString(fmt.Sprintf("    %s:\n", id))
 		b.WriteString("      match:\n")
 		b.WriteString(fmt.Sprintf("        macaddress: %s\n", mac))
-		b.WriteString("      dhcp4: false\n")
-		b.WriteString("      addresses:\n")
-		for _, e := range entries {
-			// default prefix to 24 if zero
-			prefix := e.Prefix
-			if prefix == 0 {
-				prefix = 24
+		if useDHCP {
+			b.WriteString("      dhcp4: true\n")
+		} else {
+			b.WriteString("      dhcp4: false\n")
+		}
+		if len(staticEntries) > 0 {
+			b.WriteString("      addresses:\n")
+			for _, e := range staticEntries {
+				// default prefix to 24 if zero
+				prefix := e.Prefix
+				if prefix == 0 {
+					prefix = 24
+				}
+				b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 			}
-			b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 		}
 		if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
 			if !routesAdded {
@@ -664,7 +694,11 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 	if !routesAdded {
 		log.Println("WARNING: No gateway found")
 	}
-	netplanYAML := b.String()
+	return b.String()
+}
+
+func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
+	netplanYAML := buildWildcardNetplanYAML(guestNetworks, gatewayIP, ipPerMac)
 	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	// Create the netplan file
 	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)

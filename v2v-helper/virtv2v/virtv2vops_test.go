@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // ---------------------------------------------------------------------------
@@ -311,4 +313,197 @@ func TestConvertDisk_BlockDriverArg(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ---------------------------------------------------------------------------
+// buildWildcardNetplanYAML – DHCP-vs-static decision
+//
+// IpEntry.DHCP distinguishes an IP that came from a live OpenStack/Neutron
+// auto-allocation (fallback-to-DHCP, or a subnet-mismatch DHCP fallback)
+// from a preserved/custom static IP. DHCP-sourced entries must get a real
+// dhcp4: true so the guest performs an actual DHCP handshake instead of
+// having the IP pinned statically — some networks tie the IP-to-port
+// binding to an observed lease, so a static pin that never went through
+// DORA can leave the guest unreachable even though Neutron's port record is
+// correct.
+// ---------------------------------------------------------------------------
+
+func TestBuildWildcardNetplanYAML_StaticEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "10.0.0.5", Prefix: 24}},
+	}
+
+	yaml := buildWildcardNetplanYAML(nil, map[string]string{}, ipPerMac)
+
+	assert.Contains(t, yaml, "macaddress: aa:bb:cc:dd:ee:ff")
+	assert.Contains(t, yaml, "dhcp4: false", "static entry must get dhcp4: false")
+	assert.NotContains(t, yaml, "dhcp4: true", "static-only entry must not get dhcp4: true")
+	assert.Contains(t, yaml, "- 10.0.0.5/24", "static entry must be written as an address")
+}
+
+func TestBuildWildcardNetplanYAML_DHCPEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+	}
+
+	yaml := buildWildcardNetplanYAML(nil, map[string]string{}, ipPerMac)
+
+	assert.Contains(t, yaml, "dhcp4: true", "DHCP-sourced entry must get dhcp4: true")
+	assert.NotContains(t, yaml, "dhcp4: false", "DHCP-only entry must not get dhcp4: false")
+	assert.NotContains(t, yaml, "addresses:", "DHCP-only entry must not get a static addresses: block")
+	assert.NotContains(t, yaml, "192.168.50.77", "DHCP-sourced IP must not be pinned as a static address")
+}
+
+func TestBuildWildcardNetplanYAML_MixedEntries(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {
+			{IP: "10.0.0.5", Prefix: 24},
+			{IP: "192.168.50.77", Prefix: 0, DHCP: true},
+		},
+	}
+
+	yaml := buildWildcardNetplanYAML(nil, map[string]string{}, ipPerMac)
+
+	assert.Contains(t, yaml, "dhcp4: true", "any DHCP-sourced entry on the NIC should trigger dhcp4: true")
+	assert.Contains(t, yaml, "- 10.0.0.5/24", "the static entry should still be written as an address")
+	assert.NotContains(t, yaml, "192.168.50.77", "the DHCP-sourced entry must not appear under addresses:")
+}
+
+func TestBuildWildcardNetplanYAML_EmptyEntriesSkipped(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {},
+	}
+
+	yaml := buildWildcardNetplanYAML(nil, map[string]string{}, ipPerMac)
+
+	assert.NotContains(t, yaml, "aa:bb:cc:dd:ee:ff", "a MAC with zero entries must get no ethernet stanza")
+}
+
+func TestBuildWildcardNetplanYAML_GatewayUnaffectedByDHCPFlag(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+	}
+	gatewayIP := map[string]string{"aa:bb:cc:dd:ee:ff": "192.168.50.1"}
+
+	yaml := buildWildcardNetplanYAML(nil, gatewayIP, ipPerMac)
+
+	assert.Contains(t, yaml, "via: 192.168.50.1", "gateway route must still be written for a DHCP-sourced entry")
+}
+
+// ---------------------------------------------------------------------------
+// buildRHELIfcfgFiles / buildRHELNetworkManagerKeyfiles – RHEL 7+ guest
+// network configuration (ifcfg / NetworkManager keyfile equivalents of
+// buildWildcardNetplanYAML). Same DHCP-vs-static contract: DHCP-sourced
+// entries must get a real DHCP client config (BOOTPROTO=dhcp / method=auto),
+// static entries get a pinned IP.
+// ---------------------------------------------------------------------------
+
+func TestBuildRHELIfcfgFiles_StaticEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "10.0.0.5", Prefix: 24}},
+	}
+
+	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	content, ok := files["ifcfg-vjb0"]
+	assert.True(t, ok, "expected ifcfg-vjb0 to be generated, got files: %#v", files)
+	assert.Contains(t, content, "HWADDR=aa:bb:cc:dd:ee:ff")
+	assert.Contains(t, content, "BOOTPROTO=none", "static entry must get BOOTPROTO=none")
+	assert.NotContains(t, content, "BOOTPROTO=dhcp", "static-only entry must not get BOOTPROTO=dhcp")
+	assert.Contains(t, content, "IPADDR=10.0.0.5")
+	assert.Contains(t, content, "PREFIX=24")
+}
+
+func TestBuildRHELIfcfgFiles_DHCPEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+	}
+
+	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	content := files["ifcfg-vjb0"]
+	assert.Contains(t, content, "BOOTPROTO=dhcp", "DHCP-sourced entry must get BOOTPROTO=dhcp")
+	assert.NotContains(t, content, "BOOTPROTO=none", "DHCP-only entry must not get BOOTPROTO=none")
+	assert.NotContains(t, content, "IPADDR=", "DHCP-sourced IP must not be pinned as a static IPADDR")
+}
+
+func TestBuildRHELIfcfgFiles_MixedEntries(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {
+			{IP: "10.0.0.5", Prefix: 24},
+			{IP: "192.168.50.77", Prefix: 0, DHCP: true},
+		},
+	}
+
+	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	content := files["ifcfg-vjb0"]
+	assert.Contains(t, content, "BOOTPROTO=dhcp", "any DHCP-sourced entry on the NIC should trigger BOOTPROTO=dhcp")
+	assert.NotContains(t, content, "IPADDR=10.0.0.5", "static entry must not be written when the MAC is treated as DHCP overall")
+}
+
+func TestBuildRHELIfcfgFiles_MultipleStaticIPsNumbered(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {
+			{IP: "10.0.0.5", Prefix: 24},
+			{IP: "10.0.0.6", Prefix: 24},
+		},
+	}
+
+	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{"aa:bb:cc:dd:ee:ff": "10.0.0.1"}, map[string][]string{})
+
+	content := files["ifcfg-vjb0"]
+	assert.Contains(t, content, "IPADDR=10.0.0.5")
+	assert.Contains(t, content, "PREFIX=24")
+	assert.Contains(t, content, "IPADDR1=10.0.0.6")
+	assert.Contains(t, content, "PREFIX1=24")
+	assert.Contains(t, content, "GATEWAY=10.0.0.1")
+}
+
+func TestBuildRHELIfcfgFiles_EmptyEntriesSkipped(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {},
+	}
+
+	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	assert.Empty(t, files, "a MAC with zero entries must get no ifcfg file")
+}
+
+func TestBuildRHELNetworkManagerKeyfiles_StaticEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "10.0.0.5", Prefix: 24}},
+	}
+
+	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{"aa:bb:cc:dd:ee:ff": "10.0.0.1"}, map[string][]string{})
+
+	content, ok := files["vjb0.nmconnection"]
+	assert.True(t, ok, "expected vjb0.nmconnection to be generated, got files: %#v", files)
+	assert.Contains(t, content, "mac-address=aa:bb:cc:dd:ee:ff")
+	assert.Contains(t, content, "method=manual", "static entry must get method=manual")
+	assert.NotContains(t, content, "method=auto", "static-only entry must not get method=auto")
+	assert.Contains(t, content, "address1=10.0.0.5/24,10.0.0.1")
+}
+
+func TestBuildRHELNetworkManagerKeyfiles_DHCPEntry(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+	}
+
+	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	content := files["vjb0.nmconnection"]
+	assert.Contains(t, content, "method=auto", "DHCP-sourced entry must get method=auto")
+	assert.NotContains(t, content, "method=manual", "DHCP-only entry must not get method=manual")
+	assert.NotContains(t, content, "address1=", "DHCP-sourced IP must not be pinned as a static address")
+}
+
+func TestBuildRHELNetworkManagerKeyfiles_EmptyEntriesSkipped(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {},
+	}
+
+	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{}, map[string][]string{})
+
+	assert.Empty(t, files, "a MAC with zero entries must get no NetworkManager keyfile")
 }

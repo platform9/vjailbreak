@@ -812,9 +812,14 @@ func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, networ
 		if err != nil {
 			return nil, fmt.Errorf("subnet not found for IP %s", iAddr.IPAddress)
 		}
+		// This IP came from a live DHCP fallback (the preferred static IP
+		// didn't fit the target subnet), not a preserved/custom static IP —
+		// mark it so guest-config writers configure a real DHCP client
+		// instead of pinning it statically.
 		ipPerMac[mac] = append(ipPerMac[mac], vm.IpEntry{
 			IP:     iAddr.IPAddress,
 			Prefix: 0,
+			DHCP:   true,
 		})
 		gatewayIP[mac] = dhcpSubnetId.GatewayIP
 	}

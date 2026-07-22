@@ -1627,7 +1627,6 @@ func (migobj *Migrate) addUdevRulesForUbuntu(vminfo vm.VMInfo, bootVolumeIndex i
 	return nil
 }
 
-// configureRHELNetwork handles RHEL-specific network configuration
 func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex int, osRelease string) error {
 	versionID := parseVersionID(osRelease)
 	majorVersion, err := strconv.Atoi(strings.Split(versionID, ".")[0])
@@ -1638,7 +1637,7 @@ func (migobj *Migrate) configureRHELNetwork(vminfo vm.VMInfo, bootVolumeIndex in
 	if majorVersion < 7 {
 		diskPath := vminfo.VMDisks[bootVolumeIndex].Path
 		if err := DetectAndHandleNetwork(diskPath, osRelease, vminfo); err != nil {
-			utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration, 
+			utils.PrintLog(fmt.Sprintf(`Warning: Failed to handle network: %v,Continuing with migration,
                     network might not come up post migration, please check the network configuration post migration`, err))
 		}
 	}
@@ -2392,6 +2391,7 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		syncIPperMacFromPort(vminfo, mac, port)
 
 		networkids = append(networkids, network.ID)
 		portids = append(portids, port.ID)
@@ -2502,15 +2502,62 @@ func applyPreserveIPOverride(vminfo *vm.VMInfo, idx int, mac string, override ni
 	return detectedIPs
 }
 
-// applyPreserveMACOverride copies mac's IPs to the "" key and returns "" so
-// OpenStack generates a new MAC, when preserveMAC is false.
+// applyPreserveMACOverride moves mac's IPs to the "" key and returns "" so
+// OpenStack generates a new MAC, when preserveMAC is false. The real MAC
+// OpenStack assigns isn't known yet at this point in the flow — see
+// syncIPperMacFromPort, which re-keys "" to the real MAC once the port is
+// created.
 func applyPreserveMACOverride(vminfo *vm.VMInfo, idx int, mac string, preserveMAC bool) string {
 	if preserveMAC {
 		return mac
 	}
 	utils.PrintLog(fmt.Sprintf("NIC[%d]: preserveMAC=false for MAC %s — OpenStack will generate a new MAC", idx, mac))
 	vminfo.IPperMac[""] = vminfo.IPperMac[mac]
+	delete(vminfo.IPperMac, mac)
 	return ""
+}
+
+// syncIPperMacFromPort reconciles vminfo.IPperMac with the port OpenStack
+// actually created, keyed by placeholderMAC (the MAC passed to createPort:
+// the original MAC if preserveMAC=true, or "" if preserveMAC=false). Two
+// situations need reconciling once the real port exists:
+//
+//   - preserveMAC=false: OpenStack assigns a new MAC, but the entry is still
+//     sitting under the "" placeholder key. It's moved as-is to the real
+//     MAC (port.MACAddress) so MAC-keyed guest-config code (AddWildcardNetplan,
+//     the network-persistence script) can match it against the real NIC.
+//   - preserveIP=false + fallbackToDHCP=true: applyPreserveIPOverride left
+//     the entry nil so OpenStack would auto-allocate an IP instead of
+//     getting an explicit empty port. That nil is filled in with whatever
+//     IP(s) the port actually ended up with (possibly none, e.g. on an
+//     L2 network with no subnets).
+//
+// A NIC whose entries were already populated (preserveIP=true, or a custom
+// IP) is left untouched by the fill step: the port was created with exactly
+// that IP, so rebuilding from port.FixedIPs would risk losing a preserved
+// subnet prefix for no benefit.
+func syncIPperMacFromPort(vminfo *vm.VMInfo, placeholderMAC string, port *ports.Port) {
+	realMAC := port.MACAddress
+	if realMAC == "" {
+		// Defensive: don't lose the entry if a backend ever fails to echo a MAC.
+		realMAC = placeholderMAC
+	}
+
+	if realMAC != placeholderMAC {
+		vminfo.IPperMac[realMAC] = vminfo.IPperMac[placeholderMAC]
+		delete(vminfo.IPperMac, placeholderMAC)
+	}
+
+	if vminfo.IPperMac[realMAC] == nil {
+		// These IPs came from a live OpenStack auto-allocation, not a
+		// preserved/custom static IP — mark them so guest-config writers
+		// configure a real DHCP client instead of pinning the IP statically.
+		entries := make([]vm.IpEntry, 0, len(port.FixedIPs))
+		for _, fixedIP := range port.FixedIPs {
+			entries = append(entries, vm.IpEntry{IP: fixedIP.IPAddress, Prefix: 0, DHCP: true})
+		}
+		vminfo.IPperMac[realMAC] = entries
+	}
 }
 
 // LogMessage is an exported wrapper for logMessage that satisfies the esxissh.ProgressLogger interface.

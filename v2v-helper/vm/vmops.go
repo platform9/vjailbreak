@@ -57,6 +57,14 @@ type VMOperations interface {
 type IpEntry struct {
 	IP     string
 	Prefix int32
+	// DHCP marks an entry as coming from a live OpenStack/Neutron
+	// auto-allocation (fallback-to-DHCP) rather than a preserved or
+	// user-assigned static IP. Guest-config writers must configure a real
+	// DHCP client for these entries instead of pinning the IP statically,
+	// since the address may only be reachable after an actual DHCP
+	// handshake (e.g. on networks where port security ties the IP-to-port
+	// binding to an observed lease, not just a fixed_ip match).
+	DHCP bool
 }
 
 type VMInfo struct {
