@@ -9,7 +9,7 @@ import { OpenStackFlavor, OpenstackCreds, PCDNetworkInfo } from 'src/api/opensta
 import type { VMwareDiskEntry } from 'src/api/vmware-machines/model'
 import { Migration } from './api/migrations'
 import { RefetchOptions, QueryObserverResult } from '@tanstack/react-query'
-import type { GridRowSelectionModel, GridToolbarProps } from '@mui/x-data-grid'
+import type { GridRowSelectionModel } from '@mui/x-data-grid'
 import type { ErrorContext } from 'src/services/errorReporting'
 
 // ---------------------------------------------------------------------------
@@ -371,44 +371,17 @@ export interface MigrationOptionsPropsInterface {
 // MigrationsTable types
 // ---------------------------------------------------------------------------
 
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    numSelected: number
-    onDeleteSelected: () => void
-    onBulkAdminCutover: () => void
-    numEligibleForCutover: number
-    onBulkRetry: () => void
-    numEligibleForRetry: number
-    isBulkRetryLoading: boolean
-    currentDateFilter: string
-    onDateFilterChange: (filter: string) => void
-    currentStatusFilter: string
-    onStatusFilterChange: (filter: string) => void
-    onRefresh: () => void
-    isRefreshing: boolean
-  }
-}
-
-export interface CustomToolbarProps extends GridToolbarProps {
-  numSelected: number
-  onDeleteSelected: () => void
-  onBulkAdminCutover: () => void
-  numEligibleForCutover: number
-  onBulkRetry: () => void
-  numEligibleForRetry: number
-  isBulkRetryLoading: boolean
-  currentDateFilter: string
-  onDateFilterChange: (filter: string) => void
-  currentStatusFilter: string
-  onStatusFilterChange: (filter: string) => void
-  onRefresh: () => void
-  isRefreshing: boolean
-}
-
 export interface MigrationsTableProps {
   migrations: Migration[]
   onDeleteMigration?: (name: string) => void
   onDeleteSelected?: (migrations: Migration[]) => void
   refetchMigrations: (options?: RefetchOptions) => Promise<QueryObserverResult<Migration[], Error>>
   loading?: boolean
+  // Search/status/date filtering now lives inline with the page's tabs (see
+  // MigrationsPage) rather than in a toolbar rendered inside this table. Optional —
+  // embedded read-only usages (e.g. the rolling-migration drawer) don't need filtering
+  // and can omit them entirely.
+  searchValue?: string
+  statusFilter?: string
+  dateFilter?: string
 }

@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Box, Tab, Tabs, Typography, Button } from '@mui/material'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import Tooltip from '@mui/material/Tooltip'
 import AddIcon from '@mui/icons-material/Add'
+import { CustomSearchToolbar } from 'src/components/grid'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 import { useMigrationsQuery } from '../hooks/useMigrationsQuery'
 import { Migration } from '../api/migrations'
@@ -13,8 +14,10 @@ import { useMigrationStatusMonitor } from '../hooks/useMigrationStatusMonitor'
 import { useMigrationTemplatesQuery } from '../hooks/useMigrationTemplatesQuery'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
 import TemplatesTabPanel from '../components/templates/TemplatesTabPanel'
+import TemplatesToolbar from '../components/templates/TemplatesToolbar'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
-import { getMigrationStatusCategory } from '../utils/migrationTableUtils'
+import { getMigrationStatusCategory, STATUS_FILTER_OPTIONS } from '../utils/migrationTableUtils'
+import type { TemplateCopyMethodFilter, TemplateSortKey } from '../utils/templateFilters'
 import { useVmwareCredentialsQuery } from 'src/hooks/api/useVmwareCredentialsQuery'
 import { useOpenstackCredentialsQuery } from 'src/hooks/api/useOpenstackCredentialsQuery'
 
@@ -62,6 +65,15 @@ export default function MigrationsPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedMigrations, setSelectedMigrations] = useState<Migration[]>([])
   const [openSnackbar, setOpenSnackbar] = useState(false)
+  const [searchValue, setSearchValue] = useState('')
+  const [statusFilter, setStatusFilter] = useState('All')
+  const [dateFilter, setDateFilter] = useState('All Time')
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [templateQuery, setTemplateQuery] = useState('')
+  const [templateCopyMethodFilter, setTemplateCopyMethodFilter] =
+    useState<TemplateCopyMethodFilter>('all')
+  const [templateSortKey, setTemplateSortKey] = useState<TemplateSortKey>('created')
+  const [templateView, setTemplateView] = useState<'grid' | 'list'>('grid')
   const { data: templates = [] } = useMigrationTemplatesQuery()
   const { openMigrationForm } = useMigrationFormActions()
 
@@ -112,6 +124,15 @@ export default function MigrationsPage() {
   })
 
   useMigrationStatusMonitor(migrations)
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true)
+    try {
+      await refetchMigrations()
+    } finally {
+      setIsRefreshing(false)
+    }
+  }, [refetchMigrations])
 
   const summaryCounts = useMemo(() => {
     const counts = { inProgress: 0, awaitingAction: 0, pending: 0, succeeded: 0, failed: 0 }
@@ -233,7 +254,18 @@ export default function MigrationsPage() {
         </Box>
       </Box>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+          mb: 2
+        }}
+      >
         <Tabs
           value={activeTab}
           onChange={(_event, value: MigrationsPageTab) => setActiveTab(value)}
@@ -262,6 +294,33 @@ export default function MigrationsPage() {
             data-testid="migrations-page-tab-templates"
           />
         </Tabs>
+
+        {activeTab === 'migrations' ? (
+          <CustomSearchToolbar
+            placeholder="Search VM, tenant, OS..."
+            searchValue={searchValue}
+            onSearchChange={setSearchValue}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            currentDateFilter={dateFilter}
+            onDateFilterChange={setDateFilter}
+            currentStatusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            statusFilterOptions={[...STATUS_FILTER_OPTIONS]}
+            maxSearchWidth={220}
+          />
+        ) : (
+          <TemplatesToolbar
+            query={templateQuery}
+            onQueryChange={setTemplateQuery}
+            copyMethodFilter={templateCopyMethodFilter}
+            onCopyMethodFilterChange={setTemplateCopyMethodFilter}
+            sortKey={templateSortKey}
+            onSortKeyChange={setTemplateSortKey}
+            view={templateView}
+            onViewChange={setTemplateView}
+          />
+        )}
       </Box>
 
       {activeTab === 'migrations' ? (
@@ -271,9 +330,19 @@ export default function MigrationsPage() {
           onDeleteMigration={handleDeleteClick}
           onDeleteSelected={handleDeleteSelected}
           loading={isMigrationsLoading}
+          searchValue={searchValue}
+          statusFilter={statusFilter}
+          dateFilter={dateFilter}
         />
       ) : (
-        <TemplatesTabPanel onUseTemplate={handleUseTemplate} onEditTemplate={handleEditTemplate} />
+        <TemplatesTabPanel
+          onUseTemplate={handleUseTemplate}
+          onEditTemplate={handleEditTemplate}
+          query={templateQuery}
+          copyMethodFilter={templateCopyMethodFilter}
+          sortKey={templateSortKey}
+          view={templateView}
+        />
       )}
 
       <DeleteMigrationDialog

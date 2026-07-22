@@ -6,7 +6,6 @@ import ReplayIcon from '@mui/icons-material/Replay'
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord'
 import { useCallback, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CustomSearchToolbar, ListingToolbar } from 'src/components/grid'
 import { CommonDataGrid } from 'src/components/grid'
 import { Phase } from '../api/migrations'
 import MigrationProgress from '../components/MigrationProgress'
@@ -18,7 +17,7 @@ import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
 import { keyframes } from '@mui/material/styles'
 import { useMigrationFormActions } from '../context/MigrationFormContext'
-import type { CustomToolbarProps, MigrationsTableProps } from '../types'
+import type { MigrationsTableProps } from '../types'
 import { TooltipContent } from 'src/components'
 import { useMigrationPlanDestinationsQuery } from '../api/useMigrationPlanDestinationsQuery'
 import { STATUS_ORDER } from '../constants'
@@ -27,7 +26,6 @@ import {
   getProgressText,
   getMigrationStatusCategory,
   matchesDateFilter,
-  STATUS_FILTER_OPTIONS,
   STATUS_FILTER_TO_CATEGORY
 } from '../utils/migrationTableUtils'
 
@@ -43,85 +41,15 @@ const pulse = keyframes`
   }
 `
 
-const CustomToolbar = ({
-  numSelected,
-  onDeleteSelected,
-  onBulkAdminCutover,
-  numEligibleForCutover,
-  onBulkRetry,
-  numEligibleForRetry,
-  isBulkRetryLoading,
-  currentDateFilter,
-  onDateFilterChange,
-  currentStatusFilter,
-  onStatusFilterChange,
-  onRefresh,
-  isRefreshing
-}: CustomToolbarProps) => {
-  const search = (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-      {numSelected > 0 ? (
-        <>
-          <Button
-            data-testid="delete-selected-button"
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteIcon />}
-            onClick={onDeleteSelected}
-            sx={{ height: 40 }}
-          >
-            Delete Selected ({numSelected})
-          </Button>
-
-          {numEligibleForCutover > 0 && (
-            <Button
-              variant="outlined"
-              color="primary"
-              startIcon={<PlayArrowIcon />}
-              onClick={onBulkAdminCutover}
-              sx={{ height: 40 }}
-            >
-              Trigger Cutover ({numEligibleForCutover})
-            </Button>
-          )}
-
-          {numEligibleForRetry > 0 && (
-            <Button
-              data-testid="bulk-retry-button"
-              variant="outlined"
-              color="primary"
-              startIcon={<ReplayIcon />}
-              onClick={onBulkRetry}
-              disabled={isBulkRetryLoading}
-              sx={{ height: 40 }}
-            >
-              Retry Selected ({numEligibleForRetry})
-            </Button>
-          )}
-        </>
-      ) : null}
-      <CustomSearchToolbar
-        placeholder="Search VM, tenant, OS..."
-        onRefresh={onRefresh}
-        isRefreshing={isRefreshing}
-        currentDateFilter={currentDateFilter}
-        onDateFilterChange={onDateFilterChange}
-        currentStatusFilter={currentStatusFilter}
-        onStatusFilterChange={onStatusFilterChange}
-        statusFilterOptions={[...STATUS_FILTER_OPTIONS]}
-      />
-    </Box>
-  )
-
-  return <ListingToolbar search={search} />
-}
-
 export default function MigrationsTable({
   migrations,
   onDeleteMigration,
   onDeleteSelected,
   refetchMigrations,
-  loading = false
+  loading = false,
+  searchValue = '',
+  statusFilter = 'All',
+  dateFilter = 'All Time'
 }: MigrationsTableProps) {
   const { openMigrationForm } = useMigrationFormActions()
   const navigate = useNavigate()
@@ -133,22 +61,10 @@ export default function MigrationsTable({
   const [isBulkRetryLoading, setIsBulkRetryLoading] = useState(false)
   const [bulkRetryDialogOpen, setBulkRetryDialogOpen] = useState(false)
   const [bulkRetryError, setBulkRetryError] = useState<string | null>(null)
-  const [dateFilter, setDateFilter] = useState('All Time')
-  const [statusFilter, setStatusFilter] = useState('All')
-  const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleSelectionChange = useCallback((newSelection: GridRowSelectionModel) => {
     setSelectedRows(newSelection)
   }, [])
-
-  const handleRefresh = useCallback(async () => {
-    setIsRefreshing(true)
-    try {
-      await refetchMigrations()
-    } finally {
-      setIsRefreshing(false)
-    }
-  }, [refetchMigrations])
 
   const filteredMigrations = useMemo(() => {
     if (!migrations) return []
@@ -160,6 +76,17 @@ export default function MigrationsTable({
       return matchesDateFilter(m.metadata?.creationTimestamp, dateFilter)
     })
   }, [migrations, statusFilter, dateFilter])
+
+  // Drives the DataGrid's built-in quick filter — the search box itself now lives
+  // inline with the page tabs (outside this component), so its value flows in as a
+  // controlled prop instead of being read from a toolbar rendered inside the grid.
+  const filterModel = useMemo(
+    () => ({
+      items: [],
+      quickFilterValues: searchValue.trim() ? searchValue.trim().split(/\s+/) : []
+    }),
+    [searchValue]
+  )
 
   const destinationByPlanQuery = useMigrationPlanDestinationsQuery(filteredMigrations)
 
@@ -650,8 +577,51 @@ export default function MigrationsTable({
     [filteredMigrations, onDeleteMigration, refetchMigrations]
   )
 
+  const numEligibleForRetry = allSelectedRetryable ? eligibleForRetry.length : 0
+
   return (
     <>
+      {selectedRows.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+          <Button
+            data-testid="delete-selected-button"
+            variant="outlined"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={handleDeleteSelected}
+            sx={{ height: 40 }}
+          >
+            Delete Selected ({selectedRows.length})
+          </Button>
+
+          {eligibleForCutover.length > 0 && (
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<PlayArrowIcon />}
+              onClick={() => setBulkCutoverDialogOpen(true)}
+              sx={{ height: 40 }}
+            >
+              Trigger Cutover ({eligibleForCutover.length})
+            </Button>
+          )}
+
+          {numEligibleForRetry > 0 && (
+            <Button
+              data-testid="bulk-retry-button"
+              variant="outlined"
+              color="primary"
+              startIcon={<ReplayIcon />}
+              onClick={() => setBulkRetryDialogOpen(true)}
+              disabled={isBulkRetryLoading}
+              sx={{ height: 40 }}
+            >
+              Retry Selected ({numEligibleForRetry})
+            </Button>
+          )}
+        </Box>
+      )}
+
       <CommonDataGrid
         data-testid="migrations-table"
         rows={migrationsWithActions}
@@ -671,37 +641,12 @@ export default function MigrationsTable({
             }
           }
         }}
+        filterModel={filterModel}
         pageSizeOptions={[10, 25, 50, 100]}
         checkboxSelection={hasSelectionActions}
         disableRowSelectionOnClick
         onRowSelectionModelChange={handleSelectionChange}
         rowSelectionModel={selectedRows}
-        slots={{
-          // Pass CustomToolbar directly (stable module-level reference) to prevent DataGrid
-          // from unmounting/remounting the toolbar on every MigrationsTable re-render.
-          // Dynamic data flows through slotProps.toolbar instead of an inline wrapper.
-          // Always mounted — search/refresh/filter are independent of bulk-selection
-          // capability; the bulk-action buttons inside gate themselves on numSelected.
-          toolbar: CustomToolbar
-        }}
-        slotProps={{
-          toolbar: {
-            numSelected: selectedRows.length,
-            onDeleteSelected: handleDeleteSelected,
-            onBulkAdminCutover: () => setBulkCutoverDialogOpen(true),
-            numEligibleForCutover: eligibleForCutover.length,
-            onBulkRetry: () => setBulkRetryDialogOpen(true),
-            numEligibleForRetry: allSelectedRetryable ? eligibleForRetry.length : 0,
-            isBulkRetryLoading,
-            currentDateFilter: dateFilter,
-            onDateFilterChange: setDateFilter,
-            currentStatusFilter: statusFilter,
-            onStatusFilterChange: setStatusFilter,
-            onRefresh: handleRefresh,
-            isRefreshing
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any
-        }}
         getRowId={(row) => row.metadata?.name}
         loading={loading}
         emptyMessage="No migrations available"
