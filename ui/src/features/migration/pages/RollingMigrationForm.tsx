@@ -32,7 +32,7 @@ import { useHostConfigHandlers } from '../hooks/useHostConfigHandlers'
 import { useRollingFormData } from '../hooks/useRollingFormData'
 import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
-import { hasAnySubnetMismatch } from '../utils/subnetMismatch'
+import { hasAnySubnetMismatch, hasAnyPreserveIpDisabled } from '../utils/subnetMismatch'
 import { useRollingFormValidation } from '../hooks/useRollingFormValidation'
 import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 import { useSectionTracking } from '../hooks/useSectionTracking'
@@ -419,6 +419,7 @@ export default function RollingMigrationFormDrawer({
     openstackNetworks
   })
   const hasSubnetMismatch = hasAnySubnetMismatch(subnetWarnings)
+  const hasPreserveIpDisabled = hasAnyPreserveIpDisabled(subnetCheckVMs)
 
   // Update ESXi host config names when OpenStack host configs become available
   useEffect(() => {
@@ -1004,6 +1005,7 @@ export default function RollingMigrationFormDrawer({
                     getErrorsUpdater={getFieldErrorsUpdater}
                     showHeader={false}
                     hasSubnetMismatch={hasSubnetMismatch}
+                    hasPreserveIpDisabled={hasPreserveIpDisabled}
                   />
                 </SurfaceCard>
               </Box>

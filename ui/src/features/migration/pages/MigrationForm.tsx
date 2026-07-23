@@ -38,7 +38,7 @@ import type {
 import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
-import { hasAnySubnetMismatch } from '../utils/subnetMismatch'
+import { hasAnySubnetMismatch, hasAnyPreserveIpDisabled } from '../utils/subnetMismatch'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
@@ -381,6 +381,7 @@ export default function MigrationFormDrawer({
     openstackNetworks: sortedOpenstackNetworks
   })
   const hasSubnetMismatch = hasAnySubnetMismatch(subnetWarnings)
+  const hasPreserveIpDisabled = hasAnyPreserveIpDisabled(params.vms || [])
 
   const { submitting, handleSubmit, handleClose } = useMigrationFormSubmit({
     params,
@@ -843,6 +844,7 @@ export default function MigrationFormDrawer({
                     stepNumber="6"
                     showHeader={false}
                     hasSubnetMismatch={hasSubnetMismatch}
+                    hasPreserveIpDisabled={hasPreserveIpDisabled}
                   />
                 </SurfaceCard>
               </Box>

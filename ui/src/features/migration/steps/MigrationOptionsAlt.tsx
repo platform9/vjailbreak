@@ -87,6 +87,7 @@ export default function MigrationOptionsAlt({
   stepNumber,
   showHeader = true,
   hasSubnetMismatch = false,
+  hasPreserveIpDisabled = false,
   skipDefaultSeeding = false
 }: MigrationOptionsPropsInterface) {
   const { setValue } = useFormContext()
@@ -273,12 +274,16 @@ export default function MigrationOptionsAlt({
   }, [params, selectedMigrationOptions])
 
   // Persist IP is mutually exclusive with mapping to a network whose subnet
-  // does not contain the source VM IPs — auto-uncheck when a mismatch appears
+  // does not contain the source VM IPs, or with any selected VM having
+  // "Preserve IP" turned off (nothing left to persist) — auto-uncheck when
+  // either condition appears.
+  const disableNetworkPersistence = hasSubnetMismatch || hasPreserveIpDisabled
+
   useEffect(() => {
-    if (hasSubnetMismatch && params?.networkPersistence) {
+    if (disableNetworkPersistence && params?.networkPersistence) {
       onChange('networkPersistence')(false)
     }
-  }, [hasSubnetMismatch, params?.networkPersistence, onChange])
+  }, [disableNetworkPersistence, params?.networkPersistence, onChange])
 
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
   const hasL2Network = hasSelectedLayer2Network(
@@ -741,7 +746,7 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
-                    disabled={hasSubnetMismatch}
+                    disabled={disableNetworkPersistence}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('networkPersistence')(!params?.networkPersistence)
@@ -756,7 +761,7 @@ export default function MigrationOptionsAlt({
             <Box />
           </OptionRow>
 
-          {hasSubnetMismatch && (
+          {disableNetworkPersistence && (
             <Alert severity="info" sx={{ mt: 1 }} data-testid="network-persistence-subnet-alert">
               Persist source network interfaces is not available because some IP addresses of the
               selected VMs do not lie within the subnet of the selected destination network(s). Map
