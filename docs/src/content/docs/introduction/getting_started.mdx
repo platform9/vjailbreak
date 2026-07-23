@@ -13,6 +13,12 @@ provisioning operations including creation of volumes, VMs.
 ### Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
 
+:::note[vJailbreak Accelerated Copy]
+When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM:
+- **10809–11808** — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel)
+- **22** — SSH, used by vJailbreak to control the Proxy VM
+:::
+
 <ReadMore>Further details can be found in [Prerequisites](../prerequisites/).</ReadMore>
 
 ### Download vJailbreak Image

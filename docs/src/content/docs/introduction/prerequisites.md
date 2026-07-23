@@ -109,6 +109,8 @@ Please refer the following table for the required ports:
 | 443 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer authentication |
 | 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy via NFC protocol (see NFC limitations above) |
 | 5480 | TCP | PCD nodes | VMware vCenter API endpoint | VMware Site Recovery Manager Appliance Management Interface |
+| 22 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
+| 10809–11808 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel) |
 
 
 ### What network connectivity do I need for vJailbreak?
