@@ -6,7 +6,10 @@ description: prerequisites for vJailbreak
 For frequently asked questions, see [FAQ](../faq/).
 
 ### What access do I need for my vCenter user to be able to perform this migration?
-Please refer to the following table for the required privileges:
+
+The required privileges depend on which features you use. The base set below is required for all migrations. Additional privileges are listed separately for vJailbreak Accelerated Copy and OVA-based Proxy VM deployment.
+
+#### Base Privileges (all migrations)
 
 | Privilege | Description |
 | --- | --- |
@@ -42,6 +45,29 @@ Please refer to the following table for the required privileges:
 | `Cryptographic` privileges: |     |
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
+
+#### Additional Privileges: vJailbreak Accelerated Copy Migrations
+
+Required when using the **vJailbreak Accelerated Copy** storage copy method (VMware hot-add). vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
+
+| Privilege | Description |
+| --- | --- |
+| `Virtual machine.Config.AddExistingDisk` | Allows attaching an existing VMDK (snapshot disk) to another virtual machine — used to attach source disks to the Proxy VM. |
+| `Virtual machine.Config.RemoveDisk` | Allows removing a disk from a virtual machine — used to detach source disks from the Proxy VM after copy. |
+| `Virtual machine.Config.AdvancedConfig` | Allows modifying VM extra config parameters — used to set `disk.EnableUUID = TRUE` on the Proxy VM. |
+
+#### Additional Privileges: OVA-Based Proxy VM Deployment
+
+Required only when using the **Deploy a new vJailbreak Proxy VM** option in the UI. These privileges are not needed if you register an existing VM as the Proxy VM.
+
+| Privilege | Description |
+| --- | --- |
+| `vApp.Import` | Allows importing an OVF/OVA package into vCenter — used to deploy the pre-built Proxy VM appliance. |
+| `Datastore.AllocateSpace` | Allows allocating disk space on a datastore — used to create the Proxy VM disk files during OVA import. |
+| `Network.Assign` | Allows assigning a network to a virtual machine or vApp — used to connect the Proxy VM to the selected portgroup. |
+| `Resource.AssignVAppToPool` | Allows assigning a vApp to a resource pool — used to place the deployed Proxy VM in the target compute resource. |
+| `Virtual machine.Inventory.Create` | Allows creating a virtual machine in the vCenter inventory — used to register the Proxy VM after OVA import. |
+| `Virtual machine.Config.AdvancedConfig` | Allows modifying VM extra config parameters — used to set `disk.EnableUUID = TRUE` on the newly deployed Proxy VM. |
 
 ### Understanding VMware NFC Performance Limitations
 

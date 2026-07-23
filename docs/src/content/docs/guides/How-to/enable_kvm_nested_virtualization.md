@@ -27,64 +27,78 @@ The v2v-helper pod already mounts the host `/dev` directory into the pod at `/de
 
 The condition that must be met is that the vJailbreak VM itself has access to KVM, which requires nested virtualization to be enabled at every layer of the stack.
 
+⚠️ **Caution — this affects all VMs on the compute host, not just vjailbreak.**
+
 ## Enabling Nested Virtualization
 
-### Layer 1 — Hypervisor (host running the vJailbreak VM)
+### Step 1 — Enable nested KVM on the compute host
+On each compute host that will run vjailbreak VMs and agents:
 
-The physical host (or outer hypervisor) must expose hardware virtualization extensions to its guest VMs.
-
-**KVM/QEMU host**
-
-Use `host-passthrough` or `host-model` CPU mode, or explicitly add `vmx` (Intel) / `svm` (AMD) to the CPU flags:
-
-```xml
-<cpu mode="host-passthrough"/>
+```
+cat /sys/module/kvm_intel/parameters/nested   # expect Y (or 1)
+# AMD: cat /sys/module/kvm_amd/parameters/nested
 ```
 
-**OpenStack**
+If disabled, enable it persistently and reload:
 
-Set the flavor's `hw:cpu_mode` to `host-passthrough` or enable the `hw:nested_virt` trait:
-
-```bash
-openstack flavor set <flavor> --property hw:cpu_mode=host-passthrough
 ```
-
----
-
-### Layer 2 — vJailbreak VM (the Linux OS)
-
-Once the hypervisor exposes the virtualization extensions, verify that the KVM kernel module is loaded inside the vJailbreak VM:
-
-```bash
-# For Intel CPUs
-lsmod | grep kvm_intel
-
-# For AMD CPUs
-lsmod | grep kvm_amd
-```
-
-If the module is not loaded, load it manually (and add to `/etc/modules` to persist across reboots):
-
-```bash
 # Intel
-modprobe kvm_intel
-echo kvm_intel >> /etc/modules
-
+echo "options kvm-intel nested=1" | sudo tee /etc/modprobe.d/kvm-nested.conf
 # AMD
-modprobe kvm_amd
-echo kvm_amd >> /etc/modules
+# echo "options kvm-amd nested=1" | sudo tee /etc/modprobe.d/kvm-nested.conf
+
+sudo modprobe -r kvm_intel && sudo modprobe kvm_intel   # or reboot the host
 ```
 
-Verify `/dev/kvm` is present:
+### Step 2 — Set the CPU mode in `nova_override.conf`
 
-```bash
-ls -l /dev/kvm
-# Expected: crw-rw---- 1 root kvm ...
+`[libvirt]` section of `/opt/pf9/etc/nova/conf.d/nova_override.conf` on each
+compute host.
+
+**Recommended — `host-passthrough`** (passes `vmx`/`svm` through automatically):
+
+```
+[libvirt]
+cpu_mode = host-passthrough
 ```
 
----
+**Alternative — `host-model`** (must add the flag explicitly; `host-model` does
+**not** expose `vmx`/`svm` by default):
 
-### Layer 3 — Pod (automatic)
+```
+[libvirt]
+cpu_mode = host-model
+cpu_model_extra_flags = vmx    # use svm on AMD
+```
+
+> **Note:** `host-passthrough` ties the VM to a host with a closely matching
+> CPU, model, and microcode for live migration. For vjailbreak — a
+> short-lived, migration-tool VM — this is rarely a concern. 
+
+### Step 3 — Apply
+
+Restart Nova on the compute host, then hard-reboot the vjailbreak VM so it picks
+up the new CPU definition (a soft reboot is not enough):
+
+```
+sudo systemctl restart pf9-ostackhost
+openstack server reboot --hard <instance-uuid>
+```
+
+### Step 4 — Verify
+
+Inside the vjailbreak VM, confirm the flag is present:
+
+```
+grep -E -o 'vmx|svm' /proc/cpuinfo | sort -u    # expect vmx (Intel) or svm (AMD)
+ls /dev/kvm                                      # device node should exist
+```
+
+If `virt-v2v` still falls back to TCG (no acceleration), check that
+`/dev/kvm` is present and that `kvm-ok` (if available) reports acceleration can
+be used.
+
+### Pod (automatic)
 
 No changes are needed. The pod's `/dev` hostPath mount makes `/dev/kvm` visible to the `v2v-helper` container as soon as it exists on the vJailbreak VM.
 

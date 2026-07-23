@@ -115,6 +115,16 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 **Workaround**: Migrate each OS as a separate VM, or convert the disk to a single-boot configuration before migration.
 
+## SUSE Linux (SLES / SLED) with Legacy GRUB 0.97
+
+Older SUSE-family VMs — **SLES**, **SLED**, and other **SUSE** distributions — that still boot with **legacy GRUB (0.97)** require special handling. These are typically BIOS VMs on a multi-disk layout, where the first boot stage sits in one disk's MBR while its second stage and `/boot` live on a separate disk. After migration to KVM, the virtual disks are re-numbered and no longer match the original VMware ordering, so GRUB cannot find its second stage and the VM fails to boot with `GRUB Error 21`.
+
+In such scenarios, we recommend upgrading to GRUB2.
+
+**Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2.
+
+NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+
 ## Hotplug Flavor Requirements
 
 OpenStack **hotplug** (live CPU/RAM resize without VM reboot) is supported post-migration, but only if the assigned flavor is explicitly configured for hotplug by the OpenStack administrator.
@@ -137,6 +147,29 @@ To use hotplug after migration:
 Standard flavors without hotplug extra specs will not support live resize. The VM must be powered off for a cold resize in that case.
 :::
 
+## PCI Slot Exhaustion When Attaching Disks with virtio-blk
+
+During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, Maximum 26 devices can be attached after which PCI slots will exhaust and volume attach fails with:
+
+```text
+libvirt.libvirtError: internal error: No more available PCI slots
+```
+
+**Workaround**: Set the disk bus to **virtio-scsi** on the vJailbreak image before creating the vJailbreak VM. All attached volumes then share a single SCSI controller (one PCI slot, up to 256 devices):
+
+```bash
+openstack image set \
+  --property hw_disk_bus=scsi \
+  --property hw_scsi_model=virtio-scsi \
+  <vjailbreak-image-name-or-ID>
+```
+
+:::note
+The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale up use the same image, so set these properties before scaling up.
+:::
+
+See the full troubleshooting entry: [Disk attach fails during migration: No more available PCI slots](../../guides/troubleshooting/troubleshooting/#disk-attach-fails-during-migration-no-more-available-pci-slots).
+
 ## Low Disk Space in the Source VM
 
 Before starting conversion, `virt-v2v` checks that each filesystem inside the **source VM** has sufficient free space. If any filesystem is too full, the conversion fails before it begins.
@@ -153,6 +186,32 @@ Minimum free space required inside the source VM ([source: virt-v2v docs](https:
 Each filesystem must also have at least **100 free inodes**.
 
 **Workaround**: Before migrating, free up space inside the source VM on any full partitions. Check with `df -h` (Linux) or Disk Management (Windows).
+
+## Hot Migration Requires Virtual Hardware Version 7 or Newer
+
+vJailbreak **Hot migration** (**Copy live VMs, then power off**) relies on VMware **Changed Block Tracking (CBT)** to copy only changed disk blocks during the live sync phase. CBT is available only on VMs running **virtual hardware version 7 or newer** (VMware KB 1020128).
+
+VMs on older hardware versions (for example, version 4) do not expose the CBT property at all, so Hot migration cannot track changed blocks for them.
+
+**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step. The reported error looks similar to:
+
+```
+CBT is not enabled on disk <id>
+```
+
+**What to do** — choose one:
+
+1. **Use cold migration** (**Power off VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
+2. **Upgrade the VM's virtual hardware version** to 7 or newer in vCenter, then use Hot migration if you need minimal downtime. Upgrading the hardware version requires a VM power-off and cannot be reversed — review VMware's documentation before proceeding.
+
+| VM virtual hardware version | Hot migration | Cold migration |
+|---|---|---|
+| 7 or newer | Supported | Supported |
+| Below 7 (e.g., version 4) | Not supported — use cold migration | Supported |
+
+:::note
+To check a VM's hardware version in vCenter, select the VM and look at **VM Hardware → Compatibility** (shown as "ESXi X.X and later (VM version N)").
+:::
 
 ## Application Reboot During Migration
 

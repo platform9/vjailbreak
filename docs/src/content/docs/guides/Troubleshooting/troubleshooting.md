@@ -116,3 +116,42 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
 
   - This is a known and documented `virt-v2v` issue. [See upstream documentation](https://libguestfs.org/virt-v2v.1.html#linux%3A-rename%3A-sysroot-etc-resolv.conf-failure).
   - If configuration management or security hardening marks `/etc/resolv.conf` immutable, ensure this is unset before conversion, or adjust your automation so VMs intended for conversion do not have `/etc/resolv.conf` marked immutable.
+
+---
+
+## Disk attach fails during migration: No more available PCI slots
+
+- **Symptom**
+
+  During a migration, attaching a target volume to the vJailbreak VM (or an agent VM) fails. The `nova-compute` log on the OpenStack side shows an error similar to:
+
+  ```text
+  TRACE nova.virt.libvirt.driver [instance: <uuid>] libvirt.libvirtError: internal error: No more available PCI slots
+  ```
+
+- **Cause**
+
+  During conversion, vJailbreak attaches the target Cinder volumes to the vJailbreak VM (or its agent VMs) to copy and convert the disk data. If the vJailbreak image was uploaded without a disk bus setting, OpenStack attaches these volumes using the default **virtio-blk** bus, where **every attached volume is a separate PCI device** and consumes its own PCI slot.
+
+  The virtual PCI bus has a limited number of slots, several of which are already used by essential devices (network interfaces, video, memory balloon, and so on). Migrating VMs with many disks — or running many migrations in parallel on one agent — exhausts the available PCI slots, and the volume attach fails with the error above.
+
+- **Resolution**
+
+  Configure the vJailbreak image to use the **virtio-scsi** disk bus. With virtio-scsi, all attached volumes share a single SCSI controller that consumes only one PCI slot and supports up to 256 devices.
+
+  1. Set the following properties on the vJailbreak image **before** creating the vJailbreak VM:
+
+     ```bash
+     openstack image set \
+       --property hw_disk_bus=scsi \
+       --property hw_scsi_model=virtio-scsi \
+       <vjailbreak-image-name-or-ID>
+     ```
+
+  2. Deploy the vJailbreak VM from the updated image, then re-run the migration.
+
+- **Notes**
+
+  - The disk bus is fixed when the VM is created. If your vJailbreak VM is already deployed, setting the properties on the image is not enough — you must recreate the vJailbreak VM from the updated image.
+  - Agent VMs created during [scale up](../../how-to/scaling/) use the same image, so set these properties before scaling up agents.
+  - See also: [Known Limitations](../../../reference/known-limitations/#pci-slot-exhaustion-when-attaching-disks-with-virtio-blk).
