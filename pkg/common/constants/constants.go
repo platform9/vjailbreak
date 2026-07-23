@@ -17,6 +17,11 @@ import (
 // - VCenterLoginRetryLimit: Using k8s/migration value (5) - more resilient
 // ============================================================================
 
+// OpenStack Neutron constraints
+const (
+	NeutronMaxPortNameLen = 255
+)
+
 // OS Family Constants
 // These values match VMware's VirtualMachineGuestOsFamily types
 const (

@@ -43,7 +43,7 @@ type OpenstackOperations interface {
 	GetFlavor(ctx context.Context, flavorId string) (*flavors.Flavor, error)
 	GetNetwork(ctx context.Context, networkname string) (*networks.Network, error)
 	GetPort(ctx context.Context, portID string) (*ports.Port, error)
-	ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
+	ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string, subnetPortIndex map[string]int) (*ports.Port, error)
 	DeletePort(ctx context.Context, portID string) error
 	GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error)
 	CreatePort(ctx context.Context, networkid *networks.Network, mac string, ip []string, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string) (*ports.Port, error)
