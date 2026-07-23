@@ -13,6 +13,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
 // TestIsHotplugFlavor verifies that hotplug intent is inferred solely from the
@@ -270,6 +271,74 @@ func TestGetCreateOpts_NilIPEntries_L2NetworkWithNoSubnets(t *testing.T) {
 	}
 	if _, ok := gatewayIP["aa:bb:cc:dd:ee:ff"]; ok {
 		t.Fatalf("expected no gateway to be recorded for a subnet-less L2 network, got: %v", gatewayIP)
+	}
+}
+
+// TestCreatePortWithDHCP_MarksEntriesAsDHCP verifies that the IP(s) it pulls
+// back from the created port are marked IpEntry.DHCP=true. These IPs came
+// from a live Neutron allocation (the preferred static IP didn't fit the
+// target subnet), not a preserved/custom static IP, so guest-config code
+// must configure a real DHCP client for them instead of pinning them
+// statically (see buildWildcardNetplanYAML in v2v-helper/virtv2v).
+func TestCreatePortWithDHCP_MarksEntriesAsDHCP(t *testing.T) {
+	const networkID = "net-1"
+	const subnetID = "subnet-1"
+	const mac = "aa:bb:cc:dd:ee:ff"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/networks/"+networkID):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"network": map[string]any{"id": networkID, "tags": []string{}},
+			})
+		case strings.Contains(r.URL.Path, "/subnets/"+subnetID):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"subnet": map[string]any{
+					"id":         subnetID,
+					"cidr":       "192.168.50.0/24",
+					"gateway_ip": "192.168.50.1",
+				},
+			})
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/ports"):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"port": map[string]any{
+					"id":          "port-1",
+					"mac_address": mac,
+					"fixed_ips": []map[string]any{
+						{"ip_address": "192.168.50.77", "subnet_id": subnetID},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := &OpenStackClients{NetworkingClient: newTestNetworkingClient(srv)}
+	network := &networks.Network{ID: networkID, Subnets: []string{subnetID}}
+	ipPerMac := map[string][]vm.IpEntry{
+		mac: {{IP: "10.0.0.5", Prefix: 24}}, // the static IP that didn't fit, about to be replaced
+	}
+	gatewayIP := map[string]string{}
+	createOpts := ports.CreateOpts{Name: "port-test", NetworkID: networkID}
+
+	port, err := client.CreatePortWithDHCP(t.Context(), network, ipPerMac, mac, gatewayIP, createOpts)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if port.ID != "port-1" {
+		t.Fatalf("expected port-1, got: %s", port.ID)
+	}
+
+	want := []vm.IpEntry{{IP: "192.168.50.77", Prefix: 0, DHCP: true}}
+	got := ipPerMac[mac]
+	if len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("ipPerMac[mac] = %#v, want %#v (DHCP must be true for a live Neutron allocation)", got, want)
+	}
+	if gatewayIP[mac] != "192.168.50.1" {
+		t.Fatalf("gatewayIP[mac] = %q, want %q", gatewayIP[mac], "192.168.50.1")
 	}
 }
 
