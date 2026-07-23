@@ -15,6 +15,23 @@ interface UseNetworkSubnetCompatibilityParams {
   openstackNetworks: PCDNetworkInfo[]
 }
 
+/**
+ * Signature used to decide whether a recompute is needed. Must change whenever
+ * either the network mappings OR the per-network IP data changes — keying off
+ * mappings alone misses IP edits/clears made after a mapping is created, which
+ * leaves the subnet-mismatch warning stuck showing the pre-edit IP.
+ */
+export function computeSubnetCheckSignature(
+  mappings: Array<{ source?: string; target?: string }>,
+  networkIPsMap: Map<string, string[]>
+): string {
+  const mappingsKey = mappings.map((m) => `${m.source}|${m.target}`).join(',')
+  const ipsKey = mappings
+    .map((m) => `${m.source}:${[...(networkIPsMap.get(m.source ?? '') ?? [])].sort().join(',')}`)
+    .join('|')
+  return `${mappingsKey}::${ipsKey}`
+}
+
 export function useNetworkSubnetCompatibility({
   networkMappings,
   openstackCredentials,
@@ -23,17 +40,24 @@ export function useNetworkSubnetCompatibility({
   openstackNetworks
 }: UseNetworkSubnetCompatibilityParams): Record<string, string> {
   const [subnetWarnings, setSubnetWarnings] = useState<Record<string, string>>({})
-  const prevMappingsRef = useRef<string>('')
+  const prevSignatureRef = useRef<string>('')
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const apiCacheRef = useRef<Map<string, CheckNetworkSubnetCompatibilityResponse>>(new Map())
   const prevCredNameRef = useRef<string | undefined>(undefined)
+  // Bumped on every recompute that actually starts. The check-compatibility API call
+  // can take over a second — if the user edits/clears an IP while an older call for
+  // the pre-edit IP is still in flight, clearTimeout only cancels the *timer*, not an
+  // already-firing async body. Without this guard the stale call lands after the new
+  // (correct) result and silently overwrites it back to the pre-edit warning text.
+  const requestIdRef = useRef(0)
 
   useEffect(() => {
     const completeMappings = (networkMappings || []).filter((m) => m.source && m.target)
 
-    const mappingsKey = completeMappings.map((m) => `${m.source}|${m.target}`).join(',')
-    if (mappingsKey === prevMappingsRef.current) return
-    prevMappingsRef.current = mappingsKey
+    const signature = computeSubnetCheckSignature(completeMappings, networkIPsMap)
+    if (signature === prevSignatureRef.current) return
+    prevSignatureRef.current = signature
+    const requestId = ++requestIdRef.current
 
     if (!openstackCredentials || completeMappings.length === 0 || selectedVMs.length === 0) {
       setSubnetWarnings({})
@@ -94,6 +118,10 @@ export function useNetworkSubnetCompatibility({
         })
       )
 
+      // A newer recompute has since started (e.g. the user edited the IP again while
+      // this one's API call was in flight) — drop this stale result instead of
+      // clobbering the newer one.
+      if (requestIdRef.current !== requestId) return
       setSubnetWarnings(nextWarnings)
     }, 350)
 
