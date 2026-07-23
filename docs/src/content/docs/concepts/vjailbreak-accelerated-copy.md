@@ -198,6 +198,8 @@ The Proxy VM status will update to **Ready** once all checks pass. Any failed ch
 
 :::tip
 If verification fails, address the reported issue (e.g., install missing utilities, fix SSH access) and click **Retry** to re-run the validation without re-entering the form.
+
+**Retry** won't interrupt a verification already in progress (e.g., during a `disk.EnableUUID` reboot) — it's applied on the next cycle, so the status may take a moment to return to **Verifying**.
 :::
 
 ## Using vJailbreak Accelerated Copy in a Migration
