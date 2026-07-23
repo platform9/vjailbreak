@@ -243,7 +243,7 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	defer func() {
 		migobj.logMessage("Cleaning up volume mappings")
 		if err := migobj.StorageProvider.UnmapVolumeFromGroup(initiatorGroup, targetVol, mappingContext); err != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
 		}
 	}()
 

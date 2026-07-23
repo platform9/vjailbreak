@@ -394,7 +394,7 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 			continue
 		}
 		if _, err := sshClient.ExecuteCommand(fmt.Sprintf("kill %d 2>/dev/null; true", t.NBDPid)); err != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: failed to kill qemu-nbd PID %d: %v", t.NBDPid, err))
+			utils.PrintLog(fmt.Sprintf("Warning: failed to kill qemu-nbd PID %d: %v", t.NBDPid, err))
 		}
 	}
 
@@ -402,7 +402,7 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 	if proxyVMObj != nil {
 		var vmProps mo.VirtualMachine
 		if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &vmProps); err != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: failed to read proxy VM devices during cleanup: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: failed to read proxy VM devices during cleanup: %v", err))
 		} else {
 			for _, t := range transfers {
 				if t.DiskKey == 0 {
@@ -411,7 +411,7 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 				for _, dev := range vmProps.Config.Hardware.Device {
 					if dev.GetVirtualDevice().Key == t.DiskKey {
 						if err := proxyVMObj.RemoveDevice(ctx, true, dev); err != nil {
-							migobj.logMessage(fmt.Sprintf("Warning: failed to detach disk key %d from proxy VM: %v", t.DiskKey, err))
+							utils.PrintLog(fmt.Sprintf("Warning: failed to detach disk key %d from proxy VM: %v", t.DiskKey, err))
 						}
 						break
 					}
@@ -422,7 +422,7 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 
 	// Remove the source VM snapshot.
 	if err := migobj.VMops.DeleteSnapshot(hotAddSnapName); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: failed to remove snapshot '%s': %v", hotAddSnapName, err))
+		utils.PrintLog(fmt.Sprintf("Warning: failed to remove snapshot '%s': %v", hotAddSnapName, err))
 	}
 
 	// Decrement the proxy VM's attached disk count for every disk we attached.
@@ -515,7 +515,7 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	}
 	defer func() {
 		if err := sshClient.Disconnect(); err != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", err))
 		}
 	}()
 
