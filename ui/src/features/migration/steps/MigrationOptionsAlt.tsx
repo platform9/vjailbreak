@@ -698,9 +698,10 @@ export default function MigrationOptionsAlt({
                 label="Data only (no VM creation)"
                 control={
                   <Checkbox
-                    checked={params?.dataOnly || false}
-                    onChange={(e) => {
-                      onChange('dataOnly')(e.target.checked)
+                    checked={Boolean(params?.dataOnly)}
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('dataOnly')(!params?.dataOnly)
                     }}
                   />
                 }
