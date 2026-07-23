@@ -10,6 +10,46 @@ import {
 } from '../utils/ipValidation'
 import type { VmDataWithFlavor, BulkIpEdit, BulkIpClear } from '../types'
 
+export interface ClearAllIpsUpdate {
+  clearedIPs: Record<string, Record<number, string>>
+  clearedStatus: Record<string, Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>>
+  clearedPreserveIp: Record<string, Record<number, boolean>>
+  clearedCurrentIPs: Record<string, Record<number, string>>
+}
+
+/**
+ * Pure computation for "Clear All": empties every IP field AND turns Preserve IP off
+ * for each one. Preserve IP must flip too — collectIpsToApply/collectIpsToClear in
+ * handleApplyBulkIPs both treat an empty field with Preserve IP still on as a no-op,
+ * so without this the Apply button silently does nothing to the VM's IP despite the
+ * field looking cleared.
+ */
+export function buildClearAllIpsUpdate(
+  bulkEditIPs: Record<string, Record<number, string>>
+): ClearAllIpsUpdate {
+  const clearedIPs: ClearAllIpsUpdate['clearedIPs'] = {}
+  const clearedStatus: ClearAllIpsUpdate['clearedStatus'] = {}
+  const clearedPreserveIp: ClearAllIpsUpdate['clearedPreserveIp'] = {}
+  const clearedCurrentIPs: ClearAllIpsUpdate['clearedCurrentIPs'] = {}
+
+  Object.keys(bulkEditIPs).forEach((vmName) => {
+    clearedIPs[vmName] = {}
+    clearedStatus[vmName] = {}
+    clearedPreserveIp[vmName] = {}
+    clearedCurrentIPs[vmName] = {}
+
+    Object.keys(bulkEditIPs[vmName]).forEach((interfaceIndexStr) => {
+      const interfaceIndex = parseInt(interfaceIndexStr)
+      clearedIPs[vmName][interfaceIndex] = ''
+      clearedStatus[vmName][interfaceIndex] = 'empty'
+      clearedPreserveIp[vmName][interfaceIndex] = false
+      clearedCurrentIPs[vmName][interfaceIndex] = ''
+    })
+  })
+
+  return { clearedIPs, clearedStatus, clearedPreserveIp, clearedCurrentIPs }
+}
+
 function flattenBulkIps(items: BulkIpEdit[]): Array<{ vmName: string; interfaceIndex: number; ip: string }> {
   const flattened: Array<{ vmName: string; interfaceIndex: number; ip: string }> = []
   items.forEach((item) => {
@@ -305,26 +345,47 @@ export function useBulkIPEdit({
   }
 
   const handleClearAllIPs = () => {
-    const clearedIPs: Record<string, Record<number, string>> = {}
-    const clearedStatus: Record<
-      string,
-      Record<number, 'empty' | 'valid' | 'invalid' | 'validating'>
-    > = {}
-
-    Object.keys(bulkEditIPs).forEach((vmName) => {
-      clearedIPs[vmName] = {}
-      clearedStatus[vmName] = {}
-
-      Object.keys(bulkEditIPs[vmName]).forEach((interfaceIndexStr) => {
-        const interfaceIndex = parseInt(interfaceIndexStr)
-        clearedIPs[vmName][interfaceIndex] = ''
-        clearedStatus[vmName][interfaceIndex] = 'empty'
-      })
-    })
+    const { clearedIPs, clearedStatus, clearedPreserveIp, clearedCurrentIPs } =
+      buildClearAllIpsUpdate(bulkEditIPs)
 
     setBulkEditIPs(clearedIPs)
     setBulkValidationStatus(clearedStatus)
     setBulkValidationMessages({})
+    setBulkPreserveIp((prev) => {
+      const next = { ...prev }
+      Object.entries(clearedPreserveIp).forEach(([vmName, interfaces]) => {
+        next[vmName] = { ...next[vmName], ...interfaces }
+      })
+      return next
+    })
+    setBulkCurrentIPs((prev) => {
+      const next = { ...prev }
+      Object.entries(clearedCurrentIPs).forEach(([vmName, interfaces]) => {
+        next[vmName] = { ...next[vmName], ...interfaces }
+      })
+      return next
+    })
+    // bulkEditOverrides is a second, independent snapshot of preserveIP/preserveMAC
+    // taken at dialog-open time — applyIpAssignmentsToRows prefers it over the live
+    // bulkPreserveIp state when persisting nic.preserveIP. Left stale here, the
+    // persisted flag would silently snap back to "true" despite Preserve IP now
+    // being off, undermining any check that relies on nic.preserveIP (e.g. the
+    // Persist source network interfaces gate).
+    setBulkEditOverrides((prev) => {
+      const next = { ...prev }
+      Object.entries(clearedPreserveIp).forEach(([vmName, interfaces]) => {
+        next[vmName] = { ...next[vmName] }
+        Object.keys(interfaces).forEach((interfaceIndexStr) => {
+          const interfaceIndex = parseInt(interfaceIndexStr)
+          const existing = next[vmName][interfaceIndex]
+          next[vmName][interfaceIndex] = {
+            preserveIP: false,
+            preserveMAC: existing?.preserveMAC ?? true
+          }
+        })
+      })
+      return next
+    })
   }
 
   const validateRequiredIpsForPreserveEnabled = () => {
