@@ -2362,6 +2362,12 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 	portids := []string{}
 	ipaddresses := []string{}
 
+	// subnetPortIndex is shared across every NIC of this VM: it's how
+	// distinct port names get assigned when two or more NICs land on the same
+	// subnet (see GetCreateOpts/buildPortName), so it must persist across the
+	// whole loop, not be recreated per NIC.
+	subnetPortIndex := make(map[string]int)
+
 	for idx, networkname := range migobj.Networknames {
 		network, err := migobj.Openstackclients.GetNetwork(ctx, networkname)
 		if err != nil {
@@ -2388,7 +2394,7 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 		mac = applyPreserveMACOverride(vminfo, idx, mac, override.preserveMAC)
 		utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], loggedIPs))
 
-		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs)
+		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs, subnetPortIndex)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -2406,8 +2412,10 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 
 // createPort creates a single OpenStack port on network for the given
 // (possibly overridden) MAC, using vminfo.IPperMac to determine fixed IPs.
-func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string) (*ports.Port, error) {
-	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP)
+// subnetPortIndex must be the same map across every NIC of this VM (see
+// createPortsForNetworks) so NICs sharing a subnet get distinct port names.
+func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string, subnetPortIndex map[string]int) (*ports.Port, error) {
+	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP, subnetPortIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create port group")
 	}

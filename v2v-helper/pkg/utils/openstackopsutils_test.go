@@ -2,6 +2,7 @@ package utils
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -263,7 +264,7 @@ func TestGetCreateOpts_NilIPEntries_L2NetworkWithNoSubnets(t *testing.T) {
 		}
 	}()
 
-	createOpts, err := client.GetCreateOpts(t.Context(), network, "aa:bb:cc:dd:ee:ff", nil, "test-vm", nil, gatewayIP)
+	createOpts, err := client.GetCreateOpts(t.Context(), network, "aa:bb:cc:dd:ee:ff", nil, "test-vm", nil, gatewayIP, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -272,6 +273,9 @@ func TestGetCreateOpts_NilIPEntries_L2NetworkWithNoSubnets(t *testing.T) {
 	}
 	if _, ok := gatewayIP["aa:bb:cc:dd:ee:ff"]; ok {
 		t.Fatalf("expected no gateway to be recorded for a subnet-less L2 network, got: %v", gatewayIP)
+	}
+	if createOpts.Name != "port-test-vm-1" {
+		t.Errorf("expected fallback port name %q, got %q", "port-test-vm-1", createOpts.Name)
 	}
 }
 
@@ -483,40 +487,64 @@ func TestBuildPortName(t *testing.T) {
 		name             string
 		vmname           string
 		subnetName       string
+		index            int
 		want             string
 		wantLen          int
-		wantSuffixIntact bool // whether the "-<subnetName>" suffix must survive untruncated
+		wantSuffixIntact bool // whether the "-<subnetName>-<index>"/"-<index>" suffix must survive untruncated
 	}{
 		{
-			name:             "normal case with subnet",
+			name:             "normal case with subnet, first NIC",
 			vmname:           "my-vm",
 			subnetName:       "prod-subnet",
-			want:             "port-my-vm-prod-subnet",
+			index:            1,
+			want:             "port-my-vm-prod-subnet-1",
 			wantSuffixIntact: true,
 		},
 		{
-			name:       "L2 network no subnet",
-			vmname:     "my-vm",
-			subnetName: "",
-			want:       "port-my-vm",
+			name:             "normal case with subnet, second NIC on same subnet",
+			vmname:           "my-vm",
+			subnetName:       "prod-subnet",
+			index:            2,
+			want:             "port-my-vm-prod-subnet-2",
+			wantSuffixIntact: true,
+		},
+		{
+			name:             "L2 network no subnet, first NIC",
+			vmname:           "my-vm",
+			subnetName:       "",
+			index:            1,
+			want:             "port-my-vm-1",
+			wantSuffixIntact: true,
+		},
+		{
+			name:             "L2 network no subnet, second NIC",
+			vmname:           "my-vm",
+			subnetName:       "",
+			index:            2,
+			want:             "port-my-vm-2",
+			wantSuffixIntact: true,
 		},
 		{
 			name:             "vmname truncated to fit 255 limit",
 			vmname:           strings.Repeat("a", 300),
 			subnetName:       "sub",
+			index:            1,
 			wantLen:          constants.NeutronMaxPortNameLen,
 			wantSuffixIntact: true,
 		},
 		{
-			name:       "vmname truncated, L2 (no subnet)",
-			vmname:     strings.Repeat("a", 300),
-			subnetName: "",
-			wantLen:    constants.NeutronMaxPortNameLen,
+			name:             "vmname truncated, L2 (no subnet)",
+			vmname:           strings.Repeat("a", 300),
+			subnetName:       "",
+			index:            1,
+			wantLen:          constants.NeutronMaxPortNameLen,
+			wantSuffixIntact: true,
 		},
 		{
 			name:       "extremely long subnet name exceeds prefix budget",
 			vmname:     "vm",
 			subnetName: strings.Repeat("s", 300),
+			index:      1,
 			wantLen:    constants.NeutronMaxPortNameLen,
 			// subnet name itself doesn't fit even with an empty vmname, so the whole
 			// string is hard-truncated as a last resort and the suffix is not preserved.
@@ -526,25 +554,89 @@ func TestBuildPortName(t *testing.T) {
 			name:             "all short names fit without truncation",
 			vmname:           "vm",
 			subnetName:       "sub",
-			want:             "port-vm-sub",
+			index:            1,
+			want:             "port-vm-sub-1",
 			wantSuffixIntact: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildPortName(tt.vmname, tt.subnetName)
+			got := buildPortName(tt.vmname, tt.subnetName, tt.index)
 			if tt.want != "" && got != tt.want {
-				t.Errorf("buildPortName(%q, %q) = %q, want %q", tt.vmname, tt.subnetName, got, tt.want)
+				t.Errorf("buildPortName(%q, %q, %d) = %q, want %q", tt.vmname, tt.subnetName, tt.index, got, tt.want)
 			}
 			if tt.wantLen > 0 && len(got) != tt.wantLen {
-				t.Errorf("buildPortName(%q, %q) len=%d, want %d", tt.vmname, tt.subnetName, len(got), tt.wantLen)
+				t.Errorf("buildPortName(%q, %q, %d) len=%d, want %d", tt.vmname, tt.subnetName, tt.index, len(got), tt.wantLen)
 			}
 			if len(got) > constants.NeutronMaxPortNameLen {
 				t.Errorf("buildPortName result len=%d exceeds %d: %q", len(got), constants.NeutronMaxPortNameLen, got)
 			}
-			if tt.wantSuffixIntact && !strings.HasSuffix(got, "-"+tt.subnetName) {
-				t.Errorf("buildPortName(%q, %q) = %q, expected suffix %q to be preserved intact for uniqueness", tt.vmname, tt.subnetName, got, "-"+tt.subnetName)
+			wantSuffix := fmt.Sprintf("-%d", tt.index)
+			if tt.subnetName != "" {
+				wantSuffix = "-" + tt.subnetName + wantSuffix
+			}
+			if tt.wantSuffixIntact && !strings.HasSuffix(got, wantSuffix) {
+				t.Errorf("buildPortName(%q, %q, %d) = %q, expected suffix %q to be preserved intact for uniqueness", tt.vmname, tt.subnetName, tt.index, got, wantSuffix)
 			}
 		})
+	}
+}
+
+// TestGetCreateOpts_MultipleNICsSameSubnet_IndexIncrements verifies the fix
+// for the remaining collision case in #2143: a VM with two or more NICs that
+// land on the *same* subnet would still get identical port names under plain
+// port-<vmname>-<subnet-name> naming. Sharing one subnetPortIndex map across
+// the calls (as callers must, one per NIC) makes each subsequent NIC on that
+// subnet get a distinct, incrementing suffix instead.
+func TestGetCreateOpts_MultipleNICsSameSubnet_IndexIncrements(t *testing.T) {
+	const networkID = "net-shared"
+	const subnetID = "subnet-shared"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.Contains(r.URL.Path, "/networks/"+networkID):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"network": map[string]any{"id": networkID, "tags": []string{}},
+			})
+		case strings.Contains(r.URL.Path, "/subnets/"+subnetID):
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"subnet": map[string]any{
+					"id":         subnetID,
+					"name":       "prod-subnet",
+					"cidr":       "10.0.0.0/24",
+					"gateway_ip": "10.0.0.1",
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := &OpenStackClients{NetworkingClient: newTestNetworkingClient(srv)}
+	network := &networks.Network{ID: networkID, Subnets: []string{subnetID}}
+	subnetPortIndex := map[string]int{}
+
+	// NIC 1 and NIC 2 both resolve to the same subnet (different IPs, same /24).
+	opts1, err := client.GetCreateOpts(t.Context(), network, "aa:bb:cc:dd:ee:01",
+		[]vm.IpEntry{{IP: "10.0.0.10", Prefix: 24}}, "test-vm", nil, map[string]string{}, subnetPortIndex)
+	if err != nil {
+		t.Fatalf("first GetCreateOpts call failed: %v", err)
+	}
+	opts2, err := client.GetCreateOpts(t.Context(), network, "aa:bb:cc:dd:ee:02",
+		[]vm.IpEntry{{IP: "10.0.0.20", Prefix: 24}}, "test-vm", nil, map[string]string{}, subnetPortIndex)
+	if err != nil {
+		t.Fatalf("second GetCreateOpts call failed: %v", err)
+	}
+
+	if want := "port-test-vm-prod-subnet-1"; opts1.Name != want {
+		t.Errorf("first NIC port name = %q, want %q", opts1.Name, want)
+	}
+	if want := "port-test-vm-prod-subnet-2"; opts2.Name != want {
+		t.Errorf("second NIC port name = %q, want %q", opts2.Name, want)
+	}
+	if opts1.Name == opts2.Name {
+		t.Fatalf("both NICs on the same subnet got identical port names: %q", opts1.Name)
 	}
 }
