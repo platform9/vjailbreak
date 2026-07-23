@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -354,6 +355,33 @@ func TestBuildWildcardNetplanYAML_DHCPEntry(t *testing.T) {
 	assert.NotContains(t, yaml, "192.168.50.77", "DHCP-sourced IP must not be pinned as a static address")
 }
 
+// TestBuildWildcardNetplanYAML_DHCPOnlyEntryOmitsRoutesAndDNS covers exactly
+// the preserveIP=false + fallbackToDHCP=true + preserveMAC=true case: the MAC
+// is purely DHCP-sourced (no static entries), but gatewayIP[mac] and
+// macToDNS[mac] can still be populated (GetCreateOpts's auto-allocate branch
+// records a gateway even for a DHCP-sourced port, and macToDNS comes from the
+// source VM's GuestNetworks independent of the override). Neither should be
+// written: the DHCP client owns the gateway/DNS entirely, and a hand-written
+// default route or carried-over source-network DNS servers sitting next to
+// dhcp4: true would fight with (or go stale relative to) the actual lease.
+func TestBuildWildcardNetplanYAML_DHCPOnlyEntryOmitsRoutesAndDNS(t *testing.T) {
+	ipPerMac := map[string][]vm.IpEntry{
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+	}
+	gatewayIP := map[string]string{"aa:bb:cc:dd:ee:ff": "192.168.50.1"}
+	guestNetworks := []vjailbreakv1alpha1.GuestNetwork{
+		{MAC: "aa:bb:cc:dd:ee:ff", IP: "10.0.0.5", DNS: []string{"10.0.0.2"}},
+	}
+
+	yaml := buildWildcardNetplanYAML(guestNetworks, gatewayIP, ipPerMac)
+
+	assert.Contains(t, yaml, "dhcp4: true")
+	assert.NotContains(t, yaml, "routes:", "a purely DHCP-sourced MAC must not get a hand-written default route")
+	assert.NotContains(t, yaml, "via: 192.168.50.1")
+	assert.NotContains(t, yaml, "nameservers:", "a purely DHCP-sourced MAC must not get carried-over source-network DNS servers")
+	assert.NotContains(t, yaml, "10.0.0.2")
+}
+
 func TestBuildWildcardNetplanYAML_MixedEntries(t *testing.T) {
 	ipPerMac := map[string][]vm.IpEntry{
 		"aa:bb:cc:dd:ee:ff": {
@@ -361,12 +389,14 @@ func TestBuildWildcardNetplanYAML_MixedEntries(t *testing.T) {
 			{IP: "192.168.50.77", Prefix: 0, DHCP: true},
 		},
 	}
+	gatewayIP := map[string]string{"aa:bb:cc:dd:ee:ff": "10.0.0.1"}
 
-	yaml := buildWildcardNetplanYAML(nil, map[string]string{}, ipPerMac)
+	yaml := buildWildcardNetplanYAML(nil, gatewayIP, ipPerMac)
 
 	assert.Contains(t, yaml, "dhcp4: true", "any DHCP-sourced entry on the NIC should trigger dhcp4: true")
 	assert.Contains(t, yaml, "- 10.0.0.5/24", "the static entry should still be written as an address")
 	assert.NotContains(t, yaml, "192.168.50.77", "the DHCP-sourced entry must not appear under addresses:")
+	assert.Contains(t, yaml, "via: 10.0.0.1", "a route is still written when the NIC also has a static entry")
 }
 
 func TestBuildWildcardNetplanYAML_EmptyEntriesSkipped(t *testing.T) {
@@ -379,15 +409,15 @@ func TestBuildWildcardNetplanYAML_EmptyEntriesSkipped(t *testing.T) {
 	assert.NotContains(t, yaml, "aa:bb:cc:dd:ee:ff", "a MAC with zero entries must get no ethernet stanza")
 }
 
-func TestBuildWildcardNetplanYAML_GatewayUnaffectedByDHCPFlag(t *testing.T) {
+func TestBuildWildcardNetplanYAML_GatewayWrittenForStaticEntry(t *testing.T) {
 	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
+		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 24}},
 	}
 	gatewayIP := map[string]string{"aa:bb:cc:dd:ee:ff": "192.168.50.1"}
 
 	yaml := buildWildcardNetplanYAML(nil, gatewayIP, ipPerMac)
 
-	assert.Contains(t, yaml, "via: 192.168.50.1", "gateway route must still be written for a DHCP-sourced entry")
+	assert.Contains(t, yaml, "via: 192.168.50.1", "gateway route must be written for a static entry")
 }
 
 // ---------------------------------------------------------------------------

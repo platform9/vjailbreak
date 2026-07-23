@@ -615,6 +615,15 @@ func AddWildcardNetplanForL2(disks []vm.VMDisk, diskPath string) error {
 // keep the existing `dhcp4: false` + explicit `addresses:` behavior. A MAC
 // with both (uncommon, e.g. one preserved IP plus one DHCP-fallback IP on
 // the same NIC) gets both stanzas together.
+//
+// A MAC's `routes:`/`nameservers:` are only written when it has at least one
+// static entry — they're only meaningful alongside a static address we
+// determined ourselves. A purely DHCP-sourced MAC (no static entries at all)
+// gets neither: the DHCP client owns the gateway and DNS entirely, so
+// writing our own default route on top would fight with (or go stale
+// relative to) whatever the lease actually provides, and any carried-over
+// DNS servers come from the source VM's original network, which may not
+// even be reachable from the target network.
 func buildWildcardNetplanYAML(guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) string {
 	macToIPs := ipPerMac
 	macToDNS := make(map[string][]string)
@@ -662,6 +671,14 @@ func buildWildcardNetplanYAML(guestNetworks []vjailbreakv1alpha1.GuestNetwork, g
 		} else {
 			b.WriteString("      dhcp4: false\n")
 		}
+		// Gateway and DNS are only meaningful alongside a static address we
+		// determined ourselves (preserved or custom IP). A MAC with no
+		// static entries is purely DHCP-sourced, so the DHCP client owns
+		// the gateway and DNS entirely — writing our own routes/nameservers
+		// on top would fight with (or go stale relative to) whatever the
+		// DHCP lease actually provides, and any carried-over DNS servers
+		// here come from the source VM's original network, which may not
+		// even be reachable from the target network.
 		if len(staticEntries) > 0 {
 			b.WriteString("      addresses:\n")
 			for _, e := range staticEntries {
@@ -672,21 +689,21 @@ func buildWildcardNetplanYAML(guestNetworks []vjailbreakv1alpha1.GuestNetwork, g
 				}
 				b.WriteString(fmt.Sprintf("        - %s/%d\n", e.IP, prefix))
 			}
-		}
-		if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
-			if !routesAdded {
-				log.Printf("Writing default routes")
-				b.WriteString("      routes:\n")
-				b.WriteString("        - to: default\n")
-				b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
-				routesAdded = true
+			if gateway, ok := gatewayIP[mac]; ok && gateway != "" {
+				if !routesAdded {
+					log.Printf("Writing default routes")
+					b.WriteString("      routes:\n")
+					b.WriteString("        - to: default\n")
+					b.WriteString(fmt.Sprintf("          via: %s\n", gateway))
+					routesAdded = true
+				}
 			}
-		}
-		if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
-			b.WriteString("      nameservers:\n")
-			b.WriteString("        addresses:\n")
-			for _, d := range dns {
-				b.WriteString(fmt.Sprintf("          - %s\n", d))
+			if dns, ok := macToDNS[mac]; ok && len(dns) > 0 {
+				b.WriteString("      nameservers:\n")
+				b.WriteString("        addresses:\n")
+				for _, d := range dns {
+					b.WriteString(fmt.Sprintf("          - %s\n", d))
+				}
 			}
 		}
 		idx++
