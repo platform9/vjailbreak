@@ -370,6 +370,7 @@ export interface MigrationOptionsPropsInterface {
   stepNumber: string
   showHeader?: boolean
   hasSubnetMismatch?: boolean
+  hasPreserveIpDisabled?: boolean
   // True while a template/retry prefill is populating the form. Async global-default
   // effects must skip entirely in this window rather than race the prefill on load-order — settings and
   // prefill can each resolve first depending on network timing, so "only seed if unset"
