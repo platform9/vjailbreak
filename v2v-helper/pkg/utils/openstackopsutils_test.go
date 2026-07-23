@@ -480,67 +480,70 @@ func TestSetVolumeBootable_ErrorButNotBootableReturnsError(t *testing.T) {
 
 func TestBuildPortName(t *testing.T) {
 	tests := []struct {
-		name        string
-		networkName string
-		subnetName  string
-		vmname      string
-		want        string
-		wantLen     int
+		name             string
+		vmname           string
+		subnetName       string
+		want             string
+		wantLen          int
+		wantSuffixIntact bool // whether the "-<subnetName>" suffix must survive untruncated
 	}{
 		{
-			name:        "normal case with subnet",
-			networkName: "prod-net",
-			subnetName:  "prod-subnet",
-			vmname:      "my-vm",
-			want:        "port-prod-net-prod-subnet-my-vm",
+			name:             "normal case with subnet",
+			vmname:           "my-vm",
+			subnetName:       "prod-subnet",
+			want:             "port-my-vm-prod-subnet",
+			wantSuffixIntact: true,
 		},
 		{
-			name:        "L2 network no subnet",
-			networkName: "l2-net",
-			subnetName:  "",
-			vmname:      "my-vm",
-			want:        "port-l2-net-my-vm",
+			name:       "L2 network no subnet",
+			vmname:     "my-vm",
+			subnetName: "",
+			want:       "port-my-vm",
 		},
 		{
-			name:        "vmname truncated to fit 255 limit",
-			networkName: "net",
-			subnetName:  "sub",
-			vmname:      strings.Repeat("a", 300),
-			wantLen:     constants.NeutronMaxPortNameLen,
+			name:             "vmname truncated to fit 255 limit",
+			vmname:           strings.Repeat("a", 300),
+			subnetName:       "sub",
+			wantLen:          constants.NeutronMaxPortNameLen,
+			wantSuffixIntact: true,
 		},
 		{
-			name:        "long network+subnet forces vmname truncation",
-			networkName: strings.Repeat("n", 100),
-			subnetName:  strings.Repeat("s", 100),
-			vmname:      strings.Repeat("v", 100),
-			wantLen:     constants.NeutronMaxPortNameLen,
+			name:       "vmname truncated, L2 (no subnet)",
+			vmname:     strings.Repeat("a", 300),
+			subnetName: "",
+			wantLen:    constants.NeutronMaxPortNameLen,
 		},
 		{
-			name:        "extremely long network+subnet exceeds prefix budget",
-			networkName: strings.Repeat("n", 200),
-			subnetName:  strings.Repeat("s", 100),
-			vmname:      "vm",
-			wantLen:     constants.NeutronMaxPortNameLen,
+			name:       "extremely long subnet name exceeds prefix budget",
+			vmname:     "vm",
+			subnetName: strings.Repeat("s", 300),
+			wantLen:    constants.NeutronMaxPortNameLen,
+			// subnet name itself doesn't fit even with an empty vmname, so the whole
+			// string is hard-truncated as a last resort and the suffix is not preserved.
+			wantSuffixIntact: false,
 		},
 		{
-			name:        "all short names fit without truncation",
-			networkName: "net",
-			subnetName:  "sub",
-			vmname:      "vm",
-			want:        "port-net-sub-vm",
+			name:             "all short names fit without truncation",
+			vmname:           "vm",
+			subnetName:       "sub",
+			want:             "port-vm-sub",
+			wantSuffixIntact: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := buildPortName(tt.networkName, tt.subnetName, tt.vmname)
+			got := buildPortName(tt.vmname, tt.subnetName)
 			if tt.want != "" && got != tt.want {
-				t.Errorf("buildPortName(%q, %q, %q) = %q, want %q", tt.networkName, tt.subnetName, tt.vmname, got, tt.want)
+				t.Errorf("buildPortName(%q, %q) = %q, want %q", tt.vmname, tt.subnetName, got, tt.want)
 			}
 			if tt.wantLen > 0 && len(got) != tt.wantLen {
-				t.Errorf("buildPortName(%q, %q, %q) len=%d, want %d", tt.networkName, tt.subnetName, tt.vmname, len(got), tt.wantLen)
+				t.Errorf("buildPortName(%q, %q) len=%d, want %d", tt.vmname, tt.subnetName, len(got), tt.wantLen)
 			}
 			if len(got) > constants.NeutronMaxPortNameLen {
 				t.Errorf("buildPortName result len=%d exceeds %d: %q", len(got), constants.NeutronMaxPortNameLen, got)
+			}
+			if tt.wantSuffixIntact && !strings.HasSuffix(got, "-"+tt.subnetName) {
+				t.Errorf("buildPortName(%q, %q) = %q, expected suffix %q to be preserved intact for uniqueness", tt.vmname, tt.subnetName, got, "-"+tt.subnetName)
 			}
 		})
 	}

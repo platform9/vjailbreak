@@ -695,30 +695,31 @@ func (osclient *OpenStackClients) CheckIfPortExists(ctx context.Context, ipEntri
 }
 
 // buildPortName constructs a unique, human-readable port name for OpenStack.
-// Format: port-<networkName>-<subnetName>-<vmname> (or port-<networkName>-<vmname> for L2).
-// The vmname segment is truncated to fit within the Neutron 255-character limit.
-func buildPortName(networkName, subnetName, vmname string) string {
-	var prefix string
+// Format: port-<vmname>-<subnetName> (or port-<vmname> for L2 networks, which have no subnet).
+// The vmname segment is truncated as needed to fit within the Neutron 255-character limit;
+// the subnet-name suffix (the part relied on for uniqueness) is always preserved intact.
+func buildPortName(vmname, subnetName string) string {
+	const prefix = "port-"
+	suffix := ""
 	if subnetName != "" {
-		prefix = fmt.Sprintf("port-%s-%s-", networkName, subnetName)
-	} else {
-		prefix = fmt.Sprintf("port-%s-", networkName)
+		suffix = "-" + subnetName
 	}
-	remaining := constants.NeutronMaxPortNameLen - len(prefix)
-	if remaining <= 0 {
-		return (prefix + vmname)[:constants.NeutronMaxPortNameLen]
+	maxVMNameLen := constants.NeutronMaxPortNameLen - len(prefix) - len(suffix)
+	if maxVMNameLen <= 0 {
+		// prefix + suffix alone exceed the limit; truncate the whole result as a last resort.
+		return (prefix + vmname + suffix)[:constants.NeutronMaxPortNameLen]
 	}
-	if len(vmname) > remaining {
-		return prefix + vmname[:remaining]
+	if len(vmname) > maxVMNameLen {
+		vmname = vmname[:maxVMNameLen]
 	}
-	return prefix + vmname
+	return prefix + vmname + suffix
 }
 
 func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *networks.Network, mac string, ipEntries []vm.IpEntry, vmname string, securityGroups []string, gatewayIP map[string]string) (ports.CreateOpts, error) {
 
-	// Default: network-only name (L2 networks have no subnets). Overridden below when subnet is available.
+	// Default: vmname-only name (L2 networks have no subnets). Overridden below when subnet is available.
 	createOpts := ports.CreateOpts{
-		Name:           buildPortName(network.Name, "", vmname),
+		Name:           buildPortName(vmname, ""),
 		NetworkID:      network.ID,
 		SecurityGroups: &securityGroups,
 	}
@@ -749,7 +750,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 				return createOpts, fmt.Errorf("subnet not found for IP %s", ipEntry.IP)
 			} else {
 				if !nameSet {
-					createOpts.Name = buildPortName(network.Name, subnetId.Name, vmname)
+					createOpts.Name = buildPortName(vmname, subnetId.Name)
 					nameSet = true
 				}
 				gatewayIP[mac] = subnetId.GatewayIP
@@ -769,7 +770,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 		if !isL2Network && len(network.Subnets) > 0 {
 			subnetID, err := subnets.Get(ctx, osclient.NetworkingClient, network.Subnets[0]).Extract()
 			if err == nil {
-				createOpts.Name = buildPortName(network.Name, subnetID.Name, vmname)
+				createOpts.Name = buildPortName(vmname, subnetID.Name)
 			}
 		}
 	} else if len(network.Subnets) > 0 {
@@ -780,7 +781,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 			return createOpts, fmt.Errorf("subnet not found for network %s", network.ID)
 		}
 		gatewayIP[mac] = subnetID.GatewayIP
-		createOpts.Name = buildPortName(network.Name, subnetID.Name, vmname)
+		createOpts.Name = buildPortName(vmname, subnetID.Name)
 	} else {
 		// nil ipEntries but the network has no subnets at all (e.g. an L2-only
 		// network that legitimately has zero subnets). There's no subnet to
