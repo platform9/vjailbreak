@@ -136,7 +136,7 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeFailed,
 			corev1.ConditionTrue,
 			constants.MigrationReason,
-			eventList.Items[i].Message,
+			cleanFailureMessage(eventList.Items[i].Message),
 			eventList.Items[i].LastTimestamp)
 
 		if idx == -1 {
@@ -146,6 +146,25 @@ func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *c
 		}
 	}
 	return existingConditions
+}
+
+// cleanFailureMessage strips the generic "Trying to perform cleanup" boilerplate
+// that migobj.cleanup() appends to the actual v2v-helper error (see
+// constants.EventMessageMigrationFailed), so the Failed condition's message -
+// and therefore what the UI shows in its progress tooltip and failure banner -
+// is just the concise, actionable root cause rather than the full wrapped
+// error chain plus cleanup-status prose.
+func cleanFailureMessage(msg string) string {
+	msg = strings.TrimSpace(msg)
+
+	if idx := strings.Index(msg, ". "+constants.EventMessageMigrationFailed); idx != -1 {
+		msg = msg[:idx]
+	} else {
+		msg = strings.TrimSuffix(msg, constants.EventMessageMigrationFailed)
+	}
+	msg = strings.TrimSpace(msg)
+	msg = strings.TrimSuffix(msg, ".")
+	return strings.TrimSpace(msg)
 }
 
 // CreateSucceededCondition creates or updates a succeeded condition for a migration based on events.
