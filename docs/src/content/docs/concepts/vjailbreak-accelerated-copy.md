@@ -31,6 +31,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 
 - **Proxy VM**: A Linux VM running in the same vCenter with `qemu-nbd` and `openssh-server` installed
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
+- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
@@ -290,7 +291,7 @@ Error: failed to connect to NBD endpoint on proxy VM
 **Resolution:**
 1. Verify the Proxy VM is still running and SSH is accessible
 2. Check that `qemu-nbd` started successfully — review v2v helper logs
-3. Ensure the NBD port (typically in the 10809+ range) is not blocked by a firewall between the Proxy VM and vJailbreak
+3. Ensure the NBD ports (TCP **10809–11808**, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and vJailbreak
 4. Confirm the Proxy VM's guest IP is correct (VMware Tools must be running)
 
 ### Block Device Not Found in Proxy VM
