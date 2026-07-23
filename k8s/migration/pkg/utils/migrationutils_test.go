@@ -177,6 +177,11 @@ func TestCreateSucceededCondition(t *testing.T) {
 			}
 			if hasMigrated != tt.wantMigrated {
 				t.Errorf("hasMigrated = %v, want %v", hasMigrated, tt.wantMigrated)
+			}
+		})
+	}
+}
+
 func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 	tests := []struct {
 		name            string
