@@ -135,6 +135,14 @@ func newHandlePool(size int, sockUrl string) (*handlePool, error) {
 		if err := handle.ConnectUri(sockUrl); err != nil {
 			handle.Close()
 			pool.Close()
+			// libnbd's own error rarely says more than "connection refused" -
+			// the actual reason (DNS failure, port 902 blocked, bad
+			// thumbprint, etc.) is in nbdkit's own stdout/stderr, captured in
+			// the dedicated "nbd" debug log. Pull the most relevant line out
+			// of it and fold it into the returned error.
+			if reason := nbdFailureReasonFromLatestLog(); reason != "" {
+				return nil, fmt.Errorf("failed to connect handle %d: %v: %s", handleIdx, err, reason)
+			}
 			return nil, fmt.Errorf("failed to connect handle %d: %v", handleIdx, err)
 		}
 		pool.all = append(pool.all, handle)
@@ -327,10 +335,38 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 		cmd.Stderr = os.Stderr
 		err = cmd.Run()
 		if err != nil {
+			// nbdcopy/nbdkit's own error is rarely more than "exit status 1".
+			// The actionable root cause (ESXi DNS resolution failure, port
+			// 902 blocked, bad thumbprint, NFC resource exhaustion, etc.) is
+			// only in the dedicated nbd debug log, so pull the most relevant
+			// line out of it and fold it into the returned error.
+			if reason := nbdFailureReasonFromLatestLog(); reason != "" {
+				return errors.Wrapf(err, "failed to run nbdcopy: %s", reason)
+			}
 			return errors.Wrapf(err, "failed to run nbdcopy")
 		}
 	}
 	return nil
+}
+
+// nbdFailureReasonFromLatestLog looks up the debug log file that was just
+// written for the current migration's nbd-category commands (nbdkit,
+// nbdcopy) and extracts a concise, human-readable root-cause line from it.
+// Returns "" if the migration name or log file can't be resolved, or no
+// error line is found - in which case callers should fall back to the raw
+// process error.
+func nbdFailureReasonFromLatestLog() string {
+	migrationName, err := utils.GetMigrationObjectName()
+	if err != nil {
+		return ""
+	}
+
+	logPath, err := utils.GetLatestLogFilePath(migrationName, utils.LogCategoryNBD)
+	if err != nil {
+		return ""
+	}
+
+	return utils.ExtractNBDFailureReason(logPath)
 }
 
 func getBlockStatus(handle *libnbd.Libnbd, extent types.DiskChangeExtent) []*BlockStatusData {
