@@ -15,6 +15,23 @@ interface UseNetworkSubnetCompatibilityParams {
   openstackNetworks: PCDNetworkInfo[]
 }
 
+/**
+ * Signature used to decide whether a recompute is needed. Must change whenever
+ * either the network mappings OR the per-network IP data changes — keying off
+ * mappings alone misses IP edits/clears made after a mapping is created, which
+ * leaves the subnet-mismatch warning stuck showing the pre-edit IP.
+ */
+export function computeSubnetCheckSignature(
+  mappings: Array<{ source?: string; target?: string }>,
+  networkIPsMap: Map<string, string[]>
+): string {
+  const mappingsKey = mappings.map((m) => `${m.source}|${m.target}`).join(',')
+  const ipsKey = mappings
+    .map((m) => `${m.source}:${[...(networkIPsMap.get(m.source ?? '') ?? [])].sort().join(',')}`)
+    .join('|')
+  return `${mappingsKey}::${ipsKey}`
+}
+
 export function useNetworkSubnetCompatibility({
   networkMappings,
   openstackCredentials,
@@ -23,7 +40,7 @@ export function useNetworkSubnetCompatibility({
   openstackNetworks
 }: UseNetworkSubnetCompatibilityParams): Record<string, string> {
   const [subnetWarnings, setSubnetWarnings] = useState<Record<string, string>>({})
-  const prevMappingsRef = useRef<string>('')
+  const prevSignatureRef = useRef<string>('')
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const apiCacheRef = useRef<Map<string, CheckNetworkSubnetCompatibilityResponse>>(new Map())
   const prevCredNameRef = useRef<string | undefined>(undefined)
@@ -31,9 +48,9 @@ export function useNetworkSubnetCompatibility({
   useEffect(() => {
     const completeMappings = (networkMappings || []).filter((m) => m.source && m.target)
 
-    const mappingsKey = completeMappings.map((m) => `${m.source}|${m.target}`).join(',')
-    if (mappingsKey === prevMappingsRef.current) return
-    prevMappingsRef.current = mappingsKey
+    const signature = computeSubnetCheckSignature(completeMappings, networkIPsMap)
+    if (signature === prevSignatureRef.current) return
+    prevSignatureRef.current = signature
 
     if (!openstackCredentials || completeMappings.length === 0 || selectedVMs.length === 0) {
       setSubnetWarnings({})
