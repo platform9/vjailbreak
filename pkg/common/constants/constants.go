@@ -648,6 +648,9 @@ runcmd:
 	// MigrationConditionTypeMigrated represents the condition type for successful completion
 	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
+	// MigrationConditionTypeDataCopied represents the condition type for DataOnly migration completion
+	MigrationConditionTypeDataCopied corev1.PodConditionType = "DataCopied"
+
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
 		vjailbreakv1alpha1.VMMigrationPhasePending:               0,

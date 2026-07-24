@@ -16,6 +16,7 @@ export const PHASE_STEPS: Record<string, number> = {
   [Phase.AwaitingCutOverStartTime]: 7,
   [Phase.AwaitingAdminCutOver]: 8,
   [Phase.Succeeded]: 9,
+  [Phase.DataCopied]: 9,
   [Phase.Failed]: 10,
   [Phase.ValidationFailed]: 11
 }
@@ -49,7 +50,7 @@ export type MigrationStatusCategory =
 // page stat cards; also drives the "click to filter" status filter on the table.
 export function getMigrationStatusCategory(phase: Phase | undefined): MigrationStatusCategory {
   if (!phase || phase === Phase.Pending) return 'pending'
-  if (phase === Phase.Succeeded) return 'succeeded'
+  if (phase === Phase.Succeeded || phase === Phase.DataCopied) return 'succeeded'
   if (phase === Phase.Failed || phase === Phase.ValidationFailed) return 'failed'
   if (AWAITING_ACTION_PHASES.includes(phase)) return 'awaitingAction'
   return 'inProgress'
@@ -120,7 +121,7 @@ export const getProgressText = (
 
   const message = latestCondition?.message || phase
 
-  if (phase === Phase.Failed || phase === Phase.ValidationFailed || phase === Phase.Succeeded) {
+  if (phase === Phase.Failed || phase === Phase.ValidationFailed || phase === Phase.Succeeded || phase === Phase.DataCopied) {
     return `${phase} - ${message}`
   }
 

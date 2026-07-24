@@ -185,17 +185,23 @@ export function derivePhaseStates(
     : rawIndex
   const failed = isFailed(phase as Phase)
   const succeeded = phase === Phase.Succeeded || phase === Phase.DataCopied
+  const dataOnly = migration.spec?.dataOnly === true
 
   return DESIGN_PHASE_DEFS.map((_, i): PhaseState => {
     if (succeeded) {
+      // DataOnly migrations skip cutover: step 3 was never executed.
+      if (dataOnly && i === 3) {
+        return { status: 'pending', elapsed: null, detail: 'Skipped — no cutover in data-only migration.', eta: null }
+      }
       const condType =
         i === 1 ? 'Validated' :
         i === 2 ? 'DataCopy' :
         i === 3 ? 'Migrating' :
         i === 4 ? 'Migrating' :
-        i === 5 ? 'Migrated' : ''
+        i === 5 ? (dataOnly ? 'DataCopied' : 'Migrated') : ''
       const elapsed = conditionElapsed(creationTs?.toString(), conditions, condType) ?? null
-      return { status: 'done', elapsed, detail: doneDetail(i, conditions), eta: null }
+      const detail = (dataOnly && i === 5) ? 'Disk copy and conversion complete.' : doneDetail(i, conditions)
+      return { status: 'done', elapsed, detail, eta: null }
     }
 
     if (failed) {
