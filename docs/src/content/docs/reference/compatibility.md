@@ -24,9 +24,11 @@ add support for additional versions. Verified implies it has been tested and con
 | AlmaLinux | linux/amd64 | No | Yes |
 | Amazon Linux 2 | linux/amd64 | No | Yes |
 | CentOS 4/5  | linux/i386 | No | Yes |
-| CentOS 4/5  | linux/amd64 | No | Yes |
+| CentOS 4  | linux/amd64 | No | Yes |
+| CentOS 5  | linux/amd64 | Yes | Yes |
 | CentOS 6  | linux/amd64 | Yes | Yes |
 | CentOS 7 | linux/amd64 | Yes | Yes |
+| CentOS 8 | linux/amd64 | Yes | Yes |
 | CentOS 9 | linux/amd64 | Yes | Yes |
 | CentOS Stream10 | linux/amd64 | No | Yes |
 | Debian GNU/Linux 8 (64-bit) | linux/amd64 | No | Yes |
