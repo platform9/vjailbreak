@@ -1,5 +1,11 @@
 import { Box, CircularProgress, Typography, styled } from '@mui/material'
-import { DataGrid, DataGridProps, GridOverlay, GridValidRowModel } from '@mui/x-data-grid'
+import {
+  DataGrid,
+  DataGridProps,
+  GridOverlay,
+  GridValidRowModel,
+  GRID_CHECKBOX_SELECTION_COL_DEF
+} from '@mui/x-data-grid'
 import { alpha } from '@mui/material/styles'
 import type { SxProps, Theme } from '@mui/material/styles'
 
@@ -50,6 +56,9 @@ type CommonDataGridProps<R extends GridValidRowModel> = DataGridProps<R> & {
   emptyMessage?: string
 }
 
+export const defaultGetTogglableColumns = (columns: { field: string }[]) =>
+  columns.filter((column) => column.field !== GRID_CHECKBOX_SELECTION_COL_DEF.field).map((column) => column.field)
+
 export default function CommonDataGrid<R extends GridValidRowModel>(props: CommonDataGridProps<R>) {
   const { loadingMessage, emptyMessage, slots, slotProps, sx, ...rest } = props
 
@@ -57,6 +66,14 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
     loadingOverlay: () => <DefaultLoadingOverlay loadingMessage={loadingMessage} />,
     noRowsOverlay: () => <DefaultNoRowsOverlay emptyMessage={emptyMessage} />,
     ...slots
+  }
+
+  const mergedSlotProps = {
+    ...slotProps,
+    columnsManagement: {
+      getTogglableColumns: defaultGetTogglableColumns,
+      ...slotProps?.columnsManagement
+    }
   }
 
   const baseSx = (theme) => ({
@@ -126,5 +143,5 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
     return [baseSx, sx]
   })()
 
-  return <DataGrid {...rest} slots={mergedSlots} slotProps={slotProps} sx={mergedSx} />
+  return <DataGrid {...rest} slots={mergedSlots} slotProps={mergedSlotProps} sx={mergedSx} />
 }
