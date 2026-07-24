@@ -123,24 +123,13 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
-// eventMessageRecoveredFromTimeout is the one known message that legitimately contains
-// "failed to" while describing a migration that RECOVERED, not one that failed: when
-// CreateTargetInstance times out but verifyVMCreatedDespiteTimeout later confirms the VM
-// was actually created, migrate.go logs "VM created despite CreateTargetInstance error
-// (failed to create VM: ...), skipping cleanup" and continues normally. It must never be
-// mistaken for a terminal failure.
+// eventMessageRecoveredFromTimeout marks a recovery message that mentions "failed to" but
+// is not an actual failure.
 const eventMessageRecoveredFromTimeout = "skipping cleanup"
 
 // isFailureEventMessage reports whether an event message represents a genuine terminal
-// migration failure. It matches the cleanup-boilerplate marker (set when migobj.cleanup()
-// runs), virt-v2v/nbd root-cause messages surfaced from debug logs (e.g. "failed to run
-// nbdcopy: ...", see v2v-helper/nbd/nbdops.go and virtv2v/virtv2vops.go), and v2v-helper's
-// top-level error handling in main.go (e.g. "Failed to migrate VM: ..." and early setup
-// failures before MigrateVM even starts) — case-insensitively, since these come from
-// different layers with inconsistent capitalization. It excludes "Warning: ..." messages
-// (non-fatal mid-migration warnings, e.g. migrate.go's get-bootable-partition/
-// generate-mount-persistence warnings) and the timeout-recovery message above, neither of
-// which represent an actual failure.
+// migration failure, matched case-insensitively. Warning messages and the timeout-recovery
+// message are excluded since they don't represent a real failure.
 func isFailureEventMessage(msg string) bool {
 	trimmed := strings.TrimSpace(msg)
 	if strings.HasPrefix(trimmed, constants.EventMessageWarningPrefix) {
