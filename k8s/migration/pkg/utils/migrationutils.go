@@ -252,6 +252,31 @@ func SortConditionsByLastTransitionTime(conditions []corev1.PodCondition) {
 	})
 }
 
+// CreateDataCopiedCondition creates a DataCopied condition for DataOnly migrations when disk copy and conversion complete.
+func CreateDataCopiedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	for i := 0; i < len(eventList.Items); i++ {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, constants.EventMessageDataCopied) {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeDataCopied, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeDataCopied,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			"DataOnly: disk copy and conversion complete",
+			eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+		break
+	}
+	return existingConditions
+}
+
 // CreateStorageAcceleratedCopyCondition creates a StorageAcceleratedCopy condition for a migration based on StorageAcceleratedCopy-specific events
 func CreateStorageAcceleratedCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions

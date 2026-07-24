@@ -237,6 +237,61 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 	}
 }
 
+func TestCreateDataCopiedCondition(t *testing.T) {
+	tests := []struct {
+		name          string
+		events        []corev1.Event
+		wantCondition bool
+	}{
+		{
+			name: "DataCopied event creates DataCopied condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, constants.EventMessageDataCopied),
+			},
+			wantCondition: true,
+		},
+		{
+			name: "wrong reason ignored",
+			events: []corev1.Event{
+				makeEvent("OtherReason", constants.EventMessageDataCopied),
+			},
+			wantCondition: false,
+		},
+		{
+			name:          "empty events produces no condition",
+			events:        []corev1.Event{},
+			wantCondition: false,
+		},
+		{
+			name: "unrelated event ignored",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "VM created successfully"),
+			},
+			wantCondition: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migration := makeMigration()
+			eventList := &corev1.EventList{Items: tt.events}
+
+			got := CreateDataCopiedCondition(migration, eventList)
+
+			hasCondition := false
+			for _, c := range got {
+				if c.Type == constants.MigrationConditionTypeDataCopied {
+					hasCondition = true
+					break
+				}
+			}
+			if hasCondition != tt.wantCondition {
+				t.Errorf("hasDataCopiedCondition = %v, want %v", hasCondition, tt.wantCondition)
+			}
+		})
+	}
+}
+
 func TestCleanFailureMessage(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -214,6 +214,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
+	if migration.Spec.DataOnly {
+		migration.Status.Conditions = utils.CreateDataCopiedCondition(migration, filteredEvents)
+	}
 
 	migration.Status.AgentName = pod.Spec.NodeName
 
