@@ -38,17 +38,17 @@ func (m *MockNBDOperations) EXPECT() *MockNBDOperationsMockRecorder {
 }
 
 // CopyChangedBlocks mocks base method.
-func (m *MockNBDOperations) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
+func (m *MockNBDOperations) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyChangedBlocks", ctx, changedAreas, path)
+	ret := m.ctrl.Call(m, "CopyChangedBlocks", ctx, changedAreas, path, destEncrypted)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CopyChangedBlocks indicates an expected call of CopyChangedBlocks.
-func (mr *MockNBDOperationsMockRecorder) CopyChangedBlocks(ctx, changedAreas, path interface{}) *gomock.Call {
+func (mr *MockNBDOperationsMockRecorder) CopyChangedBlocks(ctx, changedAreas, path, destEncrypted interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyChangedBlocks", reflect.TypeOf((*MockNBDOperations)(nil).CopyChangedBlocks), ctx, changedAreas, path)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyChangedBlocks", reflect.TypeOf((*MockNBDOperations)(nil).CopyChangedBlocks), ctx, changedAreas, path, destEncrypted)
 }
 
 // CopyDisk mocks base method.

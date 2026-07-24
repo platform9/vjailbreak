@@ -610,7 +610,7 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			changedBlockCopySuccess := true
 			startTime := time.Now()
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
-			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path, vminfo.VMDisks[idx].OpenstackVol.Encrypted)
 			if err != nil {
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to copy changed blocks for disk %d: %v", idx, err))
 				select {
@@ -1066,7 +1066,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 
 					// Use exponential backoff for retry logic (3 retries, 30 second cap)
 					copyErr := utils.DoRetryWithExponentialBackoff(ctx, func() error {
-						return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path)
+						return nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path, vminfo.VMDisks[idx].OpenstackVol.Encrypted)
 					}, 3, 30*time.Second)
 
 					if copyErr != nil {
