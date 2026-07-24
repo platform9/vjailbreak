@@ -674,9 +674,10 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover
 		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks: 14,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:       15,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:            16,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:              17,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk: 15,
+		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:    16,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:     17,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:       18,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

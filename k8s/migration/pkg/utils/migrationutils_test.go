@@ -189,10 +189,10 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 		expectedMessage string
 	}{
 		{
-			name: "virt-v2v free space error without cleanup path",
+			name: "virt-v2v free space error strips trailing period and cleanup boilerplate",
 			eventMessage: "Failed to migrate VM: failed to convert disks: failed to run virt-v2v: " +
 				"failed to run virt-v2v-in-place: exit status 1: virt-v2v-in-place: error: not enough free space " +
-				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed. ",
+				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed.. Trying to perform cleanup",
 			expectedMessage: "Failed to migrate VM: failed to convert disks: failed to run virt-v2v: " +
 				"failed to run virt-v2v-in-place: exit status 1: virt-v2v-in-place: error: not enough free space " +
 				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed",
@@ -203,9 +203,9 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 			expectedMessage: "failed to convert volumes: failed to run virt-v2v: exit status 1: some root cause",
 		},
 		{
-			name:            "message without trailing period or cleanup suffix is unchanged",
-			eventMessage:    "failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
-			expectedMessage: "failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
+			name:            "message with cleanup suffix but no trailing period before it is cleaned",
+			eventMessage:    "Failed to migrate VM: failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error. Trying to perform cleanup",
+			expectedMessage: "Failed to migrate VM: failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
 		},
 	}
 
