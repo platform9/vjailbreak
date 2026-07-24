@@ -122,14 +122,7 @@ function activeDetail(migration: Migration, designIndex: number): string {
       return 'Transferring disk data…'
     }
     case 3: return 'Waiting for admin to initiate cutover.'
-    case 4: {
-      if (status?.currentDisk != null && status?.totalDisks) {
-        const diskNum = parseInt(String(status.currentDisk), 10)
-        const display = Number.isNaN(diskNum) ? status.currentDisk : diskNum + 1
-        return `Converting disk ${display} of ${status.totalDisks}`
-      }
-      return 'Converting disk format…'
-    }
+    case 4: return 'Converting disk format…'
     default: return 'In progress…'
   }
 }
