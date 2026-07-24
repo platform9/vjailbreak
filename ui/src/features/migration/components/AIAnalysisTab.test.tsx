@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { vi } from 'vitest'
 import AIAnalysisTab from './AIAnalysisTab'
 import * as aiAnalysis from 'src/api/ai/aiAnalysis'
@@ -9,17 +10,25 @@ vi.mock('src/api/ai/aiAnalysis', () => ({
 }))
 
 const mockAnalyze = aiAnalysis.analyzeMigration as ReturnType<typeof vi.fn>
+const mockGetKeyStatus = aiAnalysis.getAIKeyStatus as ReturnType<typeof vi.fn>
 
 const defaultProps = {
   migrationName: 'migration-my-vm-abc12',
   namespace: 'migration-system',
 }
 
+const renderTab = (props = defaultProps) =>
+  render(
+    <MemoryRouter>
+      <AIAnalysisTab {...props} />
+    </MemoryRouter>
+  )
+
 describe('AIAnalysisTab', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('shows idle prompt before analysis is triggered', async () => {
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     // wait for getAIKeyStatus to resolve
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
@@ -30,7 +39,7 @@ describe('AIAnalysisTab', () => {
 
   it('shows spinner while waiting for response', async () => {
     mockAnalyze.mockImplementation(() => new Promise(() => {}))
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
     })
@@ -48,7 +57,7 @@ describe('AIAnalysisTab', () => {
       github_issue: { should_open: false },
       raw_response: '',
     })
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
     })
@@ -73,7 +82,7 @@ describe('AIAnalysisTab', () => {
       },
       raw_response: '',
     })
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
     })
@@ -84,7 +93,7 @@ describe('AIAnalysisTab', () => {
 
   it('shows error alert on API failure', async () => {
     mockAnalyze.mockRejectedValue(new Error('Service unavailable'))
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
     })
@@ -107,7 +116,7 @@ describe('AIAnalysisTab', () => {
       ...initial,
       root_cause: 'Follow-up answered',
     })
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled()
     })
@@ -135,7 +144,7 @@ describe('AIAnalysisTab', () => {
       github_issue: { should_open: false },
       raw_response: 'initial response',
     })
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     // Wait for key status check to complete, then trigger analysis
     await waitFor(() => expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: /analyse with ai/i }))
@@ -159,7 +168,7 @@ describe('AIAnalysisTab', () => {
     const secondResponse = { ...firstResponse, root_cause: 'Second analysis', raw_response: 'second response' }
     mockAnalyze.mockResolvedValueOnce(firstResponse).mockResolvedValueOnce(secondResponse)
 
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: /analyse with ai/i }))
     await screen.findByText(/first analysis/i)
@@ -194,7 +203,7 @@ describe('AIAnalysisTab', () => {
       raw_response: 'follow-up response',
     })
 
-    render(<AIAnalysisTab {...defaultProps} />)
+    renderTab()
     await waitFor(() => expect(screen.getByRole('button', { name: /analyse with ai/i })).not.toBeDisabled())
     fireEvent.click(screen.getByRole('button', { name: /analyse with ai/i }))
     await screen.findByText(/dns failure/i)
@@ -211,5 +220,22 @@ describe('AIAnalysisTab', () => {
     expect(secondCall.conversation_history[0].role).toBe('assistant')
     expect(secondCall.conversation_history[0].content).toBe('initial assistant response')
     expect(secondCall.question).toBe('What does this mean?')
+  })
+
+  it('navigates to the AI tab of Global Settings when the key is not configured', async () => {
+    mockGetKeyStatus.mockResolvedValueOnce({ configured: false })
+    render(
+      <MemoryRouter initialEntries={['/dashboard/migrations/migration-my-vm-abc12']}>
+        <Routes>
+          <Route path="/dashboard/migrations/:migrationName" element={<AIAnalysisTab {...defaultProps} />} />
+          <Route path="/dashboard/global-settings" element={<div>Global Settings Page</div>} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    const link = await screen.findByRole('button', { name: /configure in settings/i })
+    fireEvent.click(link)
+
+    expect(await screen.findByText('Global Settings Page')).toBeInTheDocument()
   })
 })
