@@ -13,6 +13,7 @@ export const createMigrationPlanJson = (params) => {
     adminInitiatedCutOver,
     postMigrationAction,
     disconnectSourceNetwork = false,
+    dataOnly = false,
     securityGroups,
     serverGroup,
     fallbackToDHCP = false,
@@ -37,7 +38,8 @@ export const createMigrationPlanJson = (params) => {
       adminInitiatedCutOver,
       vmCutoverStart,
       vmCutoverEnd,
-      disconnectSourceNetwork
+      disconnectSourceNetwork,
+      ...(dataOnly ? { dataOnly: true } : {})
     },
     virtualMachines: [virtualMachines],
     fallbackToDHCP

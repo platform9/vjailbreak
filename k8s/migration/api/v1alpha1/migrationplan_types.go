@@ -45,6 +45,10 @@ type MigrationPlanStrategy struct {
 	DisconnectSourceNetwork bool `json:"disconnectSourceNetwork,omitempty"`
 	// +kubebuilder:default:=false
 	ArrayOffload bool `json:"arrayOffload,omitempty"`
+	// DataOnly skips OpenStack VM creation; converted Cinder volumes are left staged.
+	// Compatible with all strategy types (hot, cold, mock).
+	// +kubebuilder:default:=false
+	DataOnly bool `json:"dataOnly,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process

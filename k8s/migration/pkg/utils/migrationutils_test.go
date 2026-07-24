@@ -189,10 +189,10 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 		expectedMessage string
 	}{
 		{
-			name: "virt-v2v free space error without cleanup path",
+			name: "virt-v2v free space error strips trailing period and cleanup boilerplate",
 			eventMessage: "Failed to migrate VM: failed to convert disks: failed to run virt-v2v: " +
 				"failed to run virt-v2v-in-place: exit status 1: virt-v2v-in-place: error: not enough free space " +
-				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed. ",
+				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed.. Trying to perform cleanup",
 			expectedMessage: "Failed to migrate VM: failed to convert disks: failed to run virt-v2v: " +
 				"failed to run virt-v2v-in-place: exit status 1: virt-v2v-in-place: error: not enough free space " +
 				"for conversion on filesystem '/corefiles'.  0.0 MB free < 10 MB needed",
@@ -203,9 +203,9 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 			expectedMessage: "failed to convert volumes: failed to run virt-v2v: exit status 1: some root cause",
 		},
 		{
-			name:            "message without trailing period or cleanup suffix is unchanged",
-			eventMessage:    "failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
-			expectedMessage: "failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
+			name:            "message with cleanup suffix but no trailing period before it is cleaned",
+			eventMessage:    "Failed to migrate VM: failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error. Trying to perform cleanup",
+			expectedMessage: "Failed to migrate VM: failed to run nbdcopy: exit status 1: nbdkit: vddk[1]: error: some vddk error",
 		},
 	}
 
@@ -232,6 +232,61 @@ func TestCreateFailedCondition_StripsCleanupBoilerplate(t *testing.T) {
 			}
 			if got := conditions[idx].Message; got != tc.expectedMessage {
 				t.Errorf("condition message = %q, want %q", got, tc.expectedMessage)
+			}
+		})
+	}
+}
+
+func TestCreateDataCopiedCondition(t *testing.T) {
+	tests := []struct {
+		name          string
+		events        []corev1.Event
+		wantCondition bool
+	}{
+		{
+			name: "DataCopied event creates DataCopied condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, constants.EventMessageDataCopied),
+			},
+			wantCondition: true,
+		},
+		{
+			name: "wrong reason ignored",
+			events: []corev1.Event{
+				makeEvent("OtherReason", constants.EventMessageDataCopied),
+			},
+			wantCondition: false,
+		},
+		{
+			name:          "empty events produces no condition",
+			events:        []corev1.Event{},
+			wantCondition: false,
+		},
+		{
+			name: "unrelated event ignored",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "VM created successfully"),
+			},
+			wantCondition: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migration := makeMigration()
+			eventList := &corev1.EventList{Items: tt.events}
+
+			got := CreateDataCopiedCondition(migration, eventList)
+
+			hasCondition := false
+			for _, c := range got {
+				if c.Type == constants.MigrationConditionTypeDataCopied {
+					hasCondition = true
+					break
+				}
+			}
+			if hasCondition != tt.wantCondition {
+				t.Errorf("hasDataCopiedCondition = %v, want %v", hasCondition, tt.wantCondition)
 			}
 		})
 	}

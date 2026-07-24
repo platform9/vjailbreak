@@ -116,20 +116,6 @@ func (mr *MockOpenstackOperationsMockRecorder) CreateVolume(ctx, name, size, ost
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).CreateVolume), ctx, name, size, ostype, uefi, volumetype, setRDMLabel)
 }
 
-// DeleteServer mocks base method.
-func (m *MockOpenstackOperations) DeleteServer(ctx context.Context, serverID string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteServer", ctx, serverID)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DeleteServer indicates an expected call of DeleteServer.
-func (mr *MockOpenstackOperationsMockRecorder) DeleteServer(ctx, serverID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServer", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteServer), ctx, serverID)
-}
-
 // DeletePort mocks base method.
 func (m *MockOpenstackOperations) DeletePort(ctx context.Context, portID string) error {
 	m.ctrl.T.Helper()
@@ -142,6 +128,20 @@ func (m *MockOpenstackOperations) DeletePort(ctx context.Context, portID string)
 func (mr *MockOpenstackOperationsMockRecorder) DeletePort(ctx, portID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePort", reflect.TypeOf((*MockOpenstackOperations)(nil).DeletePort), ctx, portID)
+}
+
+// DeleteServer mocks base method.
+func (m *MockOpenstackOperations) DeleteServer(ctx context.Context, serverID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteServer", ctx, serverID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteServer indicates an expected call of DeleteServer.
+func (mr *MockOpenstackOperationsMockRecorder) DeleteServer(ctx, serverID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServer", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteServer), ctx, serverID)
 }
 
 // DeleteVolume mocks base method.
@@ -321,6 +321,21 @@ func (mr *MockOpenstackOperationsMockRecorder) GetServerGroups(ctx, projectName 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServerGroups", reflect.TypeOf((*MockOpenstackOperations)(nil).GetServerGroups), ctx, projectName)
 }
 
+// GetServerStatus mocks base method.
+func (m *MockOpenstackOperations) GetServerStatus(ctx context.Context, serverID string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetServerStatus", ctx, serverID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetServerStatus indicates an expected call of GetServerStatus.
+func (mr *MockOpenstackOperationsMockRecorder) GetServerStatus(ctx, serverID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetServerStatus", reflect.TypeOf((*MockOpenstackOperations)(nil).GetServerStatus), ctx, serverID)
+}
+
 // GetSubnet mocks base method.
 func (m *MockOpenstackOperations) GetSubnet(ctx context.Context, network []string, ip string) (*subnets.Subnet, error) {
 	m.ctrl.T.Helper()
@@ -334,6 +349,21 @@ func (m *MockOpenstackOperations) GetSubnet(ctx context.Context, network []strin
 func (mr *MockOpenstackOperationsMockRecorder) GetSubnet(ctx, network, ip interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSubnet", reflect.TypeOf((*MockOpenstackOperations)(nil).GetSubnet), ctx, network, ip)
+}
+
+// GetVolume mocks base method.
+func (m *MockOpenstackOperations) GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVolume", ctx, volumeID)
+	ret0, _ := ret[0].(*volumes.Volume)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetVolume indicates an expected call of GetVolume.
+func (mr *MockOpenstackOperationsMockRecorder) GetVolume(ctx, volumeID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVolume", reflect.TypeOf((*MockOpenstackOperations)(nil).GetVolume), ctx, volumeID)
 }
 
 // ManageExistingVolume mocks base method.
