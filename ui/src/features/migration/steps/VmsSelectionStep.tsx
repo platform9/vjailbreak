@@ -21,7 +21,7 @@ import {
   GridRow,
   GridRowSelectionModel,
 } from '@mui/x-data-grid'
-import { CustomLoadingOverlay, CustomSearchToolbar } from 'src/components/grid'
+import { CustomLoadingOverlay, CustomSearchToolbar, defaultGetTogglableColumns } from 'src/components/grid'
 import { Step } from 'src/shared/components/forms'
 import * as React from 'react'
 import { RdmDisk } from 'src/api/rdm-disks/model'
@@ -307,6 +307,9 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
                     </Box>
                   ),
                 }}
+                slotProps={{
+                  columnsManagement: { getTogglableColumns: defaultGetTogglableColumns },
+                }}
                 disableColumnFilter
                 loading={loadingVMs}
               />
@@ -383,6 +386,9 @@ function VmsSelectionStep(props: VmsSelectionStepProps) {
                       </Tooltip>
                     )
                   },
+                }}
+                slotProps={{
+                  columnsManagement: { getTogglableColumns: defaultGetTogglableColumns },
                 }}
                 loading={loadingVms || loadingMigratedVms}
                 checkboxSelection
