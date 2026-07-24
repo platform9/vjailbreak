@@ -62,6 +62,16 @@ describe('derivePhaseStates — active migration', () => {
     expect(states[5].status).toBe('pending')
   })
 
+  it('does not reveal disk count while converting (GHI #2194)', () => {
+    const migration = {
+      metadata: { creationTimestamp: T0 },
+      status: { phase: Phase.ConvertingDisk, conditions: fullConditions, currentDisk: 1, totalDisks: 2 }
+    } as unknown as Migration
+    const states = derivePhaseStates(migration)
+
+    expect(states[4].detail).toBe('Converting disk format…')
+  })
+
   it('pauses at cutover while awaiting admin', () => {
     const states = derivePhaseStates(
       buildMigration(Phase.AwaitingAdminCutOver, [condition('Validated', 2), condition('DataCopy', 30)])
