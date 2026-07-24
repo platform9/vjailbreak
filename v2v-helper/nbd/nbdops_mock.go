@@ -52,17 +52,17 @@ func (mr *MockNBDOperationsMockRecorder) CopyChangedBlocks(ctx, changedAreas, pa
 }
 
 // CopyDisk mocks base method.
-func (m *MockNBDOperations) CopyDisk(ctx context.Context, dest string, diskindex int) error {
+func (m *MockNBDOperations) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CopyDisk", ctx, dest, diskindex)
+	ret := m.ctrl.Call(m, "CopyDisk", ctx, dest, diskindex, destEncrypted)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CopyDisk indicates an expected call of CopyDisk.
-func (mr *MockNBDOperationsMockRecorder) CopyDisk(ctx, dest, diskindex interface{}) *gomock.Call {
+func (mr *MockNBDOperationsMockRecorder) CopyDisk(ctx, dest, diskindex, destEncrypted interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), ctx, dest, diskindex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CopyDisk", reflect.TypeOf((*MockNBDOperations)(nil).CopyDisk), ctx, dest, diskindex, destEncrypted)
 }
 
 // GetProgress mocks base method.

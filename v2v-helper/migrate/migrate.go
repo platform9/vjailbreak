@@ -970,7 +970,7 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 				migobj.logMessage(fmt.Sprintf("  Source: %s", extractFileName(disk.SnapBackingDisk)))
 				migobj.logMessage(fmt.Sprintf("  Target: %s (Volume ID: %s)", disk.Path, disk.OpenstackVol.ID))
 
-				err = nbdops[idx].CopyDisk(ctx, disk.Path, idx)
+				err = nbdops[idx].CopyDisk(ctx, disk.Path, idx, disk.OpenstackVol.Encrypted)
 				if err != nil {
 					return vminfo, errors.Wrap(err, fmt.Sprintf("failed to copy disk %s (DeviceKey=%d)", disk.Name, disk.Disk.Key))
 				}

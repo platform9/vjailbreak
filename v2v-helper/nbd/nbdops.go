@@ -31,7 +31,7 @@ import (
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
-	CopyDisk(ctx context.Context, dest string, diskindex int) error
+	CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error
 	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
 	GetProgress() (int64, int64, time.Duration)
 }
@@ -286,7 +286,29 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int) error {
+// buildNbdcopyArgs constructs the argument list for the nbdcopy invocation
+// used by CopyDisk. It is a pure function (no exec, no I/O) specifically so
+// the --target-is-zero decision can be unit tested without shelling out.
+//
+// --target-is-zero tells nbdcopy to trust that the destination already reads
+// as all-zero, so it can skip writing any source region that is itself
+// zero/sparse. That assumption holds for a plain, freshly created Cinder
+// volume, but not for an encrypted one: encryption is applied transparently
+// at the QEMU layer, so a region that was never actually written through the
+// encryption engine does not decrypt back to zero on readback - it decrypts
+// to pseudo-random, key-derived noise. Skipping those regions produces a
+// disk that looks corrupted (missing partition table, unbootable) even
+// though the copy reported success. For encrypted destinations we must fall
+// back to a full, dense copy - slower, but correct.
+func buildNbdcopyArgs(sockUrl, dest string, destEncrypted bool) []string {
+	args := []string{"--progress=3"}
+	if !destEncrypted {
+		args = append(args, "--target-is-zero")
+	}
+	return append(args, sockUrl, dest)
+}
+
+func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -295,7 +317,13 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	defer progressRead.Close()
 	defer progressWrite.Close()
 
-	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
+	if destEncrypted {
+		utils.PrintLog(fmt.Sprintf(
+			"Disk %d destination volume is encrypted; disabling nbdcopy --target-is-zero and doing a full dense copy", diskindex))
+	}
+
+	args := buildNbdcopyArgs(generateSockUrl(nbdserver.tmp_dir), dest, destEncrypted)
+	cmd := exec.CommandContext(ctx, "nbdcopy", args...)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
 	cmdString := cmd.String()
