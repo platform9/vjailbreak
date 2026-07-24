@@ -107,10 +107,7 @@ function CopyingPhaseDetail({ migration }: { migration: Migration }) {
 
 // ─── Converting Disk ─────────────────────────────────────────────────────────
 
-function ConvertingDiskDetail({ migration }: { migration: Migration }) {
-  const status = migration.status
-  const totalDisks = status?.totalDisks
-
+function ConvertingDiskDetail() {
   return (
     <Box
       sx={{
@@ -129,7 +126,7 @@ function ConvertingDiskDetail({ migration }: { migration: Migration }) {
         Converting Disk Format
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {`Converting ${totalDisks != null ? `${totalDisks} ` : ''}disk${totalDisks !== 1 ? 's' : ''} from VMDK to target format using virt-v2v.`}
+        Converting disk from VMDK to target format using virt-v2v.
       </Typography>
       <LinearProgress variant="indeterminate" sx={{ height: 6, borderRadius: 3 }} />
     </Box>
@@ -405,7 +402,7 @@ export default function MigrationPhaseDetail({
       return <CopyingPhaseDetail migration={migration} />
 
     case Phase.ConvertingDisk:
-      return <ConvertingDiskDetail migration={migration} />
+      return <ConvertingDiskDetail />
 
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
