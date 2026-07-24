@@ -123,12 +123,43 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
+// eventMessageRecoveredFromTimeout is the one known message that legitimately contains
+// "failed to" while describing a migration that RECOVERED, not one that failed: when
+// CreateTargetInstance times out but verifyVMCreatedDespiteTimeout later confirms the VM
+// was actually created, migrate.go logs "VM created despite CreateTargetInstance error
+// (failed to create VM: ...), skipping cleanup" and continues normally. It must never be
+// mistaken for a terminal failure.
+const eventMessageRecoveredFromTimeout = "skipping cleanup"
+
+// isFailureEventMessage reports whether an event message represents a genuine terminal
+// migration failure. It matches the cleanup-boilerplate marker (set when migobj.cleanup()
+// runs), virt-v2v/nbd root-cause messages surfaced from debug logs (e.g. "failed to run
+// nbdcopy: ...", see v2v-helper/nbd/nbdops.go and virtv2v/virtv2vops.go), and v2v-helper's
+// top-level error handling in main.go (e.g. "Failed to migrate VM: ..." and early setup
+// failures before MigrateVM even starts) — case-insensitively, since these come from
+// different layers with inconsistent capitalization. It excludes "Warning: ..." messages
+// (non-fatal mid-migration warnings, e.g. migrate.go's get-bootable-partition/
+// generate-mount-persistence warnings) and the timeout-recovery message above, neither of
+// which represent an actual failure.
+func isFailureEventMessage(msg string) bool {
+	trimmed := strings.TrimSpace(msg)
+	if strings.HasPrefix(trimmed, constants.EventMessageWarningPrefix) {
+		return false
+	}
+	if strings.Contains(trimmed, eventMessageRecoveredFromTimeout) {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	return strings.Contains(lower, strings.ToLower(constants.EventMessageMigrationFailed)) ||
+		strings.Contains(lower, strings.ToLower(constants.EventMessageFailed))
+}
+
 // CreateFailedCondition creates or updates a failed condition for a migration based on events.
 // It analyzes event logs to identify failure reasons and updates the migration's status conditions accordingly.
 func CreateFailedCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, constants.EventMessageMigrationFailed) {
+		if eventList.Items[i].Reason != constants.MigrationReason || !isFailureEventMessage(eventList.Items[i].Message) {
 			continue
 		}
 
