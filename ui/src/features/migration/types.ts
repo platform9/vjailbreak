@@ -68,6 +68,7 @@ export interface FormValues extends Record<string, unknown> {
     moveToFolder?: boolean
   }
   disconnectSourceNetwork?: boolean
+  dataOnly?: boolean
   securityGroups?: string[]
   serverGroup?: string
   fallbackToDHCP?: boolean
@@ -164,6 +165,7 @@ export interface RollingFormParams extends Record<string, unknown> {
   }
   useGPU?: boolean
   disconnectSourceNetwork?: boolean
+  dataOnly?: boolean
   fallbackToDHCP?: boolean
   networkPersistence?: boolean
   preserveSourceTags?: boolean

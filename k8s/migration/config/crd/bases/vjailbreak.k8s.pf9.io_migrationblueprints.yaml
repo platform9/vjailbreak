@@ -170,6 +170,12 @@ spec:
                   dataCopyStart:
                     format: date-time
                     type: string
+                  dataOnly:
+                    default: false
+                    description: |-
+                      DataOnly skips OpenStack VM creation; converted Cinder volumes are left staged.
+                      Compatible with all strategy types (hot, cold, mock).
+                    type: boolean
                   disconnectSourceNetwork:
                     default: false
                     type: boolean

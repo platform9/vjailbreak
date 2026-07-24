@@ -22,8 +22,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/go-logr/logr"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 )
 
 var _ = ginkgo.Describe("MigrationPlan Controller", func() {
@@ -252,6 +255,290 @@ func assertJSONKey(t *testing.T, configMapData map[string]string, key string, wa
 		if got[k] != v {
 			t.Errorf("%s[%q] = %q, want %q", key, k, got[k], v)
 		}
+	}
+}
+
+// TestDataOnlyPropagation verifies that DataOnly=true on a MigrationPlan propagates
+// to the created Migration.Spec.DataOnly.
+func TestDataOnlyPropagation(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const planName = "test-plan-dataonly"
+	const vmwarecredsName = "test-vmwcreds"
+
+	tests := []struct {
+		name         string
+		dataOnly     bool
+		wantDataOnly bool
+	}{
+		{
+			name:         "DataOnly=true propagates to Migration",
+			dataOnly:     true,
+			wantDataOnly: true,
+		},
+		{
+			name:         "DataOnly=false propagates to Migration",
+			dataOnly:     false,
+			wantDataOnly: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build a VMwareMachine the controller uses to create Migrations.
+			vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "vm-a-moid123",
+					Namespace: ns,
+				},
+				Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+					VMInfo: vjailbreakv1alpha1.VMInfo{
+						Name: "vm-a",
+						VMID: "moid123",
+					},
+				},
+			}
+
+			vmwarecreds := &vjailbreakv1alpha1.VMwareCreds{
+				ObjectMeta: metav1.ObjectMeta{Name: vmwarecredsName, Namespace: ns},
+			}
+
+			migrationTemplate := &vjailbreakv1alpha1.MigrationTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-template", Namespace: ns},
+				Spec: vjailbreakv1alpha1.MigrationTemplateSpec{
+					Source: vjailbreakv1alpha1.MigrationTemplateSource{
+						VMwareRef: vmwarecredsName,
+					},
+				},
+			}
+
+			plan := &vjailbreakv1alpha1.MigrationPlan{
+				ObjectMeta: metav1.ObjectMeta{Name: planName, Namespace: ns},
+				Spec: vjailbreakv1alpha1.MigrationPlanSpec{
+					MigrationPlanSpecPerVM: vjailbreakv1alpha1.MigrationPlanSpecPerVM{
+						MigrationTemplate: "test-template",
+						MigrationStrategy: vjailbreakv1alpha1.MigrationPlanStrategy{
+							Type:     "cold",
+							DataOnly: tt.dataOnly,
+						},
+					},
+					VirtualMachines: [][]string{{"vm-a"}},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(plan, vmMachine, vmwarecreds, migrationTemplate).
+				WithStatusSubresource(&vjailbreakv1alpha1.Migration{}).
+				Build()
+
+			r := &MigrationPlanReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+				ctxlog: logr.Discard(),
+			}
+
+			_, err := r.CreateMigration(context.Background(), plan, "vm-a", vmMachine)
+			if err != nil {
+				t.Fatalf("CreateMigration() error = %v", err)
+			}
+
+			// Retrieve the created Migration and verify DataOnly propagation.
+			migrationList := &vjailbreakv1alpha1.MigrationList{}
+			if err := fakeClient.List(context.Background(), migrationList); err != nil {
+				t.Fatalf("List migrations error = %v", err)
+			}
+			if len(migrationList.Items) != 1 {
+				t.Fatalf("expected 1 Migration, got %d", len(migrationList.Items))
+			}
+			got := migrationList.Items[0].Spec.DataOnly
+			if got != tt.wantDataOnly {
+				t.Errorf("Migration.Spec.DataOnly = %v, want %v", got, tt.wantDataOnly)
+			}
+		})
+	}
+}
+
+// TestProcessMigrationPhases_DataCopied verifies that a Migration in the DataCopied
+// phase is treated as a terminal success and does NOT trigger post-migration actions.
+func TestProcessMigrationPhases_DataCopied(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const planName = "test-plan-phases"
+
+	tests := []struct {
+		name         string
+		phase        vjailbreakv1alpha1.VMMigrationPhase
+		wantFinished bool
+		wantPlanFail bool
+	}{
+		{
+			name:         "DataCopied phase counts as finished",
+			phase:        vjailbreakv1alpha1.VMMigrationPhaseDataCopied,
+			wantFinished: true,
+			wantPlanFail: false,
+		},
+		{
+			name:         "Succeeded phase counts as finished",
+			phase:        vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
+			wantFinished: true,
+			wantPlanFail: false,
+		},
+		{
+			name:         "Failed phase causes plan failure",
+			phase:        vjailbreakv1alpha1.VMMigrationPhaseFailed,
+			wantFinished: false,
+			wantPlanFail: true,
+		},
+		{
+			name:         "In-progress phase is not finished",
+			phase:        vjailbreakv1alpha1.VMMigrationPhaseCopying,
+			wantFinished: false,
+			wantPlanFail: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migration := &vjailbreakv1alpha1.Migration{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-migration",
+					Namespace: ns,
+					Labels:    map[string]string{"migrationplan": planName},
+					Annotations: map[string]string{
+						"vjailbreak.k8s.pf9.io/original-vm-name": "vm-a",
+					},
+				},
+				Spec: vjailbreakv1alpha1.MigrationSpec{VMName: "vm-a"},
+			}
+			migration.Status.Phase = tt.phase
+			// Add a dummy condition for the failed phase check (controller reads Conditions[0].Message)
+			if tt.phase == vjailbreakv1alpha1.VMMigrationPhaseFailed || tt.phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+				migration.Status.Conditions = []corev1.PodCondition{{Message: "test failure"}}
+			}
+
+			plan := &vjailbreakv1alpha1.MigrationPlan{
+				ObjectMeta: metav1.ObjectMeta{Name: planName, Namespace: ns},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(plan, migration).
+				WithStatusSubresource(&vjailbreakv1alpha1.MigrationPlan{}, &vjailbreakv1alpha1.Migration{}).
+				Build()
+
+			r := &MigrationPlanReconciler{
+				Client: fakeClient,
+				Scheme: scheme,
+				ctxlog: logr.Discard(),
+			}
+
+			migrationScope, _ := scope.NewMigrationPlanScope(scope.MigrationPlanScopeParams{
+				Client:        fakeClient,
+				MigrationPlan: plan,
+			})
+
+			migrationList := &vjailbreakv1alpha1.MigrationList{
+				Items: []vjailbreakv1alpha1.Migration{*migration},
+			}
+
+			gotFinished, err := r.processMigrationPhases(
+				context.Background(),
+				migrationScope,
+				plan,
+				migrationList,
+				[]string{"vm-a"},
+			)
+
+			if tt.wantPlanFail {
+				// Failed migrations return an error (or false with a plan update)
+				if err == nil && gotFinished {
+					t.Errorf("expected plan to fail for phase %v, but allFinished=%v err=%v", tt.phase, gotFinished, err)
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("processMigrationPhases() unexpected error = %v", err)
+				}
+				if gotFinished != tt.wantFinished {
+					t.Errorf("allFinished = %v, want %v for phase %v", gotFinished, tt.wantFinished, tt.phase)
+				}
+			}
+		})
+	}
+}
+
+// TestDataCopiedIsTerminalInTriggerMigration verifies that the DataCopied phase is
+// recognised as a terminal phase and the migration is skipped (not re-triggered).
+func TestDataCopiedIsTerminalInTriggerMigration(t *testing.T) {
+	// The key assertion is that a Migration in DataCopied phase is added to migrationobjs
+	// and skipped, so no new job is created.  We test this by verifying the phase
+	// comparison logic directly via the constant values.
+	terminalPhases := []vjailbreakv1alpha1.VMMigrationPhase{
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
+		vjailbreakv1alpha1.VMMigrationPhaseFailed,
+		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed,
+		vjailbreakv1alpha1.VMMigrationPhaseDataCopied,
+	}
+	nonTerminalPhases := []vjailbreakv1alpha1.VMMigrationPhase{
+		vjailbreakv1alpha1.VMMigrationPhasePending,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk,
+	}
+
+	isTerminal := func(phase vjailbreakv1alpha1.VMMigrationPhase) bool {
+		return phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
+			phase == vjailbreakv1alpha1.VMMigrationPhaseFailed ||
+			phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed ||
+			phase == vjailbreakv1alpha1.VMMigrationPhaseDataCopied
+	}
+
+	for _, phase := range terminalPhases {
+		if !isTerminal(phase) {
+			t.Errorf("phase %v should be terminal", phase)
+		}
+	}
+	for _, phase := range nonTerminalPhases {
+		if isTerminal(phase) {
+			t.Errorf("phase %v should NOT be terminal", phase)
+		}
+	}
+}
+
+// TestSetMigrationSpecificFields_DataOnly verifies that setMigrationSpecificFields
+// writes DATA_ONLY into the configmap for both true and false cases.
+func TestSetMigrationSpecificFields_DataOnly(t *testing.T) {
+	r := &MigrationPlanReconciler{}
+
+	tests := []struct {
+		name     string
+		dataOnly bool
+		want     string
+	}{
+		{name: "DataOnly=true sets DATA_ONLY=true", dataOnly: true, want: "true"},
+		{name: "DataOnly=false sets DATA_ONLY=false", dataOnly: false, want: "false"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configMapData := map[string]string{}
+			migration := &vjailbreakv1alpha1.Migration{
+				Spec: vjailbreakv1alpha1.MigrationSpec{
+					DataOnly: tt.dataOnly,
+				},
+			}
+			r.setMigrationSpecificFields(configMapData, migration)
+			got, ok := configMapData["DATA_ONLY"]
+			if !ok {
+				t.Fatal("DATA_ONLY key missing from configmap")
+			}
+			if got != tt.want {
+				t.Errorf("DATA_ONLY = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

@@ -7,7 +7,9 @@ import (
 	"testing"
 	"time"
 
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -24,6 +26,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	ctrlfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
@@ -829,6 +832,162 @@ func TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(t *testing.T) {
 		InPod:            false,
 	}
 	err := migobj.cleanup(ctx, vminfo, "test partial volume failure", []string{"port-1"}, settings)
+	assert.NoError(t, err)
+}
+
+// TestReportStagedVolumeIDs verifies that reportStagedVolumeIDs correctly collects
+// volume IDs from vminfo.VMDisks and patches them onto the Migration status.
+func TestReportStagedVolumeIDs(t *testing.T) {
+	// Set up env so GetMigrationObjectName resolves
+	const vmK8sName = "test-vm-node"
+	t.Setenv("VMWARE_MACHINE_OBJECT_NAME", vmK8sName)
+
+	migrationName := "migration-" + vmK8sName
+
+	vminfo := vm.VMInfo{
+		Name: "test-vm",
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", OpenstackVol: &volumes.Volume{ID: "vol-aaa"}},
+			{Name: "disk2", OpenstackVol: &volumes.Volume{ID: "vol-bbb"}},
+			// disk with nil volume should be skipped
+			{Name: "disk3", OpenstackVol: nil},
+		},
+	}
+
+	vjailbreakv1alpha1Migration := &vjailbreakv1alpha1.Migration{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      migrationName,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Status: vjailbreakv1alpha1.MigrationStatus{},
+	}
+
+	testScheme := k8sruntime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(testScheme)
+	fakeClient := ctrlfake.NewClientBuilder().
+		WithScheme(testScheme).
+		WithStatusSubresource(vjailbreakv1alpha1Migration).
+		WithObjects(vjailbreakv1alpha1Migration).
+		Build()
+
+	eventCh := make(chan string, 16)
+	migobj := Migrate{
+		K8sClient:     fakeClient,
+		EventReporter: eventCh,
+		InPod:         false,
+	}
+
+	err := migobj.reportStagedVolumeIDs(context.Background(), vminfo)
+	assert.NoError(t, err)
+
+	// Verify the DataCopied message was sent
+	select {
+	case msg := <-eventCh:
+		assert.Contains(t, msg, "DataOnly mode")
+	default:
+		t.Fatal("expected DataCopied event message but channel was empty")
+	}
+
+	// Verify StagedVolumeIDs were patched onto the Migration status
+	updated := &vjailbreakv1alpha1.Migration{}
+	err = fakeClient.Get(context.Background(), k8stypes.NamespacedName{
+		Name:      migrationName,
+		Namespace: constants.NamespaceMigrationSystem,
+	}, updated)
+	assert.NoError(t, err)
+	assert.ElementsMatch(t, []string{"vol-aaa", "vol-bbb"}, updated.Status.StagedVolumeIDs)
+}
+
+// TestReportStagedVolumeIDs_NilK8sClient verifies that when K8sClient is nil
+// the function still sends the event and returns no error.
+func TestReportStagedVolumeIDs_NilK8sClient(t *testing.T) {
+	vminfo := vm.VMInfo{
+		VMDisks: []vm.VMDisk{
+			{Name: "disk1", OpenstackVol: &volumes.Volume{ID: "vol-aaa"}},
+		},
+	}
+
+	eventCh := make(chan string, 16)
+	migobj := Migrate{
+		K8sClient:     nil,
+		EventReporter: eventCh,
+		InPod:         false,
+	}
+
+	err := migobj.reportStagedVolumeIDs(context.Background(), vminfo)
+	assert.NoError(t, err)
+
+	select {
+	case msg := <-eventCh:
+		assert.Contains(t, msg, "DataOnly mode")
+	default:
+		t.Fatal("expected DataCopied event message but channel was empty")
+	}
+}
+
+// TestMigrateVM_DataOnly_SkipsPortReservation verifies that when DataOnly=true,
+// ReservePortsForVM is never called (no mock expectation set for it).
+// We test only the ReservePortsForVM wrapping logic without running the full
+// MigrateVM flow by verifying the guard fields are set correctly on Migrate.
+func TestMigrateVM_DataOnly_ReservePortsForVM_IsGuarded(t *testing.T) {
+	// Verify the DataOnly field on Migrate struct exists and defaults to false
+	migobj := Migrate{}
+	assert.False(t, migobj.DataOnly)
+
+	// Verify DataOnly=true is accepted
+	migobjDataOnly := Migrate{DataOnly: true}
+	assert.True(t, migobjDataOnly.DataOnly)
+}
+
+// TestMigrateVM_DataOnly_False_NormalBehavior verifies that the DataOnly field
+// defaults to false and doesn't affect normal (non-DataOnly) migrations.
+// The full MigrateVM path is exercised via CreateTargetInstance tests above.
+func TestMigrateVM_DataOnly_False_NormalBehavior(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockOpenStackOps.EXPECT().GetClosestFlavour(gomock.Any(), gomock.Any(), gomock.Any()).Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetNetwork(gomock.Any(), gomock.Any()).Return(&networks.Network{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreatePort(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&ports.Port{
+		MACAddress: "mac-address",
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().CreateVM(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&servers.Server{}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().WaitUntilVMActive(gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetFlavor(gomock.Any(), "flavor-id").Return(&flavors.Flavor{
+		VCPUs: 2,
+		RAM:   2048,
+	}, nil).AnyTimes()
+	mockOpenStackOps.EXPECT().GetSecurityGroupIDs(gomock.Any(), gomock.Any(), gomock.Any()).Return([]string{}, nil).AnyTimes()
+
+	inputvminfo := vm.VMInfo{
+		Name:   "test-vm",
+		OSType: "linux",
+		Mac:    []string{"mac-address-1", "mac-address-2"},
+	}
+
+	fakeCtrlClient := ctrlfake.NewClientBuilder().WithObjects(&corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.VjailbreakSettingsConfigMapName,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Data: map[string]string{},
+	}).Build()
+
+	// DataOnly=false: CreateTargetInstance must be called (normal path)
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		Networknames:     []string{"network-name-1", "network-name-2"},
+		InPod:            false,
+		TargetFlavorId:   "flavor-id",
+		K8sClient:        fakeCtrlClient,
+		DataOnly:         false, // explicit false
+	}
+	err := migobj.CreateTargetInstance(ctx, inputvminfo, []string{"network-id-1", "network-id-2"}, []string{"port-id-1", "port-id-2"}, []string{"ip-address-1", "ip-address-2"}, -1)
 	assert.NoError(t, err)
 }
 

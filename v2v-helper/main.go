@@ -179,6 +179,7 @@ func main() {
 		NetworkOverrides:       networkOverrides,
 		ImageMetadata:          migrationparams.ImageMetadata,
 		TargetMetadata:         utils.BuildTargetMetadata(migrationparams.SourceTagsMetadata, migrationparams.CustomMetadata),
+		DataOnly:               migrationparams.DataOnly,
 	}
 
 	if migrationobj.ServerGroup != "" {

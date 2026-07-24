@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup;DataCopied
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -84,6 +84,9 @@ const (
 	VMMigrationPhaseHotAddTransferring VMMigrationPhase = "HotAddTransferInProgress"
 	// VMMigrationPhaseHotAddCleanup indicates snapshot and disk attachments are being cleaned up (HotAdd specific phase)
 	VMMigrationPhaseHotAddCleanup VMMigrationPhase = "HotAddCleanup"
+
+	// VMMigrationPhaseDataCopied indicates disks were copied and converted but no VM was created (data-only mode).
+	VMMigrationPhaseDataCopied VMMigrationPhase = "DataCopied"
 )
 
 // MigrationSpec defines the desired state of Migration
@@ -123,6 +126,10 @@ type MigrationSpec struct {
 	// attributes are copied to the migrated VM as instance metadata.
 	// +kubebuilder:default:=false
 	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`
+
+	// DataOnly indicates no OpenStack VM should be created after disk conversion.
+	// +optional
+	DataOnly bool `json:"dataOnly,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration
@@ -154,6 +161,10 @@ type MigrationStatus struct {
 	// If non-empty, indicates the sync failed but will auto-retry on next interval.
 	// +optional
 	SyncWarningMessage string `json:"syncWarningMessage,omitempty"`
+
+	// StagedVolumeIDs lists the Cinder volume IDs created during a data-only migration.
+	// +optional
+	StagedVolumeIDs []string `json:"stagedVolumeIDs,omitempty"`
 }
 
 // +kubebuilder:object:root=true

@@ -108,7 +108,7 @@ export default function MigrationProgressWithPopover({
   }, [conditions])
 
   const statusIcon = useMemo(() => {
-    if (phase === Phase.Succeeded) {
+    if (phase === Phase.Succeeded || phase === Phase.DataCopied) {
       return <CheckCircleOutlineIcon sx={{ color: 'success.main' }} />
     } else if (phase === Phase.AwaitingAdminCutOver) {
       return <PauseCircleOutlineIcon sx={{ color: 'warning.main' }} />

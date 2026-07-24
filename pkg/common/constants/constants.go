@@ -386,6 +386,8 @@ const (
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
 	EventDisconnect                               = "Disconnected network interfaces"
+	// EventMessageDataCopied is sent by v2v-helper when data-only mode completes disk copy/conversion.
+	EventMessageDataCopied = "DataOnly mode: disk copy and conversion complete, skipping VM creation"
 
 	// StorageAcceleratedCopy specific event messages
 	EventMessageEsxiSSHConnect                       = "Connecting to ESXi"
@@ -646,6 +648,9 @@ runcmd:
 	// MigrationConditionTypeMigrated represents the condition type for successful completion
 	MigrationConditionTypeMigrated corev1.PodConditionType = "Migrated"
 
+	// MigrationConditionTypeDataCopied represents the condition type for DataOnly migration completion
+	MigrationConditionTypeDataCopied corev1.PodConditionType = "DataCopied"
+
 	// VMMigrationStatesEnum is a map of migration phase to state
 	VMMigrationStatesEnum = map[vjailbreakv1alpha1.VMMigrationPhase]int{
 		vjailbreakv1alpha1.VMMigrationPhasePending:               0,
@@ -672,9 +677,10 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover
 		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks: 14,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:       15,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:            16,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:              17,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk: 15,
+		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:    16,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:     17,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:       18,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

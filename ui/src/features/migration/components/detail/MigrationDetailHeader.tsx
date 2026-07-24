@@ -75,7 +75,7 @@ export default function MigrationDetailHeader({
   const isRetryDisabled = (migration.status as { retryable?: boolean } | undefined)?.retryable === false
   const isAwaitingCutover =
     phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime
-  const isTerminal = phase === Phase.Succeeded || isFailed
+  const isTerminal = phase === Phase.Succeeded || phase === Phase.DataCopied || isFailed
 
   const planName =
     (migration.metadata?.labels as unknown as Record<string, string> | undefined)?.migrationplan ||

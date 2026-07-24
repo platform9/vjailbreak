@@ -214,6 +214,9 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
+	if migration.Spec.DataOnly {
+		migration.Status.Conditions = utils.CreateDataCopiedCondition(migration, filteredEvents)
+	}
 
 	migration.Status.AgentName = pod.Spec.NodeName
 
@@ -238,6 +241,16 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	err = r.SetupMigrationPhase(ctx, migrationScope)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "error setting migration phase")
+	}
+
+	// Fallback for DataOnly migrations: if events expired and phase is stuck at ConvertingDisk
+	// but the pod has already succeeded, advance to DataCopied.
+	if migration.Spec.DataOnly &&
+		pod.Status.Phase == corev1.PodSucceeded &&
+		migration.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk {
+		ctxlog.Info("DataOnly pod succeeded with no DataCopied event (events likely expired), advancing phase",
+			"migration", migration.Name)
+		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseDataCopied
 	}
 
 	// Record migration start if this is a new migration (hasn't been started in metrics yet)
@@ -417,6 +430,10 @@ loop:
 		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForCutOverStart) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime
+			break loop
+		case strings.Contains(events.Items[i].Message, constants.EventMessageDataCopied) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseDataCopied]:
+			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseDataCopied
 			break loop
 		case strings.Contains(events.Items[i].Message, constants.EventMessageConvertingDisk) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk]:
@@ -661,4 +678,3 @@ func (r *MigrationReconciler) ExtractSyncWarning(migration *vjailbreakv1alpha1.M
 		}
 	}
 }
-

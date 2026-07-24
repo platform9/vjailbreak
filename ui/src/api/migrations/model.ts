@@ -67,6 +67,7 @@ export interface Spec {
   initiateCutover?: boolean
   disconnectSourceNetwork?: boolean
   assignedIP?: string
+  dataOnly?: boolean
 }
 
 export enum MigrationPlan {
@@ -119,7 +120,8 @@ export enum Type {
   Migrated = 'Migrated',
   Validated = 'Validated',
   Failed = 'Failed',
-  Migrating = 'Migrating'
+  Migrating = 'Migrating',
+  DataCopied = 'DataCopied'
 }
 
 export enum Phase {
@@ -138,6 +140,7 @@ export enum Phase {
   AwaitingCutOverStartTime = 'AwaitingCutOverStartTime',
   AwaitingAdminCutOver = 'AwaitingAdminCutOver',
   Succeeded = 'Succeeded',
+  DataCopied = 'DataCopied',
   Failed = 'Failed',
   Unknown = 'Unknown'
 }
