@@ -122,7 +122,7 @@ function activeDetail(migration: Migration, designIndex: number): string {
       return 'Transferring disk data…'
     }
     case 3: return 'Waiting for admin to initiate cutover.'
-    case 4: return 'Converting disk format…'
+    case 4: return 'Converting disk.'
     default: return 'In progress…'
   }
 }
