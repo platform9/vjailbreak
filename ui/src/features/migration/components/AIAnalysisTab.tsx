@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Box,
   Button,
@@ -39,6 +40,7 @@ const confidenceTone = {
 } as const satisfies Record<string, 'success' | 'warning' | 'error'>
 
 export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTabProps) {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
   const [followUpLoading, setFollowUpLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -141,7 +143,13 @@ export default function AIAnalysisTab({ migrationName, namespace }: AIAnalysisTa
           <AutoFixHighIcon sx={{ fontSize: 48, color: 'text.secondary' }} />
           <Typography color="text.secondary">
             Anthropic API key not configured.{' '}
-            <Link href="/settings?tab=ai">Configure in Settings →</Link>
+            <Link
+              component="button"
+              type="button"
+              onClick={() => navigate('/dashboard/global-settings', { state: { tab: 'ai' } })}
+            >
+              Configure in Settings →
+            </Link>
           </Typography>
         </Box>
       )
