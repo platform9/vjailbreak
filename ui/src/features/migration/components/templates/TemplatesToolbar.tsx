@@ -70,7 +70,7 @@ export default function TemplatesToolbar({
         data-testid="templates-search"
         size="small"
         variant="standard"
-        sx={{ width: '100%', maxWidth: 220, minWidth: 0 }}
+        sx={{ width: 220, minWidth: 0 }}
         InputProps={{
           sx: { '& .MuiInputBase-input': { textOverflow: 'ellipsis' } },
           startAdornment: (
