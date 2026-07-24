@@ -222,7 +222,7 @@ describe('AIAnalysisTab', () => {
     expect(secondCall.question).toBe('What does this mean?')
   })
 
-  it('navigates to the AI tab of Global Settings when the key is not configured (GHI #2202)', async () => {
+  it('navigates to the AI tab of Global Settings when the key is not configured', async () => {
     mockGetKeyStatus.mockResolvedValueOnce({ configured: false })
     render(
       <MemoryRouter initialEntries={['/dashboard/migrations/migration-my-vm-abc12']}>
