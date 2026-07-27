@@ -301,8 +301,7 @@ export function useFormValidation({
 
   const step5Complete = Boolean(
     params.preserveSourceTags ||
-      (params.customMetadata || []).some((row) => row.key.trim() !== '') ||
-      touchedSections.tagsMetadata
+      (params.customMetadata || []).some((row) => row.key.trim() !== '')
   )
 
   const step6HasErrors = Boolean(
