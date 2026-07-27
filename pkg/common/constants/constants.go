@@ -385,6 +385,7 @@ const (
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
+	EventMessageWarningPrefix                     = "Warning:"
 	EventDisconnect                               = "Disconnected network interfaces"
 	// EventMessageDataCopied is sent by v2v-helper when data-only mode completes disk copy/conversion.
 	EventMessageDataCopied = "DataOnly mode: disk copy and conversion complete, skipping VM creation"
@@ -670,9 +671,9 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseAttachingDisksToProxy:   6,
 		vjailbreakv1alpha1.VMMigrationPhaseIdentifyingBlockDevices: 7,
 		// Common phases to both the copy methods.
-		vjailbreakv1alpha1.VMMigrationPhaseCopying:             11,
-		vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring:  11,
-		vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup:       12,
+		vjailbreakv1alpha1.VMMigrationPhaseCopying:                  11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddTransferring:       11,
+		vjailbreakv1alpha1.VMMigrationPhaseHotAddCleanup:            12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingCutOverStartTime: 12,
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover

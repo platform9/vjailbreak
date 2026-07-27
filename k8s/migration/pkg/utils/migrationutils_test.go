@@ -45,12 +45,16 @@ func TestCreateFailedCondition(t *testing.T) {
 			wantFailed:     true,
 		},
 		{
-			name: "lowercase 'failed to' no longer triggers Failed condition",
+			// This exact message is logged via utils.PrintLog, not migobj.logMessage, so it
+			// never actually reaches eventList in production — but matching is otherwise
+			// correct: lowercase "failed to" is a real failure signal (e.g. virt-v2v/nbd
+			// root-cause messages).
+			name: "lowercase 'failed to' triggers Failed condition",
 			events: []corev1.Event{
 				makeEvent(constants.MigrationReason, "VM created despite CreateTargetInstance error (failed to create VM: context deadline exceeded), skipping cleanup"),
 			},
-			wantConditions: 0,
-			wantFailed:     false,
+			wantConditions: 1,
+			wantFailed:     true,
 		},
 		{
 			name: "capital 'Failed to' warning does not trigger Failed condition",
@@ -92,6 +96,38 @@ func TestCreateFailedCondition(t *testing.T) {
 			},
 			wantConditions: 1,
 			wantFailed:     true,
+		},
+		{
+			// v2v-helper's top-level error handler (main.go) reports
+			// terminal failures as "Failed to migrate VM: <err>." without ever routing through
+			// migobj.cleanup(), so this never contains "Trying to perform cleanup". Requiring
+			// that phrase made these genuine failures invisible on the migrations page and details page.
+			name: "top-level 'Failed to migrate VM' event sets Failed condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "Failed to migrate VM: failed to convert disks: some error. "),
+			},
+			wantConditions: 1,
+			wantFailed:     true,
+		},
+		{
+			// failures during early setup (before MigrateVM even
+			// starts, e.g. vCenter/OpenStack connection issues) never call cleanup() either.
+			name: "early setup 'Failed to' event sets Failed condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "Failed to validate vCenter connection: dial tcp: timeout"),
+			},
+			wantConditions: 1,
+			wantFailed:     true,
+		},
+		{
+			// Non-fatal mid-migration warnings (migrate.go's get-bootable-partition.sh /
+			// generate-mount-persistence.sh warnings) must still not be mistaken for failures.
+			name: "warning-prefixed 'Failed to' from a mid-migration script does not trigger Failed condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "Warning: Failed to run get-bootable-partition.sh: exit status 1"),
+			},
+			wantConditions: 0,
+			wantFailed:     false,
 		},
 	}
 
