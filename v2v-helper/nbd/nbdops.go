@@ -558,7 +558,6 @@ func zeroRange(fd *os.File, offset int64, length int64, destEncrypted bool) erro
 	// Fall back to writing zeros directly. This is the slow path; it
 	// triggers on filesystems that don't support FALLOC_FL_PUNCH_HOLE
 	// (some NFS configurations, tmpfs, certain block-backed targets).
-	utils.PrintLog(fmt.Sprintf("Failed to punch hole at offset %d, falling back to pwrite: %v", offset, punchErr))
 	utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, punchErr))
 	return writeZeros(fd, offset, length)
 }
