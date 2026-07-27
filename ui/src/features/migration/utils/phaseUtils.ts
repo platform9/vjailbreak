@@ -25,8 +25,10 @@ export const DESIGN_PHASE_DEFS: DesignPhaseDef[] = [
   { key: 'done',       label: 'Done',            stepLabel: 'Step 6' },
 ]
 
-// K8s Phase → design phase index (0–4)
-function getDesignIndex(phase: Phase, conditions: Condition[]): number {
+// K8s Phase → design phase index (0–4). Exported so migrationTableUtils can reuse the
+// same fail-point reasoning (Validated/DataCopy/Migrating conditions) for the fine-grained
+// 9-step pipeline bar instead of re-deriving it.
+export function getDesignIndex(phase: Phase, conditions: Condition[]): number {
   switch (phase) {
     case Phase.Pending:
     case Phase.AwaitingDataCopyStart:
