@@ -45,12 +45,16 @@ func TestCreateFailedCondition(t *testing.T) {
 			wantFailed:     true,
 		},
 		{
-			name: "lowercase 'failed to' no longer triggers Failed condition",
+			// This exact message is logged via utils.PrintLog, not migobj.logMessage, so it
+			// never actually reaches eventList in production — but matching is otherwise
+			// correct: lowercase "failed to" is a real failure signal (e.g. virt-v2v/nbd
+			// root-cause messages).
+			name: "lowercase 'failed to' triggers Failed condition",
 			events: []corev1.Event{
 				makeEvent(constants.MigrationReason, "VM created despite CreateTargetInstance error (failed to create VM: context deadline exceeded), skipping cleanup"),
 			},
-			wantConditions: 0,
-			wantFailed:     false,
+			wantConditions: 1,
+			wantFailed:     true,
 		},
 		{
 			name: "capital 'Failed to' warning does not trigger Failed condition",

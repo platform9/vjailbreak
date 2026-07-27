@@ -123,19 +123,12 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
-// eventMessageRecoveredFromTimeout marks a recovery message that mentions "failed to" but
-// is not an actual failure.
-const eventMessageRecoveredFromTimeout = "skipping cleanup"
-
 // isFailureEventMessage reports whether an event message represents a genuine terminal
-// migration failure, matched case-insensitively. Warning messages and the timeout-recovery
-// message are excluded since they don't represent a real failure.
+// migration failure, matched case-insensitively. Warning messages are excluded since they
+// don't represent a real failure.
 func isFailureEventMessage(msg string) bool {
 	trimmed := strings.TrimSpace(msg)
 	if strings.HasPrefix(trimmed, constants.EventMessageWarningPrefix) {
-		return false
-	}
-	if strings.Contains(trimmed, eventMessageRecoveredFromTimeout) {
 		return false
 	}
 	lower := strings.ToLower(trimmed)
