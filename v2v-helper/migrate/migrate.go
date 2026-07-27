@@ -1238,7 +1238,7 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	var cmdErr error
 
 	if ans, cmdErr = virtv2v.RunGetBootablePartitionScript(vminfo.VMDisks); cmdErr != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
+		utils.PrintLog(fmt.Sprintf("Warning: Failed to run get-bootable-partition.sh: %v", cmdErr))
 	} else if ans != "" {
 		migobj.logMessage(fmt.Sprintf("Bootable partition: %s", ans))
 	}
@@ -1304,7 +1304,7 @@ func (migobj *Migrate) handleLinuxOSDetection(vminfo vm.VMInfo, bootVolumeIndex 
 	if autoFstabUpdate {
 		migobj.logMessage("Running generate-mount-persistence.sh script")
 		if err := virtv2v.RunMountPersistenceScript(vminfo.VMDisks, vminfo.VMDisks[finalBootIndex].Path, osRelease); err != nil {
-			migobj.logMessage(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
+			utils.PrintLog(fmt.Sprintf("Warning: Failed to run generate-mount-persistence.sh: %v", err))
 			// Don't fail the migration, just log the warning
 		} else {
 			migobj.logMessage("Successfully ran generate-mount-persistence.sh script")
