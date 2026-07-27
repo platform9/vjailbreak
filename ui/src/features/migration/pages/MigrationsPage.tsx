@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { Box, Tab, Tabs, Typography, Button } from '@mui/material'
+import { Box, Chip, Tab, Tabs, Typography, Button } from '@mui/material'
 import Snackbar from '@mui/material/Snackbar'
 import Alert from '@mui/material/Alert'
 import Tooltip from '@mui/material/Tooltip'
@@ -28,15 +28,35 @@ type MigrationsPageTab = 'migrations' | 'templates'
 function TabLabelWithCount({
   label,
   count,
-  active
+  active,
+  beta = false
 }: {
   label: string
   count: number
   active: boolean
+  beta?: boolean
 }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
       <span>{label}</span>
+      {beta && (
+        <Chip
+          label="Beta"
+          size="small"
+          color="warning"
+          variant="outlined"
+          sx={{
+            height: 16,
+            '& .MuiChip-label': {
+              px: 0.75,
+              fontSize: '0.65rem',
+              lineHeight: '16px',
+              display: 'flex',
+              alignItems: 'center'
+            }
+          }}
+        />
+      )}
       <Box
         component="span"
         sx={{
@@ -292,6 +312,7 @@ export default function MigrationsPage() {
                 label="Templates"
                 count={templates.length}
                 active={activeTab === 'templates'}
+                beta
               />
             }
             value="templates"

@@ -281,7 +281,6 @@ function SuccessStatBox({
 
 function SuccessDetail({ migration }: { migration: Migration }) {
   const vmName = (migration.spec?.vmName as string | undefined) || migration.metadata?.name || '—'
-  const podRef = (migration.spec?.podRef as string | undefined) || undefined
   const totalDisks = migration.status?.totalDisks
   const agentName = migration.status?.agentName
 
@@ -338,7 +337,7 @@ function SuccessDetail({ migration }: { migration: Migration }) {
           flexWrap: 'wrap',
         }}
       >
-        <SuccessStatBox label="Target VM" value={vmName} sub={podRef} />
+        <SuccessStatBox label="Target VM" value={vmName} />
         <SuccessStatBox
           label="Disks migrated"
           value={totalDisks != null ? `${totalDisks} disk${totalDisks !== 1 ? 's' : ''}` : '—'}
