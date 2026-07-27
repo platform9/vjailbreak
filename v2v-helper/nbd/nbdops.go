@@ -31,8 +31,8 @@ import (
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
-	CopyDisk(ctx context.Context, dest string, diskindex int) error
-	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error
+	CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error
+	CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error
 	GetProgress() (int64, int64, time.Duration)
 }
 
@@ -286,7 +286,29 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int) error {
+// buildNbdcopyArgs constructs the argument list for the nbdcopy invocation
+// used by CopyDisk. It is a pure function (no exec, no I/O) specifically so
+// the --target-is-zero decision can be unit tested without shelling out.
+//
+// --target-is-zero tells nbdcopy to trust that the destination already reads
+// as all-zero, so it can skip writing any source region that is itself
+// zero/sparse. That assumption holds for a plain, freshly created Cinder
+// volume, but not for an encrypted one: encryption is applied transparently
+// at the QEMU layer, so a region that was never actually written through the
+// encryption engine does not decrypt back to zero on readback - it decrypts
+// to pseudo-random, key-derived noise. Skipping those regions produces a
+// disk that looks corrupted (missing partition table, unbootable) even
+// though the copy reported success. For encrypted destinations we must fall
+// back to a full, dense copy - slower, but correct.
+func buildNbdcopyArgs(sockUrl, dest string, destEncrypted bool) []string {
+	args := []string{"--progress=3"}
+	if !destEncrypted {
+		args = append(args, "--target-is-zero")
+	}
+	return append(args, sockUrl, dest)
+}
+
+func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
 	// Copy the disk from source to destination
 	progressRead, progressWrite, err := os.Pipe()
 	if err != nil {
@@ -295,7 +317,13 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 	defer progressRead.Close()
 	defer progressWrite.Close()
 
-	cmd := exec.CommandContext(ctx, "nbdcopy", "--progress=3", "--target-is-zero", generateSockUrl(nbdserver.tmp_dir), dest)
+	if destEncrypted {
+		utils.PrintLog(fmt.Sprintf(
+			"Disk %d destination volume is encrypted; disabling nbdcopy --target-is-zero and doing a full dense copy", diskindex))
+	}
+
+	args := buildNbdcopyArgs(generateSockUrl(nbdserver.tmp_dir), dest, destEncrypted)
+	cmd := exec.CommandContext(ctx, "nbdcopy", args...)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
 	cmdString := cmd.String()
@@ -474,24 +502,13 @@ func pwrite(fd *os.File, buffer []byte, offset uint64) (int, error) {
 	return written, nil
 }
 
-// zeroRange fills the destination range with zero bytes
-func zeroRange(fd *os.File, offset int64, length int64) error {
-	punch := func(offset int64, length int64) error {
-		utils.PrintLog(fmt.Sprintf("Punching %d-byte hole at offset %d", length, offset))
-		flags := uint32(unix.FALLOC_FL_PUNCH_HOLE | unix.FALLOC_FL_KEEP_SIZE)
-		return syscall.Fallocate(int(fd.Fd()), flags, offset, length)
-	}
-
-	punchErr := punch(offset, length)
-	if punchErr == nil {
-		return nil
-	}
-	// Fall back to writing zeros directly. This is the slow path; it
-	// triggers on filesystems that don't support FALLOC_FL_PUNCH_HOLE
-	// (some NFS configurations, tmpfs, certain block-backed targets).
-	utils.PrintLog(fmt.Sprintf("Failed to punch hole at offset %d, falling back to pwrite: %v", offset, punchErr))
-	utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, punchErr))
-
+// writeZeros writes `length` zero bytes to the destination starting at
+// `offset` using pwrite. Unlike hole-punching, this pushes real zero bytes
+// down the destination's normal write path. For an encrypted destination
+// that is exactly what is required: the QEMU LUKS layer encrypts the zeros
+// as they are written, so they decrypt back to zero on readback. (A punched
+// hole only clears the underlying ciphertext, which decrypts to garbage.)
+func writeZeros(fd *os.File, offset int64, length int64) error {
 	count := int64(0)
 	const blocksize = 16 << 20
 	buffer := bytes.Repeat([]byte{0}, blocksize)
@@ -508,18 +525,48 @@ func zeroRange(fd *os.File, offset int64, length int64) error {
 		// reported as a successful migration.
 		written, err := pwrite(fd, buffer, uint64(offset+count))
 		if err != nil {
-			return errors.Wrapf(err, "zeroRange fallback pwrite failed at offset %d (%d/%d bytes written before failure)", offset+count, count, length)
+			return errors.Wrapf(err, "writeZeros pwrite failed at offset %d (%d/%d bytes written before failure)", offset+count, count, length)
 		}
 		count += int64(written)
 	}
 	return nil
 }
 
-func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error {
+// zeroRange fills the destination range with zero bytes.
+//
+// For a plain (unencrypted) destination it first tries
+// FALLOC_FL_PUNCH_HOLE, which is cheap — it deallocates the region instead
+// of writing, and the region then reads back as zero.
+//
+// For an encrypted destination, punching a hole is unsafe: the punch/discard
+// only clears the underlying ciphertext storage, but the guest reads back
+// through the QEMU LUKS layer, and decrypting raw zeros yields garbage, not
+// zero plaintext. So when destEncrypted is true we skip the punch entirely
+// and write real zeros through the encryption engine (via writeZeros), which
+// then decrypt back to zero correctly.
+func zeroRange(fd *os.File, offset int64, length int64, destEncrypted bool) error {
+	if destEncrypted {
+		return writeZeros(fd, offset, length)
+	}
+
+	utils.PrintLog(fmt.Sprintf("Punching %d-byte hole at offset %d", length, offset))
+	flags := uint32(unix.FALLOC_FL_PUNCH_HOLE | unix.FALLOC_FL_KEEP_SIZE)
+	punchErr := syscall.Fallocate(int(fd.Fd()), flags, offset, length)
+	if punchErr == nil {
+		return nil
+	}
+	// Fall back to writing zeros directly. This is the slow path; it
+	// triggers on filesystems that don't support FALLOC_FL_PUNCH_HOLE
+	// (some NFS configurations, tmpfs, certain block-backed targets).
+	utils.PrintLog(fmt.Sprintf("Unable to zero range %d - %d on destination, falling back to pwrite: %v", offset, offset+length, punchErr))
+	return writeZeros(fd, offset, length)
+}
+
+func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData, destEncrypted bool) error {
 	isZeroOrHole := (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0
 
 	if isZeroOrHole {
-		err := zeroRange(fd, block.Offset, block.Length)
+		err := zeroRange(fd, block.Offset, block.Length, destEncrypted)
 		if err != nil {
 			return fmt.Errorf("failed to zero range at offset %d: %v", block.Offset, err)
 		}
@@ -550,16 +597,18 @@ func copyRange(fd *os.File, handle *libnbd.Libnbd, block *BlockStatusData) error
 }
 
 // copyBlockParallel handles a single BlockStatusData. For zero/hole blocks it
-// punches a hole locally (no source read needed). For data blocks larger than
-// SubRangeSize it splits the block into sub-ranges and dispatches them across
-// the handle pool so that multiple Preads run in flight concurrently — which
-// is the only way to exceed single-stream VDDK throughput. Smaller blocks
-// take a single handle from the pool and run copyRange as before.
-func copyBlockParallel(ctx context.Context, fd *os.File, pool *handlePool, block *BlockStatusData) error {
+// zeroes the range locally (no source read needed) — punching a hole for
+// plain destinations, or writing real zeros for encrypted ones (see
+// zeroRange). For data blocks larger than SubRangeSize it splits the block
+// into sub-ranges and dispatches them across the handle pool so that multiple
+// Preads run in flight concurrently — which is the only way to exceed
+// single-stream VDDK throughput. Smaller blocks take a single handle from the
+// pool and run copyRange as before.
+func copyBlockParallel(ctx context.Context, fd *os.File, pool *handlePool, block *BlockStatusData, destEncrypted bool) error {
 	isZeroOrHole := (block.Flags & (libnbd.STATE_ZERO | libnbd.STATE_HOLE)) != 0
 
 	if isZeroOrHole {
-		return zeroRange(fd, block.Offset, block.Length)
+		return zeroRange(fd, block.Offset, block.Length, destEncrypted)
 	}
 
 	// Small block: keep the original single-handle path to avoid sub-range
@@ -570,7 +619,7 @@ func copyBlockParallel(ctx context.Context, fd *os.File, pool *handlePool, block
 			return fmt.Errorf("acquire handle for small block at offset %d: %v", block.Offset, err)
 		}
 		defer pool.Release(handle)
-		return copyRange(fd, handle, block)
+		return copyRange(fd, handle, block, destEncrypted)
 	}
 
 	// Plan sub-ranges. Each sub-range is treated as a fresh data block so
@@ -602,7 +651,7 @@ func copyBlockParallel(ctx context.Context, fd *os.File, pool *handlePool, block
 				return
 			}
 			defer pool.Release(handle)
-			if err := copyRange(fd, handle, subRange); err != nil {
+			if err := copyRange(fd, handle, subRange, destEncrypted); err != nil {
 				errCh <- fmt.Errorf("sub-range %d at offset %d failed: %v", subRangeIdx, subRange.Offset, err)
 				return
 			}
@@ -620,7 +669,7 @@ func (nbdserver *NBDServer) GetProgress() (int64, int64, time.Duration) {
 	return nbdserver.CopiedSize, nbdserver.TotalSize, nbdserver.Duration
 }
 
-func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string) error {
+func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error {
 	// Coalesce CBT-reported extents to amortize per-extent overhead. Holes
 	// inside a coalesced range will be discovered by getBlockStatus and
 	// punched cheaply via fallocate, so there's no read amplification beyond
@@ -745,7 +794,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 				retries := uint64(0)
 				waitTime := 1 * time.Minute
 				for blockIdx := 0; blockIdx < len(blocks); {
-					if err := copyBlockParallel(copyCtx, fd, pool, blocks[blockIdx]); err != nil {
+					if err := copyBlockParallel(copyCtx, fd, pool, blocks[blockIdx], destEncrypted); err != nil {
 						// If we were cancelled (peer worker errored), don't
 						// log a confusing failure or burn retries — just exit.
 						if copyCtx.Err() != nil {

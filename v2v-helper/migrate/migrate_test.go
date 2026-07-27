@@ -299,13 +299,13 @@ func TestLiveReplicateDisks(t *testing.T) {
 			AnyTimes(),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM(gomock.Any(), "id1").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sda", 0).Return(nil).AnyTimes(),
+		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sda", 0, false).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 
 		mockOpenStackOps.EXPECT().AttachVolumeToVM(gomock.Any(), "id2").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sdb", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sdb", 1).Return(nil).AnyTimes(),
+		mockNBD.EXPECT().CopyDisk(context.TODO(), "/dev/sdb", 1, false).Return(nil).AnyTimes(),
 		// 1. Both Disks Change
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
@@ -339,7 +339,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 			AnyTimes(),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM(gomock.Any(), "id1").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).AnyTimes(),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda", false).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		// Incremental Copy Disk 2
@@ -359,7 +359,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 			AnyTimes(),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM(gomock.Any(), "id2").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().FindDevice("id2").Return("/dev/sdb", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sdb").Return(nil).AnyTimes(),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sdb", false).Return(nil).AnyTimes(),
 		// 2. Only Disk 1 Changes
 		mockVMOps.EXPECT().
 			UpdateDiskInfo(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
@@ -383,7 +383,7 @@ func TestLiveReplicateDisks(t *testing.T) {
 		mockNBD.EXPECT().StartNBDServer(&object.VirtualMachine{}, envURL, envUserName, envPassword, thumbprint, "migration-snap", "[ds1] test_vm/test_vm.vmdk", dummychan).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().AttachVolumeToVM(gomock.Any(), "id1").Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().FindDevice("id1").Return("/dev/sda", nil).AnyTimes(),
-		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda").Return(nil).AnyTimes(),
+		mockNBD.EXPECT().CopyChangedBlocks(context.TODO(), changedAreasexample, "/dev/sda", false).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().DetachVolumeFromVM(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		mockOpenStackOps.EXPECT().WaitForVolume(gomock.Any(), gomock.Any()).Return(nil).AnyTimes(),
 		// No copy for Disk 2
