@@ -432,8 +432,7 @@ export function useRollingFormValidation({
         description: 'Preserve source tags and custom metadata',
         status:
           params.preserveSourceTags ||
-          (params.customMetadata || []).some((row) => row.key.trim() !== '') ||
-          touchedSections.tagsMetadata
+          (params.customMetadata || []).some((row) => row.key.trim() !== '')
             ? 'complete'
             : 'incomplete'
       },
