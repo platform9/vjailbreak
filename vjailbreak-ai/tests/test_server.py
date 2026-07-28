@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test", "ADMIN_API_KEY": "test"}):
+with patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"}):
     import server as _server_module
     from server import app
 

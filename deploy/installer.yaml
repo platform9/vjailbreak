@@ -5730,12 +5730,6 @@ spec:
                   name: vjailbreak-ai-secret
                   key: api-key
                   optional: true
-            - name: ADMIN_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: vjailbreak-ai-secret
-                  key: admin-key
-                  optional: true
             - name: CHROMA_PATH
               value: /data/chroma
             - name: CONTEXT_PATH

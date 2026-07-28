@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import secrets
 import hashlib
 import random
 import math
@@ -13,7 +12,7 @@ from typing import Optional, Any
 
 import logging
 
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, JSONResponse
@@ -34,7 +33,6 @@ analyze_migration = _analyze_migration
 CHROMA_PATH       = os.getenv("CHROMA_PATH", "/data/chroma")
 CONTEXT_PATH      = os.getenv("CONTEXT_PATH", "/data/context.md")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ADMIN_API_KEY     = os.getenv("ADMIN_API_KEY", "")   # required for write ops
 TOP_K             = max(1, min(int(os.getenv("TOP_K", "6")), 20))
 ALLOWED_ORIGINS   = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")]
 MAX_QUESTION_LEN  = 2000
@@ -44,7 +42,6 @@ MAX_HISTORY_TURNS = 6
 # Rate limiting: simple in-process token bucket per IP
 _rate_buckets: dict[str, list[float]] = defaultdict(list)
 RATE_LIMIT_QUERY  = int(os.getenv("RATE_LIMIT_QUERY",  "30"))  # per minute
-RATE_LIMIT_ADMIN  = int(os.getenv("RATE_LIMIT_ADMIN",  "10"))  # per minute
 
 # ---------------------------------------------------------------------------
 # Startup
@@ -57,9 +54,6 @@ anth_client   = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global chroma_client, collection, anth_client
-
-    if not ADMIN_API_KEY:
-        raise RuntimeError("ADMIN_API_KEY is not set — generate one with: openssl rand -hex 32")
 
     Path(CHROMA_PATH).mkdir(parents=True, exist_ok=True)
     chroma_client = chromadb.PersistentClient(path=CHROMA_PATH)
@@ -130,15 +124,6 @@ def _check_rate(request: Request, limit: int) -> None:
     if len(_rate_buckets[ip]) >= limit:
         raise HTTPException(status_code=429, detail="Too many requests — slow down")
     _rate_buckets[ip].append(now)
-
-
-# ---------------------------------------------------------------------------
-# Auth dependency — admin endpoints only
-# ---------------------------------------------------------------------------
-def require_admin(request: Request):
-    key = request.headers.get("X-API-Key", "")
-    if not key or not secrets.compare_digest(key, ADMIN_API_KEY):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ---------------------------------------------------------------------------
@@ -241,23 +226,23 @@ def stats(request: Request):
     }
 
 
-@app.get("/context", dependencies=[Depends(require_admin)])
+@app.get("/context")
 def get_context(request: Request):
-    _check_rate(request, RATE_LIMIT_ADMIN)
+    _check_rate(request, RATE_LIMIT_QUERY)
     return {"content": load_context()}
 
 
-@app.post("/context", dependencies=[Depends(require_admin)])
+@app.post("/context")
 def save_context(req: SaveContextRequest, request: Request):
-    _check_rate(request, RATE_LIMIT_ADMIN)
+    _check_rate(request, RATE_LIMIT_QUERY)
     Path(CONTEXT_PATH).parent.mkdir(parents=True, exist_ok=True)
     Path(CONTEXT_PATH).write_text(req.content, encoding="utf-8")
     return {"ok": True}
 
 
-@app.post("/crawl", dependencies=[Depends(require_admin)])
+@app.post("/crawl")
 async def crawl(req: CrawlRequest, request: Request):
-    _check_rate(request, RATE_LIMIT_ADMIN)
+    _check_rate(request, RATE_LIMIT_QUERY)
     try:
         from crawler import crawl_site
         count = await crawl_site(req.url, collection)
