@@ -72,6 +72,10 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // StorageCopyMethod is the storage copy method value for Storage Accelerated copy
 const StorageCopyMethod = "StorageAcceleratedCopy"
 
+// targetFlavorIDKey is the migration ConfigMap key holding the OpenStack flavor ID
+// the VM will be created with. Read back by v2v-helper as TARGET_FLAVOR_ID.
+const targetFlavorIDKey = "TARGET_FLAVOR_ID"
+
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
@@ -861,7 +865,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
 			outcome.FinishedVMs++
-			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
+			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == constants.AnnotationValueTrue {
 				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
 				continue
 			}
@@ -884,7 +888,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			if migrationCopy.Annotations == nil {
 				migrationCopy.Annotations = make(map[string]string)
 			}
-			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = "true"
+			migrationCopy.Annotations[constants.PostMigrationCompleteAnnotation] = constants.AnnotationValueTrue
 			if err := r.Update(ctx, migrationCopy); err != nil {
 				r.ctxlog.Error(err, "Failed to set post-migration complete annotation", "vm", migration.Spec.VMName)
 			}
@@ -1752,33 +1756,48 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	resolvedFlavors map[string]string,
 ) error {
+	flavorID, err := r.targetFlavorForVM(ctx, vmMachine, migrationtemplate, openstackcreds, resolvedFlavors)
+	if err != nil {
+		return err
+	}
+
+	configMapData[targetFlavorIDKey] = flavorID
+	return nil
+}
+
+// targetFlavorForVM returns the flavor ID to migrate a VM onto, preferring an
+// operator override, then the ID pre-flight validation already resolved, and only
+// then falling back to querying Nova.
+func (r *MigrationPlanReconciler) targetFlavorForVM(ctx context.Context,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	resolvedFlavors map[string]string,
+) (string, error) {
 	if vmMachine.Spec.TargetFlavorID != "" {
-		configMapData["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
-		return nil
+		return vmMachine.Spec.TargetFlavorID, nil
 	}
 
 	// Fast path: pre-flight validation already resolved this VM, so no Nova call.
 	if flavorID, ok := resolvedFlavors[vmMachine.Name]; ok && flavorID != "" {
-		configMapData["TARGET_FLAVOR_ID"] = flavorID
-		return nil
+		return flavorID, nil
 	}
 
 	// Slow path: no cached entry — e.g. a ConfigMap being rebuilt for a plan that
 	// was validated by an older controller version. Resolve on demand.
 	candidateFlavors, err := r.candidateFlavorsForPlan(ctx, migrationtemplate, openstackcreds)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	flavorID, err := resolveTargetFlavorID(vmMachine, migrationtemplate, openstackcreds, candidateFlavors)
 	if err != nil {
 		// errors.Wrapf preserves the chain, so isNoSuitableFlavorErr still matches
 		// at the trigger-loop call site.
-		return errors.Wrapf(err, "failed to determine target flavor for VM %s", vmMachine.Name)
+		return "", errors.Wrapf(err, "failed to determine target flavor for VM %s", vmMachine.Name)
 	}
 
-	configMapData["TARGET_FLAVOR_ID"] = flavorID
-	return nil
+	return flavorID, nil
 }
 
 func (r *MigrationPlanReconciler) setMigrationEnv(
