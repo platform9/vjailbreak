@@ -46,6 +46,33 @@ The required privileges depend on which features you use. The base set below is 
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
+### Additional privileges required for encrypted VMs
+
+| Privilege | Purpose |
+|---|---|
+| `Cryptographer.Access` | Base access to cryptographic operations on the VM |
+| `Cryptographer.Decrypt` | Decrypt the VM's disks for read access during migration |
+| `Cryptographer.AddDisk` | Required for the NBD access-token retrieval step VDDK uses to open encrypted disks remotely |
+
+:::note[What's required vs. commonly assumed]
+Commonly, teams provision only `Cryptographer.Access` + `Cryptographer.Decrypt` for third-party tools that need to read encrypted VM disks. In practice, **`Cryptographer.AddDisk` is also required**. Without it, VDDK fails at disk-open with a generic `Error 1 (Unknown error)` — "Unexpected error when trying to retrieve token for disk" — that gives no indication it's a permissions issue. This privilege governs the NBD access-token retrieval step used by third-party backup/migration tools to open encrypted disks remotely, and is easy to miss since it isn't obviously the cause from the error text.
+:::
+
+## Troubleshooting
+
+### `VixDiskLib_Open` token-retrieval failure
+
+**Symptom**: Migration fails during disk open with:
+
+```
+Error 1 (Unknown error): Unexpected error when trying to retrieve token for disk
+Unable to locate appropriate transport mode
+```
+
+**Cause**: Missing `Cryptographer.AddDisk` privilege on the migration service account (or the account lacks one of the other two `Cryptographer.*` privileges). This is the most common encrypted-VM permissions failure and does not surface as a permissions error in the message text.
+
+**Fix**: Verify the account role includes all three: `Cryptographer.Access`, `Cryptographer.Decrypt`, `Cryptographer.AddDisk`. Re-check with `govc permissions.ls` against the target VM.
+
 #### Additional Privileges: vJailbreak Accelerated Copy Migrations
 
 Required when using the **vJailbreak Accelerated Copy** storage copy method (VMware hot-add). vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
