@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -55,6 +57,15 @@ func (h *aiKeyHandler) getKey(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(aiKeyResponse{Configured: configured}) //nolint:errcheck
 }
 
+func generateAdminKey() ([]byte, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, err
+	}
+	key := hex.EncodeToString(b)
+	return []byte(key), nil
+}
+
 func (h *aiKeyHandler) saveKey(w http.ResponseWriter, r *http.Request) {
 	var req aiKeyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.APIKey == "" {
@@ -64,20 +75,25 @@ func (h *aiKeyHandler) saveKey(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.Background()
 
-	secretData := map[string][]byte{
-		"api-key": []byte(req.APIKey),
-	}
-
 	var existing corev1.Secret
 	existingErr := h.k8sClient.Get(ctx, types.NamespacedName{Name: aiSecretName, Namespace: aiSecretNS}, &existing)
 
 	if k8serrors.IsNotFound(existingErr) {
+		adminKey, err := generateAdminKey()
+		if err != nil {
+			logrus.Errorf("ai_key_handler: generate admin key failed: %v", err)
+			http.Error(w, "failed to generate admin key", http.StatusInternalServerError)
+			return
+		}
 		newSecret := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      aiSecretName,
 				Namespace: aiSecretNS,
 			},
-			Data: secretData,
+			Data: map[string][]byte{
+				"api-key":   []byte(req.APIKey),
+				"admin-key": adminKey,
+			},
 		}
 		if err := h.k8sClient.Create(ctx, newSecret); err != nil {
 			logrus.Errorf("ai_key_handler: create secret failed: %v", err)
@@ -85,7 +101,17 @@ func (h *aiKeyHandler) saveKey(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else if existingErr == nil {
-		existing.Data = secretData
+		// Preserve existing admin-key; generate one if missing (upgrade path).
+		if len(existing.Data["admin-key"]) == 0 {
+			adminKey, err := generateAdminKey()
+			if err != nil {
+				logrus.Errorf("ai_key_handler: generate admin key failed: %v", err)
+				http.Error(w, "failed to generate admin key", http.StatusInternalServerError)
+				return
+			}
+			existing.Data["admin-key"] = adminKey
+		}
+		existing.Data["api-key"] = []byte(req.APIKey)
 		if err := h.k8sClient.Update(ctx, &existing); err != nil {
 			logrus.Errorf("ai_key_handler: update secret failed: %v", err)
 			http.Error(w, "failed to update API key", http.StatusInternalServerError)
