@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
@@ -587,11 +588,27 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
-	var validVMs []*vjailbreakv1alpha1.VMwareMachine
+	// Creds are fetched before validation because pre-flight now resolves each VM's
+	// target flavor, which needs the OpenStack endpoint.
+	// Fetch VMwareCreds CR
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
+	}
+	// Fetch OpenStackCreds CR
+	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
+	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
+		false, openstackcreds); !ok {
+		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
+	}
+
+	// Non-nil default so the no-VMs-to-validate path below can be read safely.
+	// On error validateMigrationPlanVMs returns a nil result, but every use of
+	// `validation` is downstream of the `validationErr != nil` early return.
+	validation := &migrationPlanValidation{ResolvedFlavors: map[string]string{}}
 	var validationErr error
 	if len(vmsToValidate) > 0 {
-		// Validate VM OS types before proceeding with migration
-		validVMs, _, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, vmsToValidate)
+		// Validate VM OS types and resolve target flavors before proceeding
+		validation, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds, vmsToValidate)
 	}
 
 	if validationErr != nil {
@@ -624,9 +641,22 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, validationErr
 	}
 
+	// VMs skipped for having no schedulable flavor deliberately get no Migration CR:
+	// a ValidationFailed Migration would flip the plan to PodFailed in
+	// processMigrationPhases and stop post-migration for the healthy VMs.
+	flavorSkipped := make(map[string]bool, len(validation.FlavorSkippedVMs))
+	for _, v := range validation.FlavorSkippedVMs {
+		flavorSkipped[commonutils.GetVMUniqueKey(v.Spec.VMInfo.Name, v.Spec.VMInfo.VMID)] = true
+	}
+
 	for _, vmName := range allVMNames {
 		// Skip VMs with terminal migrations
 		if terminalMigrations[vmName] {
+			continue
+		}
+
+		if flavorSkipped[vmName] {
+			r.ctxlog.Info("Skipping Migration CR creation for VM with no schedulable target flavor", "vm", vmName)
 			continue
 		}
 
@@ -643,7 +673,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 
 		isValid := false
-		for _, v := range validVMs {
+		for _, v := range validation.ValidVMs {
 			if commonutils.GetVMUniqueKey(v.Spec.VMInfo.Name, v.Spec.VMInfo.VMID) == vmName {
 				isValid = true
 				break
@@ -653,17 +683,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if !isValid {
 			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
 		}
-	}
-
-	// Fetch VMwareCreds CR
-	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Source.VMwareRef, true, vmwcreds); !ok {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to check vmwarecreds status '%s'", migrationtemplate.Spec.Source.VMwareRef)
-	}
-	// Fetch OpenStackCreds CR
-	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{}
-	if ok, err := r.checkStatusSuccess(ctx, migrationtemplate.Namespace, migrationtemplate.Spec.Destination.OpenstackRef,
-		false, openstackcreds); !ok {
-		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
 	var arraycreds *vjailbreakv1alpha1.ArrayCreds
@@ -719,9 +738,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 
 	// vmMachinesArr is created to maintain order in which VM migration is triggered
-	vmMachinesArr := validVMs
-	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(validVMs))
-	for _, vmMachine := range validVMs {
+	vmMachinesArr := validation.ValidVMs
+	vmMachinesMap := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(validation.ValidVMs))
+	for _, vmMachine := range validation.ValidVMs {
 		vmMachinesMap[vmMachine.Spec.VMInfo.Name] = vmMachine
 	}
 
@@ -737,7 +756,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 
 	for _, parallelvms := range migrationplan.Spec.VirtualMachines {
 		migrationobjs := &vjailbreakv1alpha1.MigrationList{}
-		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr, proxyVM)
+		err := r.TriggerMigration(ctx, migrationplan, migrationobjs, openstackcreds, vmwcreds, arraycreds, migrationtemplate, vmMachinesArr, proxyVM, validation.ResolvedFlavors)
 		if err != nil {
 			if strings.Contains(err.Error(), "VDDK_MISSING") {
 				r.ctxlog.Info("Requeuing due to missing VDDK files.")
@@ -1354,6 +1373,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds, vm string, vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 	proxyVM *vjailbreakv1alpha1.ProxyVM,
+	resolvedFlavors map[string]string,
 ) (*corev1.ConfigMap, error) {
 	vmname, err := commonutils.GetK8sCompatibleVMWareObjectName(vm, vmwcreds.Name)
 	if err != nil {
@@ -1364,7 +1384,7 @@ func (r *MigrationPlanReconciler) CreateMigrationConfigMap(ctx context.Context,
 	configMap := &corev1.ConfigMap{}
 	err = r.Get(ctx, types.NamespacedName{Name: configMapName, Namespace: migrationplan.Namespace}, configMap)
 	if err != nil && apierrors.IsNotFound(err) {
-		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds, proxyVM)
+		configMap, err = r.buildNewMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmname, configMapName, vmMachine, arraycreds, proxyVM, resolvedFlavors)
 		if err != nil {
 			return nil, err
 		}
@@ -1386,6 +1406,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	arraycreds *vjailbreakv1alpha1.ArrayCreds,
 	proxyVM *vjailbreakv1alpha1.ProxyVM,
+	resolvedFlavors map[string]string,
 ) (*corev1.ConfigMap, error) {
 	r.ctxlog.Info(fmt.Sprintf("Creating new ConfigMap '%s' for VM '%s'", configMapName, vmname))
 
@@ -1418,7 +1439,7 @@ func (r *MigrationPlanReconciler) buildNewMigrationConfigMap(ctx context.Context
 
 	r.setMigrationSpecificFields(configMapData, migrationobj)
 
-	if err := r.determineAndSetTargetFlavor(ctx, configMapData, vmMachine, migrationtemplate, openstackcreds); err != nil {
+	if err := r.determineAndSetTargetFlavor(ctx, configMapData, vmMachine, migrationtemplate, openstackcreds, resolvedFlavors); err != nil {
 		return nil, err
 	}
 
@@ -1577,48 +1598,130 @@ func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[s
 	configMapData["DATA_ONLY"] = strconv.FormatBool(migrationobj.Spec.DataOnly)
 }
 
-func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Context,
-	configMapData map[string]string,
+// candidateFlavorsForPlan returns the flavors that are eligible for a plan's
+// target, applying the PCD availability-zone restriction. This is the single
+// Nova round-trip for a whole MigrationPlan: pre-flight validation calls it once
+// and caches the per-VM result, so the previous behaviour of one ListAllFlavors
+// call per VM is gone.
+//
+// In PCD the cluster name is the availability zone, and a flavor is bound to a
+// cluster via its `availability_zone` extra_spec property. Flavors without that
+// property are global and remain eligible.
+func (r *MigrationPlanReconciler) candidateFlavorsForPlan(ctx context.Context,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+) ([]flavors.Flavor, error) {
+	allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list all flavors")
+	}
+
+	if utils.IsOpenstackPCD(*openstackcreds) {
+		allFlavors = openstackpkg.FilterFlavorsByAvailabilityZone(allFlavors, migrationtemplate.Spec.TargetPCDClusterName)
+	}
+
+	return allFlavors, nil
+}
+
+// resolveTargetFlavorID picks the target flavor for a single VM out of an
+// already-fetched candidate set. It is pure (no API calls) so that pre-flight
+// validation and the config-map build path share one implementation and cannot
+// drift apart on the GPU/AZ filtering rules.
+//
+// A shape that no candidate satisfies is returned as ErrNoSuitableFlavor, which
+// callers classify with errors.Is to decide skip-vs-fail.
+func resolveTargetFlavorID(
 	vmMachine *vjailbreakv1alpha1.VMwareMachine,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
-) error {
+	candidateFlavors []flavors.Flavor,
+) (string, error) {
+	// Explicit operator override always wins and is never second-guessed.
 	if vmMachine.Spec.TargetFlavorID != "" {
-		configMapData["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
-		return nil
-	}
-
-	allFlavors, err := utils.ListAllFlavors(ctx, r.Client, openstackcreds)
-	if err != nil {
-		return errors.Wrap(err, "failed to list all flavors")
-	}
-
-	// Restrict to flavors that can schedule onto the user-selected target PCD
-	// cluster. In PCD the cluster name is the availability zone, and a flavor
-	// is bound to a cluster via its `availability_zone` extra_spec property.
-	// Flavors without that property are global and remain eligible.
-	if utils.IsOpenstackPCD(*openstackcreds) {
-		allFlavors = openstackpkg.FilterFlavorsByAvailabilityZone(allFlavors, migrationtemplate.Spec.TargetPCDClusterName)
+		return vmMachine.Spec.TargetFlavorID, nil
 	}
 
 	useGPUFlavor := migrationtemplate.Spec.UseGPUFlavor && utils.IsOpenstackPCD(*openstackcreds)
 	passthroughGPUCount := vmMachine.Spec.VMInfo.GPU.PassthroughCount
 	vgpuCount := vmMachine.Spec.VMInfo.GPU.VGPUCount
 
-	flavor, err := openstackpkg.GetClosestFlavour(vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, passthroughGPUCount, vgpuCount, allFlavors, useGPUFlavor)
+	flavor, err := openstackpkg.GetClosestFlavour(
+		vmMachine.Spec.VMInfo.CPU,
+		vmMachine.Spec.VMInfo.Memory,
+		passthroughGPUCount,
+		vgpuCount,
+		candidateFlavors,
+		useGPUFlavor,
+	)
 	if err != nil {
-		return errors.Wrap(err, "failed to get closest flavor")
+		return "", err
 	}
 
 	if flavor == nil {
+		// Defensive: GetClosestFlavour returns a non-nil error in this case today,
+		// but keep the sentinel wrapped so a future change cannot turn a nil flavor
+		// into a hard plan failure.
 		gpuInfo := " without GPU"
 		if passthroughGPUCount > 0 || vgpuCount > 0 {
 			gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
 		}
-		return errors.Errorf("no suitable flavor found for %d vCPUs, %d MB RAM%s", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
+		return "", fmt.Errorf("%w for %d vCPUs, %d MB RAM%s",
+			openstackpkg.ErrNoSuitableFlavor, vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory, gpuInfo)
 	}
 
-	configMapData["TARGET_FLAVOR_ID"] = flavor.ID
+	return flavor.ID, nil
+}
+
+// isNoSuitableFlavorErr reports whether err was ultimately caused by a VM shape
+// that no target flavor can satisfy. Used to keep that one condition
+// non-blocking while every other failure still aborts and requeues.
+func isNoSuitableFlavorErr(err error) bool {
+	return errors.Is(err, openstackpkg.ErrNoSuitableFlavor)
+}
+
+// shouldSkipVMForFlavor reports whether the trigger loop must skip a VM because
+// pre-flight validation did not resolve a target flavor for it.
+func shouldSkipVMForFlavor(vmMachine *vjailbreakv1alpha1.VMwareMachine, resolvedFlavors map[string]string) bool {
+	if vmMachine.Spec.TargetFlavorID != "" {
+		return false
+	}
+	flavorID, ok := resolvedFlavors[vmMachine.Name]
+	return !ok || flavorID == ""
+}
+
+func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Context,
+	configMapData map[string]string,
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+	resolvedFlavors map[string]string,
+) error {
+	if vmMachine.Spec.TargetFlavorID != "" {
+		configMapData["TARGET_FLAVOR_ID"] = vmMachine.Spec.TargetFlavorID
+		return nil
+	}
+
+	// Fast path: pre-flight validation already resolved this VM, so no Nova call.
+	if flavorID, ok := resolvedFlavors[vmMachine.Name]; ok && flavorID != "" {
+		configMapData["TARGET_FLAVOR_ID"] = flavorID
+		return nil
+	}
+
+	// Slow path: no cached entry — e.g. a ConfigMap being rebuilt for a plan that
+	// was validated by an older controller version. Resolve on demand.
+	candidateFlavors, err := r.candidateFlavorsForPlan(ctx, migrationtemplate, openstackcreds)
+	if err != nil {
+		return err
+	}
+
+	flavorID, err := resolveTargetFlavorID(vmMachine, migrationtemplate, openstackcreds, candidateFlavors)
+	if err != nil {
+		// errors.Wrapf preserves the chain, so isNoSuitableFlavorErr still matches
+		// at the trigger-loop call site.
+		return errors.Wrapf(err, "failed to determine target flavor for VM %s", vmMachine.Name)
+	}
+
+	configMapData["TARGET_FLAVOR_ID"] = flavorID
 	return nil
 }
 
@@ -2061,6 +2164,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	parallelvms []*vjailbreakv1alpha1.VMwareMachine,
 	proxyVM *vjailbreakv1alpha1.ProxyVM,
+	resolvedFlavors map[string]string,
 ) error {
 	ctxlog := r.ctxlog.WithValues("migrationplan", migrationplan.Name)
 	var fbcm *corev1.ConfigMap
@@ -2090,6 +2194,14 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm = vmMachineObj.Spec.VMInfo.Name
 		}
 
+		// Belt-and-braces: pre-flight validation resolved a flavor for every VM it
+		// put in parallelvms, so a missing entry means the VM is unschedulable. Skip
+		// it before creating a Migration CR so one bad VM cannot block the rest.
+		if shouldSkipVMForFlavor(vmMachineObj, resolvedFlavors) {
+			ctxlog.Info("Skipping VM with no schedulable target flavor", "vm", vm)
+			continue
+		}
+
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
@@ -2106,8 +2218,29 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 
 		migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
 
-		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM)
+		_, err = r.CreateMigrationConfigMap(ctx, migrationplan, migrationtemplate, migrationobj, openstackcreds, vmwcreds, vm, vmMachineObj, arraycreds, proxyVM, resolvedFlavors)
 		if err != nil {
+			// Defence in depth. The shouldSkipVMForFlavor check above means every VM
+			// reaching here has a flavor, so determineAndSetTargetFlavor takes a fast
+			// path and cannot raise this. The branch exists so that removing that
+			// check later degrades to skipping one VM rather than silently restoring
+			// the old behaviour of aborting the loop and starving every VM behind it.
+			// Every other error still aborts and requeues.
+			if isNoSuitableFlavorErr(err) {
+				ctxlog.Error(err, "Skipping VM with no schedulable target flavor", "vm", vm)
+				// Discard the Migration created moments ago rather than parking it in
+				// ValidationFailed: processMigrationPhases turns the first
+				// Failed/ValidationFailed Migration into a plan-wide PodFailed, which
+				// would stop post-migration for the healthy VMs — exactly what the
+				// no-Migration-CR invariant for unschedulable VMs exists to prevent.
+				if n := len(migrationobjs.Items); n > 0 && migrationobjs.Items[n-1].Name == migrationobj.Name {
+					migrationobjs.Items = migrationobjs.Items[:n-1]
+				}
+				if delErr := r.Delete(ctx, migrationobj); delErr != nil && !apierrors.IsNotFound(delErr) {
+					ctxlog.Error(delErr, "Failed to clean up Migration for unschedulable VM", "vm", vm)
+				}
+				continue
+			}
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
 		}
 		fbcm, err = r.CreateFirstbootConfigMap(ctx, migrationplan, migrationobj, vm)
@@ -2456,65 +2589,164 @@ func (r *MigrationPlanReconciler) validateVMOS(vmMachine *vjailbreakv1alpha1.VMw
 		vmMachine.Spec.VMInfo.Name, osFamily)
 }
 
+// migrationPlanValidation is the outcome of pre-flight validation for a plan.
+type migrationPlanValidation struct {
+	// ValidVMs passed every pre-flight check and should be triggered.
+	ValidVMs []*vjailbreakv1alpha1.VMwareMachine
+	// OSSkippedVMs were skipped because their guest OS is unknown or unsupported.
+	OSSkippedVMs []*vjailbreakv1alpha1.VMwareMachine
+	// FlavorSkippedVMs were skipped because no target flavor can satisfy their
+	// CPU/memory/GPU shape. These deliberately get NO Migration CR: a
+	// Failed/ValidationFailed Migration would flip the whole plan to PodFailed in
+	// processMigrationPhases and stop post-migration for the healthy VMs.
+	FlavorSkippedVMs []*vjailbreakv1alpha1.VMwareMachine
+	// ResolvedFlavors maps a VMwareMachine object name to the flavor ID chosen for
+	// it, so the config-map build path does not re-query Nova per VM.
+	ResolvedFlavors map[string]string
+}
+
+// vmDisplayNames returns the VM display names of a set of machines, for logging
+// and plan status messages.
+func vmDisplayNames(vmMachines []*vjailbreakv1alpha1.VMwareMachine) []string {
+	names := make([]string, len(vmMachines))
+	for i, vm := range vmMachines {
+		names[i] = vm.Spec.VMInfo.Name
+	}
+	return names
+}
+
 // validates all VMs in the migration plan
 func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmsToValidate []string,
-) ([]*vjailbreakv1alpha1.VMwareMachine, []*vjailbreakv1alpha1.VMwareMachine, error) {
+) (*migrationPlanValidation, error) {
+	result := &migrationPlanValidation{ResolvedFlavors: map[string]string{}}
+
 	if len(vmsToValidate) == 0 {
 		r.ctxlog.Info("No VMs left to validate; all in terminal states or plan complete")
-		return nil, nil, nil
+		return result, nil
 	}
 
-	validVMs := make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
-	skippedVMs := make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
+	result.ValidVMs = make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
+	result.OSSkippedVMs = make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
+	result.FlavorSkippedVMs = make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
+
+	// At most one Nova round-trip for the whole plan, fetched lazily on the first VM
+	// that actually needs resolution. Laziness matters: a plan whose VMs are all
+	// operator-pinned via Spec.TargetFlavorID never queried Nova before this change
+	// and must not start depending on it now. A failure here is genuinely fatal
+	// (bad creds, unreachable endpoint, no flavors at all) and must requeue rather
+	// than silently skip every VM.
+	var candidateFlavors []flavors.Flavor
+	flavorsFetched := false
+	candidates := func() ([]flavors.Flavor, error) {
+		if flavorsFetched {
+			return candidateFlavors, nil
+		}
+		fetched, err := r.candidateFlavorsForPlan(ctx, migrationtemplate, openstackcreds)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to list target flavors for pre-flight validation")
+		}
+		candidateFlavors = fetched
+		flavorsFetched = true
+		return candidateFlavors, nil
+	}
 
 	for _, vm := range vmsToValidate {
 		vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
+			return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
 		}
 
 		_, skipped, err := r.validateVMOS(vmMachine)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		if skipped {
-			skippedVMs = append(skippedVMs, vmMachine)
+			result.OSSkippedVMs = append(result.OSSkippedVMs, vmMachine)
 			continue
 		}
 
-		validVMs = append(validVMs, vmMachine)
+		// An operator-pinned flavor needs no lookup at all.
+		if vmMachine.Spec.TargetFlavorID != "" {
+			result.ResolvedFlavors[vmMachine.Name] = vmMachine.Spec.TargetFlavorID
+			result.ValidVMs = append(result.ValidVMs, vmMachine)
+			continue
+		}
+
+		planFlavors, err := candidates()
+		if err != nil {
+			return nil, err
+		}
+
+		// Pre-flight flavor resolution. An unschedulable shape is this VM's problem
+		// alone, so it is skipped instead of aborting the plan; anything else
+		// (API/auth failure) still propagates.
+		flavorID, err := resolveTargetFlavorID(vmMachine, migrationtemplate, openstackcreds, planFlavors)
+		if err != nil {
+			if isNoSuitableFlavorErr(err) {
+				r.ctxlog.Info("VM has no schedulable target flavor and will be skipped",
+					"vm", vmMachine.Spec.VMInfo.Name,
+					"cpu", vmMachine.Spec.VMInfo.CPU,
+					"memoryMB", vmMachine.Spec.VMInfo.Memory,
+					"passthroughGPUs", vmMachine.Spec.VMInfo.GPU.PassthroughCount,
+					"vGPUs", vmMachine.Spec.VMInfo.GPU.VGPUCount,
+					"reason", err.Error())
+				result.FlavorSkippedVMs = append(result.FlavorSkippedVMs, vmMachine)
+				continue
+			}
+			return nil, errors.Wrapf(err, "failed to resolve target flavor for VM %s", vm)
+		}
+
+		result.ResolvedFlavors[vmMachine.Name] = flavorID
+		result.ValidVMs = append(result.ValidVMs, vmMachine)
 	}
 
-	if len(validVMs) == 0 {
-		if len(skippedVMs) > 0 {
-			skippedVMNames := make([]string, len(skippedVMs))
-			for i, vm := range skippedVMs {
-				skippedVMNames[i] = vm.Spec.VMInfo.Name
-			}
-			msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
+	osSkippedMsg := ""
+	if len(result.OSSkippedVMs) > 0 {
+		osSkippedMsg = fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", vmDisplayNames(result.OSSkippedVMs))
+	}
+	flavorSkippedMsg := ""
+	if len(result.FlavorSkippedVMs) > 0 {
+		flavorSkippedMsg = fmt.Sprintf("Skipped VMs with no schedulable target flavor: %v", vmDisplayNames(result.FlavorSkippedVMs))
+	}
+
+	skipMsgs := make([]string, 0, 2)
+	for _, msg := range []string{osSkippedMsg, flavorSkippedMsg} {
+		if msg != "" {
+			skipMsgs = append(skipMsgs, msg)
+		}
+	}
+
+	if len(result.ValidVMs) == 0 {
+		for _, msg := range skipMsgs {
 			r.ctxlog.Info(msg)
 		}
-		return nil, skippedVMs, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
+		// Name every reason that applies, so a plan that mixes unsupported guest
+		// OSes with unschedulable shapes does not report only one of them.
+		switch {
+		case len(result.OSSkippedVMs) > 0 && len(result.FlavorSkippedVMs) > 0:
+			return nil, fmt.Errorf("no migrations to run: every VM was skipped for an unsupported OS or for having no schedulable target flavor")
+		case len(result.FlavorSkippedVMs) > 0:
+			return nil, fmt.Errorf("no VM in the plan has a schedulable target flavor; no migrations to run")
+		default:
+			return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
+		}
 	}
 
-	if len(skippedVMs) > 0 {
-		skippedVMNames := make([]string, len(skippedVMs))
-		for i, vm := range skippedVMs {
-			skippedVMNames[i] = vm.Spec.VMInfo.Name
-		}
-		msg := fmt.Sprintf("Skipped VMs due to unsupported or unknown OS: %v", skippedVMNames)
+	if len(skipMsgs) > 0 {
+		msg := strings.Join(skipMsgs, "; ")
 		r.ctxlog.Info(msg)
 		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg); updateErr != nil {
 			r.ctxlog.Error(updateErr, "Failed to update migration plan status for skipped VMs")
 		}
 	}
 
-	return validVMs, skippedVMs, nil
+	return result, nil
 }
 
 // updateMigrationPhaseWithRetry updates a Migration's phase and condition with retry logic
