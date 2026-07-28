@@ -20,16 +20,16 @@ interface UseFilteredMappingsParams {
   onChange: (key: string) => (value: unknown) => void
 }
 
-// An empty source or target list means either side's data has not loaded yet
-// (e.g. VMs not selected yet so vmwareNetworks/vmWareStorage is empty, or
-// OpenStack creds still loading) — filtering now would wipe valid mappings
-// (e.g. ones prefilled from a template or a retry) before both sides are ready.
+// sourceList (vmwareNetworks/vmWareStorage) is derived synchronously from the
+// currently selected VMs, so an empty sourceList is always the real current
+// state — no VMs selected, or none have interfaces/disks left referencing that
+// mapping — and stale entries must be dropped.
 export function filterMappingsBySourceAndTarget(
   mappings: ResourceMap[] | undefined,
   sourceList: string[],
   targetList: string[]
 ): ResourceMap[] {
-  if (sourceList.length === 0 || targetList.length === 0) {
+  if (targetList.length === 0) {
     return mappings || []
   }
   return (mappings || []).filter(
