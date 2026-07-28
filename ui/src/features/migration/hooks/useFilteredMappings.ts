@@ -23,11 +23,7 @@ interface UseFilteredMappingsParams {
 // sourceList (vmwareNetworks/vmWareStorage) is derived synchronously from the
 // currently selected VMs, so an empty sourceList is always the real current
 // state — no VMs selected, or none have interfaces/disks left referencing that
-// mapping — and stale entries must be dropped. targetList
-// (OpenStack networks/storage/array-creds names) comes from an async query;
-// an empty targetList can mean that data just hasn't loaded yet, so we skip
-// filtering rather than wipe valid mappings (e.g. ones prefilled from a
-// template or a retry) before it's ready.
+// mapping — and stale entries must be dropped.
 export function filterMappingsBySourceAndTarget(
   mappings: ResourceMap[] | undefined,
   sourceList: string[],
