@@ -1,35 +1,15 @@
 import { Box } from '@mui/material'
 
+// Level/source parsing lives in ../utils/logFilter — this file owns rendering only.
+
 // ─── Dark log theme — shared by the Migration Details Logs tab and the log drawers ──
 export const LOG_BG = '#0d1117'
 export const LOG_TEXT = '#c9d1d9'
 export const LOG_NUM = '#484f58'
-export const LOG_TS = '#8b949e'
+export const LOG_TS = '#8b949e' 
 
 const LOG_RE =
   /^(\d{2}:\d{2}:\d{2}[.\d]*)\s+\[?(\w[\w-]*)\]?\s+(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED)\s+(.*)$/i
-
-export function extractLevel(line: string): string | null {
-  const m = line.match(
-    /\b(ERROR|FATAL|WARN|WARNING|INFO|DEBUG|TRACE|SUCCESS|SUCCEEDED|FAILED)\b/i
-  )
-  return m ? m[1].toUpperCase() : null
-}
-
-export function normalizeLevel(raw: string): 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE' | 'SUCCESS' | 'OTHER' {
-  if (/ERROR|FATAL|FAIL/.test(raw)) return 'ERROR'
-  if (/WARN/.test(raw)) return 'WARN'
-  if (raw === 'INFO') return 'INFO'
-  if (raw === 'DEBUG') return 'DEBUG'
-  if (raw === 'TRACE') return 'TRACE'
-  if (/SUCCESS|SUCCEED/.test(raw)) return 'SUCCESS'
-  return 'OTHER'
-}
-
-export function extractSource(line: string): string | null {
-  const m = line.match(/^\d{2}:\d{2}:\d{2}[.\d]*\s+\[?(\w[\w-]*)\]?/)
-  return m ? m[1] : null
-}
 
 // Level color for text (no badge, just colored text)
 export function levelTextColor(lvl: string): string {

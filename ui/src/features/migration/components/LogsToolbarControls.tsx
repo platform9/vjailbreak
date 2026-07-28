@@ -17,12 +17,16 @@ export function LogsSearchField({ value, onChange, 'data-testid': dataTestId }: 
     <TextField
       data-testid={dataTestId}
       size="small"
-      placeholder='Search logs… ("exact match" for literal)'
+      placeholder='Search logs…'
       value={value}
       onChange={(e) => onChange(e.target.value)}
       sx={{ flex: 1, minWidth: 0 }}
       InputProps={{
-        startAdornment: <SearchIcon fontSize="small" sx={{ color: 'text.disabled', mr: 1 }} />,
+        startAdornment: (
+          <Tooltip title={'Space = AND · "phrase" = exact match · -word = exclude'}>
+            <SearchIcon fontSize="small" sx={{ color: 'text.disabled', mr: 1 }} />
+          </Tooltip>
+        ),
         endAdornment: value ? (
           <IconButton size="small" onClick={() => onChange('')}>
             <ClearIcon fontSize="small" />

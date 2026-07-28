@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import Fuse from 'fuse.js'
 import {
   Box,
   Typography,
@@ -20,8 +19,9 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import DownloadIcon from '@mui/icons-material/Download'
 import ReplayIcon from '@mui/icons-material/Replay'
 import { DrawerShell, DrawerHeader } from 'src/components'
-import DarkLogLine, { LOG_BG, LOG_TS, extractLevel, normalizeLevel } from './DarkLogLine'
+import DarkLogLine, { LOG_BG, LOG_TS } from './DarkLogLine'
 import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from './LogsToolbarControls'
+import { extractLevel, filterLogLines, normalizeLevel } from '../utils/logFilter'
 
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'SUCCESS']
 
@@ -93,29 +93,10 @@ export default function BaseLogsDrawer({
     }
   }, [])
 
-  const filteredLogs = useMemo(() => {
-    let filtered = logs
-
-    if (logLevelFilter !== 'ALL') {
-      filtered = filtered.filter((log) => {
-        const raw = extractLevel(log)
-        return !!raw && normalizeLevel(raw) === logLevelFilter
-      })
-    }
-
-    if (searchTerm.trim()) {
-      const isExactSearch = searchTerm.startsWith('"') && searchTerm.endsWith('"')
-      if (isExactSearch) {
-        const exactTerm = searchTerm.slice(1, -1).toLowerCase()
-        filtered = filtered.filter((log) => log.toLowerCase().includes(exactTerm))
-      } else {
-        const fuse = new Fuse(filtered, { threshold: 0.4, ignoreLocation: true, isCaseSensitive: false })
-        filtered = fuse.search(searchTerm).map((r) => r.item)
-      }
-    }
-
-    return filtered
-  }, [logs, searchTerm, logLevelFilter])
+  const filteredLogs = useMemo(
+    () => filterLogLines(logs, { search: searchTerm, level: logLevelFilter }),
+    [logs, searchTerm, logLevelFilter]
+  )
 
   const counts = useMemo(() => {
     const c = { ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0 }
@@ -388,6 +369,19 @@ export default function BaseLogsDrawer({
                       : 'No logs available'
                     : 'No lines match the current filters.'}
                 </Typography>
+                {/* Only the buffered tail is searchable — say so, otherwise an
+                    out-of-window match reads as a broken search filter. */}
+                {logs.length > 0 && (
+                  <Typography
+                    variant="caption"
+                    component="p"
+                    sx={{ color: LOG_TS, fontFamily: 'monospace', mt: 1, opacity: 0.75 }}
+                  >
+                    Only the most recent {logs.length.toLocaleString()} lines are loaded; older
+                    lines are not searched. Search matches literal text — use spaces for AND,
+                    "quotes" for a phrase, -word to exclude.
+                  </Typography>
+                )}
               </Box>
             )}
             {filteredLogs.map((log, index) => (

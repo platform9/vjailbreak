@@ -19,6 +19,11 @@ interface UseDeploymentLogsReturn {
 
 const MAX_LOG_LINES = 5000
 
+// Fetch as much history as the client is willing to buffer. Fetching less than
+// MAX_LOG_LINES silently shrinks the window the search box can see, which reads as a
+// broken search filter when the line exists in `kubectl logs`.
+const HISTORY_TAIL_LINES = String(MAX_LOG_LINES)
+
 export const useDeploymentLogs = ({
   deploymentName,
   namespace,
@@ -59,7 +64,7 @@ export const useDeploymentLogs = ({
 
       const response = await streamPodLogs(podNamespace, podName, {
         follow: true,
-        tailLines: fetchHistory ? '2000' : undefined,
+        tailLines: fetchHistory ? HISTORY_TAIL_LINES : undefined,
         limitBytes: 8 * 1024 * 1024,
         signal: abortController.signal
       })

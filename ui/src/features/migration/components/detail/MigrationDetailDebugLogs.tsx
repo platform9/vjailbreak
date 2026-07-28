@@ -22,14 +22,14 @@ import { useDirectPodLogs } from 'src/hooks/useDirectPodLogs'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { downloadDebugBundle } from 'src/api/migrations/debugBundle'
 import { useToast } from 'src/features/migration/hooks/useToast'
-import DarkLogLine, {
-  LOG_BG,
-  LOG_TS,
-  extractLevel,
-  normalizeLevel,
-  extractSource
-} from '../DarkLogLine'
+import DarkLogLine, { LOG_BG, LOG_TS } from '../DarkLogLine'
 import { ToolbarDivider, LogsSearchField, LiveToggle, LogsMetaBar } from '../LogsToolbarControls'
+import {
+  extractLevel,
+  extractSource,
+  filterLogLines,
+  normalizeLevel
+} from '../../utils/logFilter'
 
 const TERMINAL_PHASES: Phase[] = [Phase.Succeeded, Phase.Failed, Phase.ValidationFailed]
 const LOG_LEVELS = ['ALL', 'ERROR', 'WARN', 'INFO', 'DEBUG', 'SUCCESS'] as const
@@ -84,22 +84,10 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
     return Array.from(s)
   }, [logs])
 
-  const filtered = useMemo(() => {
-    return logs.filter((line) => {
-      if (levelFilter !== 'ALL') {
-        const raw = extractLevel(line)
-        if (!raw || normalizeLevel(raw) !== levelFilter) return false
-      }
-      if (sourceFilter !== 'ALL') {
-        const src = extractSource(line)
-        if (src !== sourceFilter) return false
-      }
-      if (search.trim()) {
-        if (!line.toLowerCase().includes(search.toLowerCase())) return false
-      }
-      return true
-    })
-  }, [logs, levelFilter, sourceFilter, search])
+  const filtered = useMemo(
+    () => filterLogLines(logs, { search, level: levelFilter, source: sourceFilter }),
+    [logs, levelFilter, sourceFilter, search]
+  )
 
   const counts = useMemo(() => {
     const c = { ERROR: 0, WARN: 0, INFO: 0, DEBUG: 0 }
