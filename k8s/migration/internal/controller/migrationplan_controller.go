@@ -601,10 +601,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
-	// Non-nil default so the no-VMs-to-validate path below can be read safely.
-	// On error validateMigrationPlanVMs returns a nil result, but every use of
-	// `validation` is downstream of the `validationErr != nil` early return.
-	validation := &migrationPlanValidation{ResolvedFlavors: map[string]string{}}
+	// Non-nil maps so the no-VMs-to-validate path below can be read and written
+	// safely. On error validateMigrationPlanVMs returns a nil result, but every use
+	// of `validation` is downstream of the `validationErr != nil` early return.
+	validation := &migrationPlanValidation{
+		ResolvedFlavors: map[string]string{},
+		SkipReasons:     map[string]string{},
+	}
 	var validationErr error
 	if len(vmsToValidate) > 0 {
 		// Validate VM OS types and resolve target flavors before proceeding
@@ -641,22 +644,13 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, validationErr
 	}
 
-	// VMs skipped for having no schedulable flavor deliberately get no Migration CR:
-	// a ValidationFailed Migration would flip the plan to PodFailed in
-	// processMigrationPhases and stop post-migration for the healthy VMs.
-	flavorSkipped := make(map[string]bool, len(validation.FlavorSkippedVMs))
-	for _, v := range validation.FlavorSkippedVMs {
-		flavorSkipped[commonutils.GetVMUniqueKey(v.Spec.VMInfo.Name, v.Spec.VMInfo.VMID)] = true
-	}
-
+	// Every non-terminal VM in the plan gets a Migration CR, including ones that
+	// failed pre-flight validation. The UI's migrations table is built purely from
+	// Migration objects, so a VM without one is invisible there — no row, no
+	// placeholder, and no hint as to why it never migrated.
 	for _, vmName := range allVMNames {
 		// Skip VMs with terminal migrations
 		if terminalMigrations[vmName] {
-			continue
-		}
-
-		if flavorSkipped[vmName] {
-			r.ctxlog.Info("Skipping Migration CR creation for VM with no schedulable target flavor", "vm", vmName)
 			continue
 		}
 
@@ -681,7 +675,14 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 
 		if !isValid {
-			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
+			// Prefer the specific pre-flight reason so the UI shows something
+			// actionable ("no target flavor can satisfy this VM…") rather than a
+			// generic validation failure.
+			reason := validation.SkipReasons[vmName]
+			if reason == "" {
+				reason = "VM failed migration plan validation"
+			}
+			r.markMigrationValidationFailed(ctx, migrationObj, vmName, reason)
 		}
 	}
 
@@ -776,13 +777,28 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 			return ctrl.Result{}, errors.Wrap(err, "failed to list migrations for post-migration processing")
 		}
 
-		allFinished, err := r.processMigrationPhases(ctx, scope, migrationplan, allMigrations, parallelvms)
+		outcome, err := r.processMigrationPhases(ctx, scope, migrationplan, allMigrations, parallelvms)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 
-		if !allFinished {
+		if !outcome.AllFinished {
 			// Don't requeue - rely on event-driven reconciliation when Migrations reach terminal states
+			return ctrl.Result{}, nil
+		}
+
+		// Every migration is terminal and at least one failed. Post-migration has
+		// already run for the successful ones, so the plan can now be marked failed
+		// without starving anything — a single bad VM no longer aborts the plan while
+		// its siblings are still copying.
+		if len(outcome.FailedVMs) > 0 {
+			total := outcome.FinishedVMs + len(outcome.FailedVMs)
+			msg := fmt.Sprintf("%d of %d VMs migrated successfully; %d failed: %s",
+				outcome.FinishedVMs, total, len(outcome.FailedVMs), strings.Join(outcome.FailureSummaries, "; "))
+			r.ctxlog.Info("MigrationPlan finished with failures", "migrationplan", migrationplan.Name, "failedVMs", outcome.FailedVMs)
+			if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, msg); err != nil {
+				return ctrl.Result{}, errors.Wrap(err, "failed to update migration plan status after partial failure")
+			}
 			return ctrl.Result{}, nil
 		}
 	}
@@ -818,8 +834,8 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
 	migrationobjs *vjailbreakv1alpha1.MigrationList,
 	parallelvms []string,
-) (bool, error) {
-	allFinished := true
+) (*migrationPhaseOutcome, error) {
+	outcome := &migrationPhaseOutcome{AllFinished: true}
 
 	r.ctxlog.Info("Processing migration phases", "migrationplan", migrationplan.Name, "totalMigrations", len(migrationobjs.Items), "currentBatch", parallelvms)
 
@@ -828,16 +844,23 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 
 		switch migration.Status.Phase {
 		case vjailbreakv1alpha1.VMMigrationPhaseFailed, vjailbreakv1alpha1.VMMigrationPhaseValidationFailed:
-			r.ctxlog.Info("Migration failed for VM", "vm", migration.Spec.VMName)
-			err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed,
-				fmt.Sprintf("Migration for VM '%s' failed: %s", migration.Spec.VMName, migration.Status.Conditions[0].Message))
-			return false, err
+			// Record and keep going. Returning here would abandon post-migration for
+			// every healthy VM in the plan and, because ReconcileMigrationPlanJob
+			// skips reconciliation for a PodFailed plan, park the plan permanently on
+			// the strength of one bad VM.
+			r.ctxlog.Info("Migration failed for VM", "vm", migration.Spec.VMName, "phase", migration.Status.Phase)
+			outcome.FailedVMs = append(outcome.FailedVMs, migration.Spec.VMName)
+			outcome.FailureSummaries = append(outcome.FailureSummaries,
+				fmt.Sprintf("%s (%s)", migration.Spec.VMName, firstConditionMessage(&migration)))
+			continue
 
 		case vjailbreakv1alpha1.VMMigrationPhaseDataCopied:
 			r.ctxlog.Info("Data-only migration completed for VM, skipping post-migration actions", "vm", migration.Spec.VMName, "migrationplan", migrationplan.Name)
+			outcome.FinishedVMs++
 			continue
 
 		case vjailbreakv1alpha1.VMMigrationPhaseSucceeded:
+			outcome.FinishedVMs++
 			if migration.Annotations != nil && migration.Annotations[constants.PostMigrationCompleteAnnotation] == "true" {
 				r.ctxlog.Info("Post-migration already completed for VM, skipping", "vm", migration.Spec.VMName)
 				continue
@@ -854,7 +877,7 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 			err := r.reconcilePostMigration(ctx, scope, vmKey)
 			if err != nil {
 				r.ctxlog.Error(err, "Post-migration actions failed for VM", "vm", migration.Spec.VMName)
-				return false, errors.Wrap(err, "failed post-migration")
+				return nil, errors.Wrap(err, "failed post-migration")
 			}
 
 			migrationCopy := migration.DeepCopy()
@@ -874,10 +897,43 @@ func (r *MigrationPlanReconciler) processMigrationPhases(
 				"vm", migration.Spec.VMName,
 				"phase", migration.Status.Phase,
 				"currentBatch", parallelvms)
-			allFinished = false
+			outcome.AllFinished = false
 		}
 	}
-	return allFinished, nil
+	return outcome, nil
+}
+
+// migrationPhaseOutcome summarises one pass over a plan's Migration objects.
+type migrationPhaseOutcome struct {
+	// AllFinished is true when no migration is still in a non-terminal phase.
+	AllFinished bool
+	// FinishedVMs counts migrations that reached Succeeded or DataCopied.
+	FinishedVMs int
+	// FailedVMs names the migrations in Failed or ValidationFailed.
+	FailedVMs []string
+	// FailureSummaries pairs each failed VM with its reason, for the plan status
+	// message.
+	FailureSummaries []string
+}
+
+// firstConditionMessage returns a human-readable reason for a migration's current
+// state, preferring the most recently transitioned condition. Guards against an
+// empty Conditions slice, which would otherwise panic on Conditions[0].
+func firstConditionMessage(migration *vjailbreakv1alpha1.Migration) string {
+	if len(migration.Status.Conditions) == 0 {
+		return string(migration.Status.Phase)
+	}
+
+	newest := migration.Status.Conditions[0]
+	for _, condition := range migration.Status.Conditions[1:] {
+		if condition.LastTransitionTime.After(newest.LastTransitionTime.Time) {
+			newest = condition
+		}
+	}
+	if newest.Message == "" {
+		return string(migration.Status.Phase)
+	}
+	return newest.Message
 }
 
 // handleRDMDiskMigrationError handles errors that occur during RDM disk migration
@@ -2194,17 +2250,22 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			vm = vmMachineObj.Spec.VMInfo.Name
 		}
 
-		// Belt-and-braces: pre-flight validation resolved a flavor for every VM it
-		// put in parallelvms, so a missing entry means the VM is unschedulable. Skip
-		// it before creating a Migration CR so one bad VM cannot block the rest.
-		if shouldSkipVMForFlavor(vmMachineObj, resolvedFlavors) {
-			ctxlog.Info("Skipping VM with no schedulable target flavor", "vm", vm)
-			continue
-		}
-
 		migrationobj, err := r.CreateMigration(ctx, migrationplan, vm, vmMachineObj)
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Migration for VM %s", vm)
+		}
+
+		// Belt-and-braces: pre-flight validation resolved a flavor for every VM it
+		// put in parallelvms, so a missing entry means the VM is unschedulable. Mark
+		// it terminal instead of aborting the loop, and never leave it Pending —
+		// a Pending Migration nobody will ever advance stops the plan from ever
+		// reporting as finished.
+		if shouldSkipVMForFlavor(vmMachineObj, resolvedFlavors) {
+			ctxlog.Info("Marking VM as ValidationFailed: no schedulable target flavor", "vm", vm)
+			r.markMigrationValidationFailed(ctx, migrationobj, vm,
+				flavorSkipReason(vmMachineObj, migrationtemplate, openstackcreds))
+			migrationobjs.Items = append(migrationobjs.Items, *migrationobj)
+			continue
 		}
 
 		if migrationobj.Status.Phase == vjailbreakv1alpha1.VMMigrationPhaseSucceeded ||
@@ -2227,18 +2288,9 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			// the old behaviour of aborting the loop and starving every VM behind it.
 			// Every other error still aborts and requeues.
 			if isNoSuitableFlavorErr(err) {
-				ctxlog.Error(err, "Skipping VM with no schedulable target flavor", "vm", vm)
-				// Discard the Migration created moments ago rather than parking it in
-				// ValidationFailed: processMigrationPhases turns the first
-				// Failed/ValidationFailed Migration into a plan-wide PodFailed, which
-				// would stop post-migration for the healthy VMs — exactly what the
-				// no-Migration-CR invariant for unschedulable VMs exists to prevent.
-				if n := len(migrationobjs.Items); n > 0 && migrationobjs.Items[n-1].Name == migrationobj.Name {
-					migrationobjs.Items = migrationobjs.Items[:n-1]
-				}
-				if delErr := r.Delete(ctx, migrationobj); delErr != nil && !apierrors.IsNotFound(delErr) {
-					ctxlog.Error(delErr, "Failed to clean up Migration for unschedulable VM", "vm", vm)
-				}
+				ctxlog.Error(err, "Marking VM as ValidationFailed: no schedulable target flavor", "vm", vm)
+				r.markMigrationValidationFailed(ctx, migrationobj, vm,
+					flavorSkipReason(vmMachineObj, migrationtemplate, openstackcreds))
 				continue
 			}
 			return errors.Wrapf(err, "failed to create ConfigMap for VM %s", vm)
@@ -2596,13 +2648,44 @@ type migrationPlanValidation struct {
 	// OSSkippedVMs were skipped because their guest OS is unknown or unsupported.
 	OSSkippedVMs []*vjailbreakv1alpha1.VMwareMachine
 	// FlavorSkippedVMs were skipped because no target flavor can satisfy their
-	// CPU/memory/GPU shape. These deliberately get NO Migration CR: a
-	// Failed/ValidationFailed Migration would flip the whole plan to PodFailed in
-	// processMigrationPhases and stop post-migration for the healthy VMs.
+	// CPU/memory/GPU shape. They still get a Migration CR in ValidationFailed so
+	// they remain visible in the UI, whose migrations table is populated purely
+	// from Migration objects — a VM with no CR shows no row at all.
 	FlavorSkippedVMs []*vjailbreakv1alpha1.VMwareMachine
 	// ResolvedFlavors maps a VMwareMachine object name to the flavor ID chosen for
 	// it, so the config-map build path does not re-query Nova per VM.
 	ResolvedFlavors map[string]string
+	// SkipReasons maps a plan VM key to the operator-facing reason it was skipped.
+	// Surfaced as the Migration's condition message, which the UI renders in the
+	// progress tooltip, the events tab and the error card.
+	SkipReasons map[string]string
+}
+
+// flavorSkipReason builds the operator-facing explanation shown against a VM that
+// no target flavor can accommodate. It names the shape that could not be placed
+// and the action that fixes it, and calls out the availability-zone restriction
+// when one is in force — a mistyped or under-provisioned target PCD cluster is a
+// common cause of an otherwise puzzling "no flavor" result.
+func flavorSkipReason(
+	vmMachine *vjailbreakv1alpha1.VMwareMachine,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
+) string {
+	shape := fmt.Sprintf("%d vCPUs, %d MB RAM", vmMachine.Spec.VMInfo.CPU, vmMachine.Spec.VMInfo.Memory)
+	if vmMachine.Spec.VMInfo.GPU.HasGPU() {
+		shape += fmt.Sprintf(", %d passthrough GPU(s), %d vGPU(s)",
+			vmMachine.Spec.VMInfo.GPU.PassthroughCount, vmMachine.Spec.VMInfo.GPU.VGPUCount)
+	}
+
+	reason := fmt.Sprintf("No target flavor can satisfy this VM (%s). "+
+		"Create a suitable flavor, or set spec.targetFlavorId on the VMwareMachine to pin one, then retry.", shape)
+
+	if utils.IsOpenstackPCD(*openstackcreds) && migrationtemplate.Spec.TargetPCDClusterName != "" {
+		reason += fmt.Sprintf(" Only flavors available in PCD cluster %q were considered.",
+			migrationtemplate.Spec.TargetPCDClusterName)
+	}
+
+	return reason
 }
 
 // vmDisplayNames returns the VM display names of a set of machines, for logging
@@ -2624,7 +2707,10 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmsToValidate []string,
 ) (*migrationPlanValidation, error) {
-	result := &migrationPlanValidation{ResolvedFlavors: map[string]string{}}
+	result := &migrationPlanValidation{
+		ResolvedFlavors: map[string]string{},
+		SkipReasons:     map[string]string{},
+	}
 
 	if len(vmsToValidate) == 0 {
 		r.ctxlog.Info("No VMs left to validate; all in terminal states or plan complete")
@@ -2668,6 +2754,9 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 		}
 		if skipped {
 			result.OSSkippedVMs = append(result.OSSkippedVMs, vmMachine)
+			result.SkipReasons[vm] = fmt.Sprintf(
+				"Guest OS is unknown or unsupported (OSFamily: %q). Set OSFamily explicitly on the VMwareMachine CR, then retry.",
+				vmMachine.Spec.VMInfo.OSFamily)
 			continue
 		}
 
@@ -2697,6 +2786,7 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 					"vGPUs", vmMachine.Spec.VMInfo.GPU.VGPUCount,
 					"reason", err.Error())
 				result.FlavorSkippedVMs = append(result.FlavorSkippedVMs, vmMachine)
+				result.SkipReasons[vm] = flavorSkipReason(vmMachine, migrationtemplate, openstackcreds)
 				continue
 			}
 			return nil, errors.Wrapf(err, "failed to resolve target flavor for VM %s", vm)
@@ -2738,12 +2828,12 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 		}
 	}
 
+	// Deliberately not written to the plan status. Each skipped VM now carries its
+	// own ValidationFailed Migration with a specific reason, which is what the UI
+	// actually renders; and setting the plan to PodPending here would suppress the
+	// PodRunning transition below, which only fires on an empty status.
 	if len(skipMsgs) > 0 {
-		msg := strings.Join(skipMsgs, "; ")
-		r.ctxlog.Info(msg)
-		if updateErr := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodPending, msg); updateErr != nil {
-			r.ctxlog.Error(updateErr, "Failed to update migration plan status for skipped VMs")
-		}
+		r.ctxlog.Info(strings.Join(skipMsgs, "; "), "migrationplan", migrationplan.Name)
 	}
 
 	return result, nil
@@ -2796,6 +2886,12 @@ func (r *MigrationPlanReconciler) updateMigrationPhaseWithRetry(
 		r.ctxlog.Error(retryErr, "Failed to update migration phase after retries", "phase", phase, "identifier", identifier)
 		return retryErr
 	}
+
+	// Reflect the new phase back onto the caller's copy. Callers that collect these
+	// objects into a MigrationList would otherwise hold a stale phase and could
+	// mistake a terminal migration for one still in progress.
+	migrationObj.Status.Phase = phase
+	migrationObj.Status.Conditions = append(migrationObj.Status.Conditions, condition)
 
 	return nil
 }

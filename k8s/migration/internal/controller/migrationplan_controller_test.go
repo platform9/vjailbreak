@@ -21,7 +21,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
@@ -32,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -376,35 +379,53 @@ func TestProcessMigrationPhases_DataCopied(t *testing.T) {
 	const ns = "migration-system"
 	const planName = "test-plan-phases"
 
+	// A failed migration is TERMINAL, so AllFinished stays true and the failure is
+	// reported via FailedVMs. processMigrationPhases no longer updates plan status
+	// itself — the caller decides, once nothing is still running.
 	tests := []struct {
-		name         string
-		phase        vjailbreakv1alpha1.VMMigrationPhase
-		wantFinished bool
-		wantPlanFail bool
+		name          string
+		phase         vjailbreakv1alpha1.VMMigrationPhase
+		withCondition bool
+		wantFinished  bool
+		wantFinishedN int
+		wantFailedN   int
 	}{
 		{
-			name:         "DataCopied phase counts as finished",
-			phase:        vjailbreakv1alpha1.VMMigrationPhaseDataCopied,
-			wantFinished: true,
-			wantPlanFail: false,
+			name:          "DataCopied phase counts as finished",
+			phase:         vjailbreakv1alpha1.VMMigrationPhaseDataCopied,
+			wantFinished:  true,
+			wantFinishedN: 1,
 		},
 		{
-			name:         "Succeeded phase counts as finished",
-			phase:        vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
-			wantFinished: true,
-			wantPlanFail: false,
+			name:          "Succeeded phase counts as finished",
+			phase:         vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
+			wantFinished:  true,
+			wantFinishedN: 1,
 		},
 		{
-			name:         "Failed phase causes plan failure",
+			name:          "Failed phase is terminal and recorded, not fatal",
+			phase:         vjailbreakv1alpha1.VMMigrationPhaseFailed,
+			withCondition: true,
+			wantFinished:  true,
+			wantFailedN:   1,
+		},
+		{
+			name:          "ValidationFailed phase is terminal and recorded, not fatal",
+			phase:         vjailbreakv1alpha1.VMMigrationPhaseValidationFailed,
+			withCondition: true,
+			wantFinished:  true,
+			wantFailedN:   1,
+		},
+		{
+			name:         "Failed with no conditions does not panic",
 			phase:        vjailbreakv1alpha1.VMMigrationPhaseFailed,
-			wantFinished: false,
-			wantPlanFail: true,
+			wantFinished: true,
+			wantFailedN:  1,
 		},
 		{
 			name:         "In-progress phase is not finished",
 			phase:        vjailbreakv1alpha1.VMMigrationPhaseCopying,
 			wantFinished: false,
-			wantPlanFail: false,
 		},
 	}
 
@@ -422,8 +443,7 @@ func TestProcessMigrationPhases_DataCopied(t *testing.T) {
 				Spec: vjailbreakv1alpha1.MigrationSpec{VMName: "vm-a"},
 			}
 			migration.Status.Phase = tt.phase
-			// Add a dummy condition for the failed phase check (controller reads Conditions[0].Message)
-			if tt.phase == vjailbreakv1alpha1.VMMigrationPhaseFailed || tt.phase == vjailbreakv1alpha1.VMMigrationPhaseValidationFailed {
+			if tt.withCondition {
 				migration.Status.Conditions = []corev1.PodCondition{{Message: "test failure"}}
 			}
 
@@ -452,28 +472,145 @@ func TestProcessMigrationPhases_DataCopied(t *testing.T) {
 				Items: []vjailbreakv1alpha1.Migration{*migration},
 			}
 
-			gotFinished, err := r.processMigrationPhases(
+			outcome, err := r.processMigrationPhases(
 				context.Background(),
 				migrationScope,
 				plan,
 				migrationList,
 				[]string{"vm-a"},
 			)
+			if err != nil {
+				t.Fatalf("processMigrationPhases() unexpected error = %v", err)
+			}
 
-			if tt.wantPlanFail {
-				// Failed migrations return an error (or false with a plan update)
-				if err == nil && gotFinished {
-					t.Errorf("expected plan to fail for phase %v, but allFinished=%v err=%v", tt.phase, gotFinished, err)
-				}
-			} else {
-				if err != nil {
-					t.Fatalf("processMigrationPhases() unexpected error = %v", err)
-				}
-				if gotFinished != tt.wantFinished {
-					t.Errorf("allFinished = %v, want %v for phase %v", gotFinished, tt.wantFinished, tt.phase)
-				}
+			if outcome.AllFinished != tt.wantFinished {
+				t.Errorf("AllFinished = %v, want %v for phase %v", outcome.AllFinished, tt.wantFinished, tt.phase)
+			}
+			if outcome.FinishedVMs != tt.wantFinishedN {
+				t.Errorf("FinishedVMs = %d, want %d for phase %v", outcome.FinishedVMs, tt.wantFinishedN, tt.phase)
+			}
+			if len(outcome.FailedVMs) != tt.wantFailedN {
+				t.Errorf("FailedVMs = %v, want %d entries for phase %v", outcome.FailedVMs, tt.wantFailedN, tt.phase)
+			}
+			if len(outcome.FailedVMs) != len(outcome.FailureSummaries) {
+				t.Errorf("FailedVMs (%d) and FailureSummaries (%d) must stay in step",
+					len(outcome.FailedVMs), len(outcome.FailureSummaries))
+			}
+
+			// The plan must NOT be failed by this function — one bad VM used to abort
+			// the whole plan here, starving post-migration for its siblings.
+			updatedPlan := &vjailbreakv1alpha1.MigrationPlan{}
+			if getErr := fakeClient.Get(context.Background(),
+				types.NamespacedName{Name: planName, Namespace: ns}, updatedPlan); getErr != nil {
+				t.Fatalf("failed to re-read plan: %v", getErr)
+			}
+			if updatedPlan.Status.MigrationStatus == corev1.PodFailed {
+				t.Errorf("processMigrationPhases must not set the plan to PodFailed; got %v",
+					updatedPlan.Status.MigrationStatus)
 			}
 		})
+	}
+}
+
+// TestProcessMigrationPhases_PartialFailureDoesNotStarveSiblings is the
+// regression test for the reported symptom: with 20 VMs where one cannot be
+// placed on any flavor, the other 19 must still be processed. Previously the loop
+// returned on the first ValidationFailed, so post-migration never ran for the
+// healthy VMs and the plan was parked as PodFailed while they were still copying.
+func TestProcessMigrationPhases_PartialFailureDoesNotStarveSiblings(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "migration-system"
+	const planName = "test-plan-partial"
+	const totalVMs = 20
+	const badVMIndex = 6 // VM #7
+
+	plan := &vjailbreakv1alpha1.MigrationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: planName, Namespace: ns},
+	}
+
+	migrations := make([]vjailbreakv1alpha1.Migration, 0, totalVMs)
+	vmNames := make([]string, 0, totalVMs)
+	for i := 0; i < totalVMs; i++ {
+		vmName := fmt.Sprintf("vm-%02d", i)
+		vmNames = append(vmNames, vmName)
+
+		migration := vjailbreakv1alpha1.Migration{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "migration-" + vmName,
+				Namespace:   ns,
+				Labels:      map[string]string{"migrationplan": planName},
+				Annotations: map[string]string{"vjailbreak.k8s.pf9.io/original-vm-name": vmName},
+			},
+			Spec: vjailbreakv1alpha1.MigrationSpec{VMName: vmName},
+		}
+
+		if i == badVMIndex {
+			migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidationFailed
+			migration.Status.Conditions = []corev1.PodCondition{
+				{Message: "No target flavor can satisfy this VM (256 vCPUs, 1048576 MB RAM)."},
+			}
+		} else {
+			migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
+		}
+		migrations = append(migrations, migration)
+	}
+
+	objs := []client.Object{plan}
+	for i := range migrations {
+		objs = append(objs, &migrations[i])
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(objs...).
+		WithStatusSubresource(&vjailbreakv1alpha1.MigrationPlan{}, &vjailbreakv1alpha1.Migration{}).
+		Build()
+
+	r := &MigrationPlanReconciler{Client: fakeClient, Scheme: scheme, ctxlog: logr.Discard()}
+	migrationScope, _ := scope.NewMigrationPlanScope(scope.MigrationPlanScopeParams{
+		Client:        fakeClient,
+		MigrationPlan: plan,
+	})
+
+	outcome, err := r.processMigrationPhases(context.Background(), migrationScope, plan,
+		&vjailbreakv1alpha1.MigrationList{Items: migrations}, vmNames)
+	if err != nil {
+		t.Fatalf("one unschedulable VM must not abort phase processing, got: %v", err)
+	}
+
+	if !outcome.AllFinished {
+		t.Error("AllFinished = false, want true — every migration is in a terminal phase")
+	}
+	if outcome.FinishedVMs != totalVMs-1 {
+		t.Errorf("FinishedVMs = %d, want %d — the healthy VMs must all be processed",
+			outcome.FinishedVMs, totalVMs-1)
+	}
+	if len(outcome.FailedVMs) != 1 {
+		t.Fatalf("FailedVMs = %v, want exactly 1", outcome.FailedVMs)
+	}
+	if outcome.FailedVMs[0] != fmt.Sprintf("vm-%02d", badVMIndex) {
+		t.Errorf("FailedVMs[0] = %q, want %q", outcome.FailedVMs[0], fmt.Sprintf("vm-%02d", badVMIndex))
+	}
+	if !strings.Contains(outcome.FailureSummaries[0], "No target flavor") {
+		t.Errorf("failure summary must carry the reason, got %q", outcome.FailureSummaries[0])
+	}
+
+	// Post-migration ran for every succeeded VM, evidenced by the annotation.
+	for i := 0; i < totalVMs; i++ {
+		if i == badVMIndex {
+			continue
+		}
+		vmName := fmt.Sprintf("vm-%02d", i)
+		updated := &vjailbreakv1alpha1.Migration{}
+		if getErr := fakeClient.Get(context.Background(),
+			types.NamespacedName{Name: "migration-" + vmName, Namespace: ns}, updated); getErr != nil {
+			t.Fatalf("failed to re-read migration for %s: %v", vmName, getErr)
+		}
+		if updated.Annotations[constants.PostMigrationCompleteAnnotation] != "true" {
+			t.Errorf("post-migration did not run for %s — a single failed sibling starved it", vmName)
+		}
 	}
 }
 
@@ -838,6 +975,141 @@ func TestShouldSkipVMForFlavor(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := shouldSkipVMForFlavor(tt.vmMachine, tt.resolvedFlavors); got != tt.wantSkip {
 				t.Errorf("shouldSkipVMForFlavor() = %v, want %v", got, tt.wantSkip)
+			}
+		})
+	}
+}
+
+// TestFlavorSkipReason_IsActionable checks the message shown against an
+// unschedulable VM. It is the only explanation the operator gets in the UI (it
+// lands in the Migration's condition message, which the migrations table renders
+// in the progress tooltip and the detail page shows in the error card), so it must
+// name the shape that could not be placed and the action that fixes it.
+func TestFlavorSkipReason_IsActionable(t *testing.T) {
+	pcdCreds := &vjailbreakv1alpha1.OpenstackCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{constants.IsPCDCredsLabel: "true"},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		vmMachine    *vjailbreakv1alpha1.VMwareMachine
+		template     *vjailbreakv1alpha1.MigrationTemplate
+		creds        *vjailbreakv1alpha1.OpenstackCreds
+		wantContains []string
+		wantAbsent   []string
+	}{
+		{
+			name:      "plain shape names cpu and memory",
+			vmMachine: flavorTestMachine("vm-a", 8, 32768),
+			template:  &vjailbreakv1alpha1.MigrationTemplate{},
+			creds:     &vjailbreakv1alpha1.OpenstackCreds{},
+			wantContains: []string{
+				"8 vCPUs",
+				"32768 MB RAM",
+				"targetFlavorId",
+			},
+			wantAbsent: []string{"GPU", "PCD cluster"},
+		},
+		{
+			name: "GPU shape is spelled out",
+			vmMachine: func() *vjailbreakv1alpha1.VMwareMachine {
+				m := flavorTestMachine("vm-b", 16, 65536)
+				m.Spec.VMInfo.GPU.PassthroughCount = 2
+				m.Spec.VMInfo.GPU.VGPUCount = 1
+				return m
+			}(),
+			template:     &vjailbreakv1alpha1.MigrationTemplate{},
+			creds:        &vjailbreakv1alpha1.OpenstackCreds{},
+			wantContains: []string{"2 passthrough GPU(s)", "1 vGPU(s)"},
+		},
+		{
+			name:      "PCD availability-zone restriction is called out",
+			vmMachine: flavorTestMachine("vm-c", 4, 8192),
+			template: &vjailbreakv1alpha1.MigrationTemplate{
+				Spec: vjailbreakv1alpha1.MigrationTemplateSpec{TargetPCDClusterName: "cluster-b"},
+			},
+			creds:        pcdCreds,
+			wantContains: []string{"cluster-b", "Only flavors available in PCD cluster"},
+		},
+		{
+			name:      "non-PCD creds do not mention a cluster",
+			vmMachine: flavorTestMachine("vm-d", 4, 8192),
+			template: &vjailbreakv1alpha1.MigrationTemplate{
+				Spec: vjailbreakv1alpha1.MigrationTemplateSpec{TargetPCDClusterName: "cluster-b"},
+			},
+			creds:      &vjailbreakv1alpha1.OpenstackCreds{},
+			wantAbsent: []string{"PCD cluster"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := flavorSkipReason(tt.vmMachine, tt.template, tt.creds)
+			for _, want := range tt.wantContains {
+				if !strings.Contains(got, want) {
+					t.Errorf("reason %q does not contain %q", got, want)
+				}
+			}
+			for _, absent := range tt.wantAbsent {
+				if strings.Contains(got, absent) {
+					t.Errorf("reason %q should not contain %q", got, absent)
+				}
+			}
+		})
+	}
+}
+
+// TestFirstConditionMessage guards against the Conditions[0] panic the old
+// processMigrationPhases had, and confirms the newest condition wins.
+func TestFirstConditionMessage(t *testing.T) {
+	older := metav1.NewTime(time.Now().Add(-time.Hour))
+	newer := metav1.NewTime(time.Now())
+
+	tests := []struct {
+		name      string
+		migration *vjailbreakv1alpha1.Migration
+		want      string
+	}{
+		{
+			name: "no conditions falls back to phase instead of panicking",
+			migration: &vjailbreakv1alpha1.Migration{
+				Status: vjailbreakv1alpha1.MigrationStatus{
+					Phase: vjailbreakv1alpha1.VMMigrationPhaseValidationFailed,
+				},
+			},
+			want: "ValidationFailed",
+		},
+		{
+			name: "newest condition message wins",
+			migration: &vjailbreakv1alpha1.Migration{
+				Status: vjailbreakv1alpha1.MigrationStatus{
+					Phase: vjailbreakv1alpha1.VMMigrationPhaseFailed,
+					Conditions: []corev1.PodCondition{
+						{Message: "stale reason", LastTransitionTime: older},
+						{Message: "real reason", LastTransitionTime: newer},
+					},
+				},
+			},
+			want: "real reason",
+		},
+		{
+			name: "empty message falls back to phase",
+			migration: &vjailbreakv1alpha1.Migration{
+				Status: vjailbreakv1alpha1.MigrationStatus{
+					Phase:      vjailbreakv1alpha1.VMMigrationPhaseFailed,
+					Conditions: []corev1.PodCondition{{Message: "", LastTransitionTime: newer}},
+				},
+			},
+			want: "Failed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := firstConditionMessage(tt.migration); got != tt.want {
+				t.Errorf("firstConditionMessage() = %q, want %q", got, tt.want)
 			}
 		})
 	}
