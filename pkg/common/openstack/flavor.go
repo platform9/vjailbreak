@@ -3,6 +3,7 @@
 package openstack
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -10,6 +11,17 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
+
+// ErrNoSuitableFlavor indicates that no flavor in the candidate set can satisfy a
+// VM's CPU / memory / GPU shape. This is a property of that one VM, not of the
+// cluster, so callers may treat it as a per-VM skip rather than a fatal error —
+// match it with errors.Is instead of string-matching the message.
+//
+// Note that an empty candidate set is deliberately NOT reported as this sentinel:
+// that means Nova returned no flavors at all (a credentials, connectivity or
+// availability-zone-filter problem) and must stay fatal, because silently
+// skipping it would skip every VM in the plan.
+var ErrNoSuitableFlavor = errors.New("no suitable flavor found")
 
 // AvailabilityZoneExtraSpecKey is the flavor property PCD uses to bind a
 // flavor to a target cluster (the cluster name is the availability zone).
@@ -93,7 +105,7 @@ func GetClosestFlavour(cpu, memory, passthroughGPUCount, vgpuCount int, allFlavo
 	if passthroughGPUCount > 0 || vgpuCount > 0 {
 		gpuInfo = fmt.Sprintf(", %d passthrough GPU(s), and %d vGPU(s)", passthroughGPUCount, vgpuCount)
 	}
-	return nil, fmt.Errorf("no suitable flavor found for %d vCPU(s), %d MB RAM%s", cpu, memory, gpuInfo)
+	return nil, fmt.Errorf("%w for %d vCPU(s), %d MB RAM%s", ErrNoSuitableFlavor, cpu, memory, gpuInfo)
 }
 
 // isGPUFlavor checks if a flavor has GPU-related extra_specs

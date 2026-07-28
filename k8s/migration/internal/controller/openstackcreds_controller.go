@@ -650,7 +650,10 @@ func updateVMwareMachineWithFlavor(ctx context.Context, r *OpenstackCredsReconci
 	vgpuCount := vmwaremachine.Spec.VMInfo.GPU.VGPUCount
 
 	flavor, err := openstackpkg.GetClosestFlavour(cpu, memory, passthroughGPUCount, vgpuCount, flavorList, false)
-	if err != nil && !strings.Contains(err.Error(), "no suitable flavor found") {
+	// A VM whose shape no flavor can satisfy is recorded as NOT_FOUND below rather
+	// than failing the whole OpenstackCreds sync. Matched via errors.Is so the
+	// classification no longer depends on the exact wording of the message.
+	if err != nil && !errors.Is(err, openstackpkg.ErrNoSuitableFlavor) {
 		ctxlog.Info(fmt.Sprintf("Error message '%s'", vmwaremachine.Name))
 		return errors.Wrap(err, "failed to get closest flavor")
 	}
