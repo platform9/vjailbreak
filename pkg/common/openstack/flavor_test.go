@@ -3,9 +3,11 @@
 package openstack
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	pkgerrors "github.com/pkg/errors"
 )
 
 func TestGetPassthroughGPUCount(t *testing.T) {
@@ -318,5 +320,103 @@ func TestGetClosestFlavourWithGPU(t *testing.T) {
 				t.Errorf("GetClosestFlavour() = %s, want %s", flavor.ID, tt.expectedFlavorID)
 			}
 		})
+	}
+}
+
+// TestGetClosestFlavour_NoSuitableFlavorSentinel verifies that a genuine
+// CPU/memory/GPU shape mismatch is matchable with errors.Is so callers can treat
+// an unschedulable VM as a skip instead of a fatal error, while an empty flavor
+// list (an infrastructure/permissions problem, not a per-VM shape problem)
+// deliberately does NOT match the sentinel.
+func TestGetClosestFlavour_NoSuitableFlavorSentinel(t *testing.T) {
+	candidates := []flavors.Flavor{
+		{ID: "small", VCPUs: 2, RAM: 2048},
+		{ID: "medium", VCPUs: 4, RAM: 8192},
+	}
+
+	tests := []struct {
+		name         string
+		cpu          int
+		memory       int
+		allFlavors   []flavors.Flavor
+		wantErr      bool
+		wantSentinel bool
+		wantFlavorID string
+	}{
+		{
+			name:         "shape fits: no error",
+			cpu:          2,
+			memory:       2048,
+			allFlavors:   candidates,
+			wantFlavorID: "small",
+		},
+		{
+			name:         "cpu too large: sentinel",
+			cpu:          64,
+			memory:       2048,
+			allFlavors:   candidates,
+			wantErr:      true,
+			wantSentinel: true,
+		},
+		{
+			name:         "memory too large: sentinel",
+			cpu:          2,
+			memory:       1048576,
+			allFlavors:   candidates,
+			wantErr:      true,
+			wantSentinel: true,
+		},
+		{
+			name:         "empty flavor list: error but NOT sentinel",
+			cpu:          2,
+			memory:       2048,
+			allFlavors:   nil,
+			wantErr:      true,
+			wantSentinel: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flavor, err := GetClosestFlavour(tt.cpu, tt.memory, 0, 0, tt.allFlavors, false)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an error, got nil")
+				}
+				if got := errors.Is(err, ErrNoSuitableFlavor); got != tt.wantSentinel {
+					t.Errorf("errors.Is(err, ErrNoSuitableFlavor) = %v, want %v (err: %v)",
+						got, tt.wantSentinel, err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if flavor.ID != tt.wantFlavorID {
+				t.Errorf("flavor.ID = %q, want %q", flavor.ID, tt.wantFlavorID)
+			}
+		})
+	}
+}
+
+// TestErrNoSuitableFlavor_SurvivesWrapping is the crux of the non-blocking
+// containment gate: the controller wraps this error with github.com/pkg/errors
+// before the trigger loop inspects it, so errors.Is must still match through
+// several layers of wrapping. If this breaks, one unschedulable VM silently
+// starts aborting the whole MigrationPlan again.
+func TestErrNoSuitableFlavor_SurvivesWrapping(t *testing.T) {
+	_, err := GetClosestFlavour(64, 2048, 0, 0, []flavors.Flavor{{ID: "small", VCPUs: 2, RAM: 2048}}, false)
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+
+	wrapped := pkgerrors.Wrapf(
+		pkgerrors.Wrap(err, "failed to determine target flavor for VM vm-07"),
+		"failed to create ConfigMap for VM %s", "vm-07")
+
+	if !errors.Is(wrapped, ErrNoSuitableFlavor) {
+		t.Errorf("errors.Is failed through pkg/errors wrapping; got %v", wrapped)
 	}
 }

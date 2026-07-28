@@ -19,12 +19,15 @@ package controller
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	pkgerrors "github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,6 +39,9 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
+	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 )
 
 var _ = ginkgo.Describe("MigrationPlan Controller", func() {
@@ -643,5 +649,373 @@ func TestIsVMSucceededInPlan(t *testing.T) {
 				t.Errorf("isVMSucceededInPlan(%q) = %v, want %v", tt.vmName, got, tt.want)
 			}
 		})
+	}
+}
+
+// --- Non-blocking flavor resolution -----------------------------------------
+//
+// These cover the guarantee that a single VM whose CPU/memory/GPU shape no target
+// flavor can satisfy does not stop the rest of a MigrationPlan from being
+// scheduled.
+
+func flavorTestMachine(name string, cpu, memoryMB int) *vjailbreakv1alpha1.VMwareMachine {
+	return &vjailbreakv1alpha1.VMwareMachine{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Name:   name,
+				CPU:    cpu,
+				Memory: memoryMB,
+			},
+		},
+	}
+}
+
+func TestResolveTargetFlavorID(t *testing.T) {
+	candidates := []flavors.Flavor{
+		{ID: "f-small", VCPUs: 2, RAM: 4096},
+		{ID: "f-medium", VCPUs: 4, RAM: 16384},
+		{ID: "f-large", VCPUs: 8, RAM: 32768},
+	}
+	template := &vjailbreakv1alpha1.MigrationTemplate{}
+	creds := &vjailbreakv1alpha1.OpenstackCreds{}
+
+	tests := []struct {
+		name         string
+		vmMachine    *vjailbreakv1alpha1.VMwareMachine
+		candidates   []flavors.Flavor
+		wantFlavorID string
+		wantSkip     bool
+	}{
+		{
+			name:         "smallest fitting flavor is chosen",
+			vmMachine:    flavorTestMachine("vm-a", 2, 4096),
+			candidates:   candidates,
+			wantFlavorID: "f-small",
+		},
+		{
+			name:         "rounds up to next flavor that fits",
+			vmMachine:    flavorTestMachine("vm-b", 3, 8192),
+			candidates:   candidates,
+			wantFlavorID: "f-medium",
+		},
+		{
+			name:       "shape larger than every flavor is a skip, not a failure",
+			vmMachine:  flavorTestMachine("vm-c", 128, 999999),
+			candidates: candidates,
+			wantSkip:   true,
+		},
+		{
+			name: "explicit TargetFlavorID overrides resolution entirely",
+			vmMachine: func() *vjailbreakv1alpha1.VMwareMachine {
+				m := flavorTestMachine("vm-d", 128, 999999) // would otherwise be unschedulable
+				m.Spec.TargetFlavorID = "operator-pinned"
+				return m
+			}(),
+			candidates:   candidates,
+			wantFlavorID: "operator-pinned",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flavorID, err := resolveTargetFlavorID(tt.vmMachine, template, creds, tt.candidates)
+
+			if tt.wantSkip {
+				if err == nil {
+					t.Fatalf("expected an error, got flavorID %q", flavorID)
+				}
+				if !isNoSuitableFlavorErr(err) {
+					t.Errorf("error should be classified as no-suitable-flavor, got %v", err)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if flavorID != tt.wantFlavorID {
+				t.Errorf("flavorID = %q, want %q", flavorID, tt.wantFlavorID)
+			}
+		})
+	}
+}
+
+// TestResolveTargetFlavorID_OneBadVMDoesNotStopTheRest encodes the reported
+// scenario directly: in a 20-VM plan where VM #7 cannot be placed, the other 19
+// must still resolve.
+func TestResolveTargetFlavorID_OneBadVMDoesNotStopTheRest(t *testing.T) {
+	candidates := []flavors.Flavor{{ID: "f-medium", VCPUs: 4, RAM: 16384}}
+	template := &vjailbreakv1alpha1.MigrationTemplate{}
+	creds := &vjailbreakv1alpha1.OpenstackCreds{}
+
+	const totalVMs = 20
+	const badVMIndex = 6 // zero-based, i.e. VM #7
+
+	vmMachines := make([]*vjailbreakv1alpha1.VMwareMachine, 0, totalVMs)
+	for i := 0; i < totalVMs; i++ {
+		if i == badVMIndex {
+			vmMachines = append(vmMachines, flavorTestMachine("vm-oversized", 256, 1048576))
+			continue
+		}
+		vmMachines = append(vmMachines, flavorTestMachine(fmt.Sprintf("vm-%02d", i), 2, 8192))
+	}
+
+	resolved := map[string]string{}
+	skipped := []string{}
+
+	for _, vmMachine := range vmMachines {
+		flavorID, err := resolveTargetFlavorID(vmMachine, template, creds, candidates)
+		if err != nil {
+			if !isNoSuitableFlavorErr(err) {
+				t.Fatalf("unexpected fatal error for %s: %v", vmMachine.Name, err)
+			}
+			skipped = append(skipped, vmMachine.Name)
+			continue
+		}
+		resolved[vmMachine.Name] = flavorID
+	}
+
+	if len(resolved) != totalVMs-1 {
+		t.Errorf("resolved %d VMs, want %d — a single unschedulable VM must not stop the rest",
+			len(resolved), totalVMs-1)
+	}
+	if len(skipped) != 1 {
+		t.Fatalf("skipped %d VMs, want exactly 1: %v", len(skipped), skipped)
+	}
+	if skipped[0] != "vm-oversized" {
+		t.Errorf("skipped the wrong VM: %v", skipped)
+	}
+	if _, present := resolved["vm-oversized"]; present {
+		t.Error("unschedulable VM must not appear in the resolved flavor map")
+	}
+}
+
+func TestShouldSkipVMForFlavor(t *testing.T) {
+	tests := []struct {
+		name            string
+		vmMachine       *vjailbreakv1alpha1.VMwareMachine
+		resolvedFlavors map[string]string
+		wantSkip        bool
+	}{
+		{
+			name:            "pre-resolved flavor: proceed",
+			vmMachine:       flavorTestMachine("vm-a", 2, 4096),
+			resolvedFlavors: map[string]string{"vm-a": "f-small"},
+			wantSkip:        false,
+		},
+		{
+			name:            "absent from map: skip",
+			vmMachine:       flavorTestMachine("vm-b", 2, 4096),
+			resolvedFlavors: map[string]string{"vm-a": "f-small"},
+			wantSkip:        true,
+		},
+		{
+			name:            "present but empty: skip",
+			vmMachine:       flavorTestMachine("vm-c", 2, 4096),
+			resolvedFlavors: map[string]string{"vm-c": ""},
+			wantSkip:        true,
+		},
+		{
+			name:            "nil map: skip",
+			vmMachine:       flavorTestMachine("vm-d", 2, 4096),
+			resolvedFlavors: nil,
+			wantSkip:        true,
+		},
+		{
+			name: "explicit TargetFlavorID: proceed even with empty map",
+			vmMachine: func() *vjailbreakv1alpha1.VMwareMachine {
+				m := flavorTestMachine("vm-e", 2, 4096)
+				m.Spec.TargetFlavorID = "operator-pinned"
+				return m
+			}(),
+			resolvedFlavors: nil,
+			wantSkip:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldSkipVMForFlavor(tt.vmMachine, tt.resolvedFlavors); got != tt.wantSkip {
+				t.Errorf("shouldSkipVMForFlavor() = %v, want %v", got, tt.wantSkip)
+			}
+		})
+	}
+}
+
+// TestIsNoSuitableFlavorErr_ClassifiesOnlyFlavorErrors guards the blast radius of
+// the containment gate: only an unschedulable shape may be treated as a skip.
+// Everything else (auth, connectivity, an empty flavor list) must stay fatal so
+// it is retried instead of silently burned in as a permanent per-VM failure.
+func TestIsNoSuitableFlavorErr_ClassifiesOnlyFlavorErrors(t *testing.T) {
+	_, shapeErr := openstackpkg.GetClosestFlavour(64, 2048, 0, 0,
+		[]flavors.Flavor{{ID: "f-small", VCPUs: 2, RAM: 4096}}, false)
+	_, emptyListErr := openstackpkg.GetClosestFlavour(2, 2048, 0, 0, nil, false)
+
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "nil error", err: nil, want: false},
+		{name: "unschedulable shape", err: shapeErr, want: true},
+		{name: "shape error wrapped twice", err: pkgerrors.Wrap(pkgerrors.Wrap(shapeErr, "outer"), "outermost"), want: true},
+		{name: "empty flavor list stays fatal", err: emptyListErr, want: false},
+		{name: "unrelated error", err: pkgerrors.New("keystone: 401 unauthorized"), want: false},
+		{name: "unrelated error mentioning flavor", err: pkgerrors.New("failed to list all flavors"), want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNoSuitableFlavorErr(tt.err); got != tt.want {
+				t.Errorf("isNoSuitableFlavorErr(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDetermineAndSetTargetFlavor_FastPaths verifies the cached-flavor and
+// operator-override paths never touch the OpenStack API. The reconciler is built
+// with a nil client on purpose: any attempt to reach Nova would panic, so a clean
+// pass proves no API call was made.
+func TestDetermineAndSetTargetFlavor_FastPaths(t *testing.T) {
+	r := &MigrationPlanReconciler{}
+	template := &vjailbreakv1alpha1.MigrationTemplate{}
+	creds := &vjailbreakv1alpha1.OpenstackCreds{}
+
+	tests := []struct {
+		name            string
+		vmMachine       *vjailbreakv1alpha1.VMwareMachine
+		resolvedFlavors map[string]string
+		want            string
+	}{
+		{
+			name:            "uses pre-resolved flavor from validation",
+			vmMachine:       flavorTestMachine("vm-a", 2, 4096),
+			resolvedFlavors: map[string]string{"vm-a": "f-cached"},
+			want:            "f-cached",
+		},
+		{
+			name: "explicit TargetFlavorID wins over cache",
+			vmMachine: func() *vjailbreakv1alpha1.VMwareMachine {
+				m := flavorTestMachine("vm-b", 2, 4096)
+				m.Spec.TargetFlavorID = "operator-pinned"
+				return m
+			}(),
+			resolvedFlavors: map[string]string{"vm-b": "f-cached"},
+			want:            "operator-pinned",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configMapData := map[string]string{}
+			err := r.determineAndSetTargetFlavor(context.Background(), configMapData,
+				tt.vmMachine, template, creds, tt.resolvedFlavors)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got := configMapData["TARGET_FLAVOR_ID"]; got != tt.want {
+				t.Errorf("TARGET_FLAVOR_ID = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVMDisplayNames(t *testing.T) {
+	got := vmDisplayNames([]*vjailbreakv1alpha1.VMwareMachine{
+		flavorTestMachine("vm-a", 2, 4096),
+		flavorTestMachine("vm-b", 4, 8192),
+	})
+	want := []string{"vm-a", "vm-b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("vmDisplayNames() = %v, want %v", got, want)
+	}
+}
+
+// TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup guards a regression
+// risk introduced by pre-flight validation: resolving flavors up front must stay
+// LAZY. A plan whose VMs all pin Spec.TargetFlavorID never contacted Nova before,
+// and must not start depending on it — otherwise an unrelated Nova/Keystone
+// outage would fail plans that need no flavor lookup at all.
+//
+// The fake client has no OpenStack credential secret, so any attempt to list
+// flavors returns an error. A clean pass therefore proves no lookup happened.
+func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := vjailbreakv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+	if err := corev1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add corev1 scheme: %v", err)
+	}
+
+	const ns = "migration-system"
+	const credsName = "vmwcreds-a"
+	const vmName = "pinned-vm"
+	const vmID = "vm-101"
+
+	vmKey := commonutils.GetVMUniqueKey(vmName, vmID)
+	vmk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(vmKey, credsName)
+	if err != nil {
+		t.Fatalf("failed to compute k8s name: %v", err)
+	}
+
+	vmMachine := &vjailbreakv1alpha1.VMwareMachine{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      vmk8sName,
+			Namespace: ns,
+			Labels:    map[string]string{constants.VMwareCredsLabel: credsName},
+		},
+		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+			TargetFlavorID: "operator-pinned",
+			VMInfo: vjailbreakv1alpha1.VMInfo{
+				Name:     vmName,
+				VMID:     vmID,
+				CPU:      4,
+				Memory:   8192,
+				OSFamily: "linuxGuest",
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(vmMachine).
+		Build()
+
+	r := &MigrationPlanReconciler{
+		Client: fakeClient,
+		Scheme: scheme,
+		ctxlog: logr.Discard(),
+	}
+
+	migrationplan := &vjailbreakv1alpha1.MigrationPlan{
+		ObjectMeta: metav1.ObjectMeta{Name: "plan-a", Namespace: ns},
+	}
+	migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{
+		ObjectMeta: metav1.ObjectMeta{Name: "tmpl-a", Namespace: ns},
+	}
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
+		ObjectMeta: metav1.ObjectMeta{Name: credsName, Namespace: ns},
+	}
+	openstackcreds := &vjailbreakv1alpha1.OpenstackCreds{
+		ObjectMeta: metav1.ObjectMeta{Name: "oscreds-a", Namespace: ns},
+	}
+
+	validation, err := r.validateMigrationPlanVMs(context.Background(), migrationplan,
+		migrationtemplate, vmwcreds, openstackcreds, []string{vmKey})
+	if err != nil {
+		t.Fatalf("validation must not require a Nova lookup for a pinned flavor, got: %v", err)
+	}
+
+	if len(validation.ValidVMs) != 1 {
+		t.Fatalf("ValidVMs = %d, want 1", len(validation.ValidVMs))
+	}
+	if len(validation.FlavorSkippedVMs) != 0 {
+		t.Errorf("FlavorSkippedVMs = %d, want 0", len(validation.FlavorSkippedVMs))
+	}
+	if got := validation.ResolvedFlavors[vmk8sName]; got != "operator-pinned" {
+		t.Errorf("ResolvedFlavors[%s] = %q, want %q", vmk8sName, got, "operator-pinned")
 	}
 }
