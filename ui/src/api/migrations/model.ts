@@ -121,7 +121,9 @@ export enum Type {
   Validated = 'Validated',
   Failed = 'Failed',
   Migrating = 'Migrating',
-  DataCopied = 'DataCopied'
+  DataCopied = 'DataCopied',
+  PodRunning = 'PodRunning',
+  CutoverTriggered = 'CutoverTriggered'
 }
 
 export enum Phase {

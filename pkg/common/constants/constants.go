@@ -639,6 +639,14 @@ runcmd:
 	// MigrationConditionTypeMigrating represents the condition type for migrating phase
 	MigrationConditionTypeMigrating corev1.PodConditionType = "Migrating"
 
+	// MigrationConditionTypePodRunning represents the condition type marking the instant the
+	// migration pod actually started running.
+	MigrationConditionTypePodRunning corev1.PodConditionType = "PodRunning"
+
+	// MigrationConditionTypeCutoverTriggered represents the condition type marking the instant
+	// an admin actually triggered cutover.
+	MigrationConditionTypeCutoverTriggered corev1.PodConditionType = "CutoverTriggered"
+
 	// MigrationConditionTypeValidated represents the condition type for validated phase
 	MigrationConditionTypeValidated corev1.PodConditionType = "Validated"
 	MigrationConditionTypeFailed    corev1.PodConditionType = "Failed"
@@ -678,10 +686,10 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseAwaitingAdminCutOver:     13,
 		// Post-cutover phases: these happen after admin triggers cutover
 		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks: 14,
-		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk: 15,
-		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:    16,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:     17,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:       18,
+		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:       15,
+		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:           16,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:            17,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:              18,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

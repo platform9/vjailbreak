@@ -16,7 +16,6 @@ import { getPhaseColorKey, getPhaseLabel } from '../../utils/phaseUtils'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResourcesQuery'
-import { VMwareCreds } from 'src/api/vmware-creds/model'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 import DeleteMigrationDialog from '../DeleteMigrationDialog'
 
@@ -57,11 +56,12 @@ export default function MigrationDetailHeader({
   const namespace =
     (migration.metadata?.namespace as string | undefined) ?? VJAILBREAK_DEFAULT_NAMESPACE
 
-  const vmwareCreds = resources?.vmwareCreds as VMwareCreds | null | undefined
+  // Matches MigrationDetailsTab's sourceDatacenter
+  const vmMeta = resources?.vmwareMachine?.metadata as any
+  const templateSpec = resources?.migrationTemplate?.spec as any
   const sourceLabel =
-    vmwareCreds?.spec?.hostName ||
-    vmwareCreds?.spec?.datacenter ||
-    resources?.vmwareCredsRef ||
+    (vmMeta?.annotations?.['vjailbreak.k8s.pf9.io/datacenter'] as string) ||
+    (templateSpec?.source?.datacenter as string) ||
     null
 
   const openstackCreds = resources?.openstackCreds as OpenstackCreds | null | undefined

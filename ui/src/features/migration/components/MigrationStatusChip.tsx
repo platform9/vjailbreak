@@ -12,7 +12,7 @@ export default function MigrationStatusChip({ phase }: MigrationStatusChipProps)
   const colorKey = getPhaseColorKey(phase as Phase)
   const label = getPhaseLabel(phase as Phase)
 
-  if (colorKey === 'default' && phase !== Phase.Pending) {
+  if (colorKey === 'default' && phase && phase !== Phase.Pending) {
     return (
       <Typography variant="body2" color="text.secondary">
         {label}
