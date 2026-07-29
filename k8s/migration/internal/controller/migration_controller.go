@@ -194,13 +194,14 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
-		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidating
-	}
-	// Check if the pod is in a valid state only then continue
-	if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodFailed && pod.Status.Phase != corev1.PodSucceeded {
+	// Stay Pending until the pod has actually started running (or reached a terminal
+	// state).
+	if !isPodRunningOrTerminal(pod) {
 		ctxlog.Info("Pod is not in a terminal state, requeuing", "migration", migration.Name, "podStatus", pod.Status.Phase)
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
+	if constants.VMMigrationStatesEnum[migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseValidating] {
+		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseValidating
 	}
 
 	filteredEvents, err := r.GetEventsSorted(ctx, migrationScope)
@@ -208,9 +209,11 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		return ctrl.Result{}, errors.Wrap(err, "failed getting pod events")
 	}
 	// Create status conditions
+	migration.Status.Conditions = utils.CreatePodRunningCondition(migration, pod)
 	migration.Status.Conditions = utils.CreateValidatedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateStorageAcceleratedCopyCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateDataCopyCondition(migration, filteredEvents)
+	migration.Status.Conditions = utils.CreateCutoverTriggeredCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateMigratingCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateFailedCondition(migration, filteredEvents)
 	migration.Status.Conditions = utils.CreateSucceededCondition(migration, filteredEvents)
@@ -569,6 +572,14 @@ func (r *MigrationReconciler) GetEventsSorted(ctx context.Context, scope *scope.
 		return !filteredEvents.Items[i].CreationTimestamp.Before(&filteredEvents.Items[j].CreationTimestamp)
 	})
 	return filteredEvents, nil
+}
+
+// isPodRunningOrTerminal reports whether a pod has progressed far enough to be considered
+// actively worked on - Running, Failed, or Succeeded.
+func isPodRunningOrTerminal(pod *corev1.Pod) bool {
+	return pod.Status.Phase == corev1.PodRunning ||
+		pod.Status.Phase == corev1.PodFailed ||
+		pod.Status.Phase == corev1.PodSucceeded
 }
 
 // GetPod retrieves the pod associated with a migration

@@ -123,6 +123,73 @@ func CreateMigratingCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
+// CreatePodRunningCondition creates a condition marking the instant the migration pod
+// actually started running, read directly from the pod's own Status.StartTime (a native
+// Kubernetes field) rather than from an event.
+func CreatePodRunningCondition(migration *vjailbreakv1alpha1.Migration, pod *corev1.Pod) []corev1.PodCondition {
+	existingConditions := migration.Status.Conditions
+	if pod.Status.StartTime == nil {
+		return existingConditions
+	}
+
+	idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypePodRunning, constants.MigrationReason)
+	statuscondition := GeneratePodCondition(constants.MigrationConditionTypePodRunning,
+		corev1.ConditionTrue,
+		constants.MigrationReason,
+		"Migration pod started running",
+		*pod.Status.StartTime)
+
+	if idx == -1 {
+		existingConditions = append(existingConditions, *statuscondition)
+	} else {
+		existingConditions[idx] = *statuscondition
+	}
+	return existingConditions
+}
+
+// createSingleEventCondition scans eventList for the first event matching reason/messageCheck
+// and stamps it as a single fixed-message condition on the migration - the shape shared by
+// CreateCutoverTriggeredCondition and CreateSucceededCondition (only the message-match test,
+// condition type, and stored message text vary between them).
+func createSingleEventCondition(
+	existingConditions []corev1.PodCondition,
+	eventList *corev1.EventList,
+	messageMatches func(message string) bool,
+	conditionType corev1.PodConditionType,
+	conditionMessage string,
+) []corev1.PodCondition {
+	for i := 0; i < len(eventList.Items); i++ {
+		if eventList.Items[i].Reason != constants.MigrationReason || !messageMatches(eventList.Items[i].Message) {
+			continue
+		}
+
+		idx := GetConditonIndex(existingConditions, conditionType, constants.MigrationReason)
+		statuscondition := GeneratePodCondition(conditionType,
+			corev1.ConditionTrue,
+			constants.MigrationReason,
+			conditionMessage,
+			eventList.Items[i].LastTimestamp)
+
+		if idx == -1 {
+			existingConditions = append(existingConditions, *statuscondition)
+		} else {
+			existingConditions[idx] = *statuscondition
+		}
+		break
+	}
+	return existingConditions
+}
+
+// CreateCutoverTriggeredCondition creates a condition marking the instant an admin actually
+// triggered cutover for a migration (as opposed to 'AwaitingAdminCutOver', which only marks
+// that the migration is waiting for that to happen, however long it takes).
+func CreateCutoverTriggeredCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
+	return createSingleEventCondition(migration.Status.Conditions, eventList,
+		func(message string) bool { return strings.HasPrefix(message, "Admin cutover triggered") },
+		constants.MigrationConditionTypeCutoverTriggered,
+		"Admin cutover triggered")
+}
+
 // isFailureEventMessage reports whether an event message represents a genuine terminal
 // migration failure, matched case-insensitively. Warning messages are excluded since they
 // don't represent a real failure.
@@ -182,27 +249,10 @@ func cleanFailureMessage(msg string) string {
 
 // CreateSucceededCondition creates or updates a succeeded condition for a migration based on events.
 func CreateSucceededCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
-	existingConditions := migration.Status.Conditions
-	for i := 0; i < len(eventList.Items); i++ {
-		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "VM created successfully") {
-			continue
-		}
-
-		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeMigrated, constants.MigrationReason)
-		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeMigrated,
-			corev1.ConditionTrue,
-			constants.MigrationReason,
-			"VM successfully migrated from VMware to OpenStack",
-			eventList.Items[i].LastTimestamp)
-
-		if idx == -1 {
-			existingConditions = append(existingConditions, *statuscondition)
-		} else {
-			existingConditions[idx] = *statuscondition
-		}
-		break
-	}
-	return existingConditions
+	return createSingleEventCondition(migration.Status.Conditions, eventList,
+		func(message string) bool { return strings.Contains(message, "VM created successfully") },
+		constants.MigrationConditionTypeMigrated,
+		"VM successfully migrated from VMware to OpenStack")
 }
 
 // SetCutoverLabel sets the cutover label for a migration

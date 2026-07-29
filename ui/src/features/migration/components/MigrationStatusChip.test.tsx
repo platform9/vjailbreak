@@ -24,4 +24,10 @@ describe('MigrationStatusChip', () => {
     const label = screen.getByText('Unknown')
     expect(label).not.toHaveClass('MuiChip-label')
   })
+
+  it('renders a Pending chip when phase is not yet available, not Unknown', () => {
+    render(<MigrationStatusChip phase={undefined} />)
+    expect(screen.getByText('Pending')).toHaveClass('MuiChip-label')
+    expect(screen.queryByText('Unknown')).not.toBeInTheDocument()
+  })
 })

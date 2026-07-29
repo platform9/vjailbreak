@@ -1,5 +1,4 @@
 import { Migration, Phase, Condition } from '../api/migrations'
-import { calculateTimeElapsed } from 'src/utils'
 
 export type PhaseStatus = 'done' | 'active' | 'paused' | 'pending' | 'failed'
 
@@ -70,18 +69,7 @@ function isFailed(phase: Phase): boolean {
   return phase === Phase.Failed || phase === Phase.ValidationFailed
 }
 
-// Extract elapsed duration for a condition type (time from creation to condition transition)
-function conditionElapsed(
-  creationTimestamp: string | Date | undefined,
-  conditions: Condition[],
-  type: string
-): string | null {
-  if (!creationTimestamp) return null
-  const cond = conditions.find((c) => c.type === type)
-  if (!cond?.lastTransitionTime) return null
-  const start = new Date(creationTimestamp).getTime()
-  const end = new Date(cond.lastTransitionTime).getTime()
-  const diffMs = end - start
+function formatDuration(diffMs: number): string | null {
   if (diffMs < 0) return null
   const s = Math.floor(diffMs / 1000)
   const m = Math.floor(s / 60)
@@ -89,6 +77,110 @@ function conditionElapsed(
   if (h > 0) return `${h}h ${m % 60}m`
   if (m > 0) return `${m}m ${s % 60}s`
   return `${s}s`
+}
+
+export function durationBetween(
+  startTimestamp: string | Date | undefined,
+  endTimestamp: string | Date | undefined
+): string | null {
+  if (!startTimestamp || !endTimestamp) return null
+  const start = new Date(startTimestamp).getTime()
+  const end = new Date(endTimestamp).getTime()
+  return formatDuration(end - start)
+}
+
+// Extract elapsed duration for a condition type (time from creation to condition transition).
+// Used for the terminal "Done" step, which intentionally shows total migration time rather
+// than a single step's own duration.
+function conditionElapsed(
+  creationTimestamp: string | Date | undefined,
+  conditions: Condition[],
+  type: string
+): string | null {
+  if (!creationTimestamp) return null
+  const cond = conditions.find((c) => c.type === type)
+  return durationBetween(creationTimestamp, cond?.lastTransitionTime)
+}
+
+// The condition whose lastTransitionTime marks the END of each design-phase step (0-4).
+// Step 0 (Pending) ends on 'PodRunning' - read from the pod's own Status.StartTime - so
+// Pending's real wait (queued for agent capacity) can be measured separately from
+// Validating's real work, instead of Pending always showing nothing and Validating silently
+// absorbing the wait. Step 4 (Converting Disk) ends on 'Migrated' (or 'DataCopied' for
+// DataOnly migrations) - the next condition to fire after 'Migrating' - rather than reusing
+// 'Migrating' itself (which only marks when conversion *started*).
+function stepEndType(step: number, dataOnly: boolean): string | undefined {
+  switch (step) {
+    case 0: return 'PodRunning'
+    case 1: return 'Validated'
+    case 2: return 'DataCopy'
+    case 3: return 'Migrating'
+    case 4: return dataOnly ? 'DataCopied' : 'Migrated'
+    default: return undefined
+  }
+}
+
+// A condition type can have more than one entry - e.g. 'DataCopy' gets one entry per disk
+// (matched by (type, reason) with reason "Copying disk N"), and the array's storage order
+// is not guaranteed to be chronological. Taking the max lastTransitionTime across all
+// matching entries (rather than the first array match) ensures a multi-disk copy's end
+// boundary is really the last disk to finish, not whichever disk happened to be recorded
+// first.
+function stepEndTimestamp(conditions: Condition[], step: number, dataOnly: boolean): string | undefined {
+  const type = stepEndType(step, dataOnly)
+  if (!type) return undefined
+  const matches = conditions.filter((c) => c.type === type && c.lastTransitionTime)
+  if (matches.length === 0) return undefined
+  const latest = matches.reduce((a, b) =>
+    new Date(String(a.lastTransitionTime)).getTime() > new Date(String(b.lastTransitionTime)).getTime() ? a : b
+  )
+  return String(latest.lastTransitionTime)
+}
+
+function stepStartTimestamp(
+  step: number,
+  creationTimestamp: string | Date | undefined,
+  conditions: Condition[],
+  dataOnly: boolean
+): string | undefined {
+  if (step <= 0) return creationTimestamp?.toString()
+  if (step === 3) {
+    // Cutover's real start is when an admin actually triggered it, not when data copy
+    // finished - there can be an arbitrary "awaiting admin" wait in between. Falls back to
+    // DataCopy's end for migrations where cutover isn't admin-gated (no CutoverTriggered
+    // condition ever fires there), or for migrations from before this condition existed.
+    const triggered = conditions.find((c) => c.type === 'CutoverTriggered')
+    if (triggered?.lastTransitionTime) return String(triggered.lastTransitionTime)
+  }
+  return stepEndTimestamp(conditions, step - 1, dataOnly) ?? creationTimestamp?.toString()
+}
+
+// Duration of a single design-phase step: end-of-this-step minus end-of-previous-step
+// (or migration creation time for the first tracked step), not cumulative-since-creation.
+function stepElapsed(
+  step: number,
+  creationTimestamp: string | Date | undefined,
+  conditions: Condition[],
+  dataOnly: boolean
+): string | null {
+  const end = stepEndTimestamp(conditions, step, dataOnly)
+  const start = stepStartTimestamp(step, creationTimestamp, conditions, dataOnly)
+  return durationBetween(start, end)
+}
+
+// Duration of the step currently in progress (active/paused), or the step where a failure
+// occurred: from this step's own start boundary to `until` (now, or the failure time) - not
+// cumulative since the whole migration began. Mirrors stepElapsed's start-boundary logic but
+// takes an explicit end instead of a condition, since the step isn't done yet.
+function stepElapsedUntil(
+  step: number,
+  creationTimestamp: string | Date | undefined,
+  conditions: Condition[],
+  dataOnly: boolean,
+  until: string
+): string | null {
+  const start = stepStartTimestamp(step, creationTimestamp, conditions, dataOnly)
+  return durationBetween(start, until)
 }
 
 function doneDetail(designIndex: number, conditions: Condition[]): string {
@@ -186,34 +278,28 @@ export function derivePhaseStates(
       if (dataOnly && i === 3) {
         return { status: 'pending', elapsed: null, detail: 'Skipped — no cutover in data-only migration.', eta: null }
       }
-      const condType =
-        i === 1 ? 'Validated' :
-        i === 2 ? 'DataCopy' :
-        i === 3 ? 'Migrating' :
-        i === 4 ? 'Migrating' :
-        i === 5 ? (dataOnly ? 'DataCopied' : 'Migrated') : ''
-      const elapsed = conditionElapsed(creationTs?.toString(), conditions, condType) ?? null
+      const elapsed = i >= 0 && i <= 4
+        ? stepElapsed(i, creationTs, conditions, dataOnly)
+        : i === 5
+          ? conditionElapsed(creationTs?.toString(), conditions, dataOnly ? 'DataCopied' : 'Migrated')
+          : null
       const detail = (dataOnly && i === 5) ? 'Disk copy and conversion complete.' : doneDetail(i, conditions)
       return { status: 'done', elapsed, detail, eta: null }
     }
 
     if (failed) {
       if (i < currentIndex) {
-        const condType =
-          i === 1 ? 'Validated' :
-          i === 2 ? 'DataCopy' :
-          i === 3 ? 'Migrating' : ''
         return {
           status: 'done',
-          elapsed: conditionElapsed(creationTs?.toString(), conditions, condType) ?? null,
+          elapsed: stepElapsed(i, creationTs, conditions, dataOnly),
           detail: doneDetail(i, conditions),
           eta: null,
         }
       }
       if (i === currentIndex) {
         const cond = conditions.find((c) => c.type === 'Failed')
-        const elapsed = cond?.lastTransitionTime && creationTs
-          ? calculateTimeElapsed(creationTs.toString(), migration.status)
+        const elapsed = cond?.lastTransitionTime
+          ? stepElapsedUntil(i, creationTs, conditions, dataOnly, String(cond.lastTransitionTime))
           : null
         return { status: 'failed', elapsed, detail: failedDetail(migration, i), eta: null }
       }
@@ -222,13 +308,9 @@ export function derivePhaseStates(
 
     // Active migration
     if (i < currentIndex) {
-      const condType =
-        i === 1 ? 'Validated' :
-        i === 2 ? 'DataCopy' :
-        i === 3 ? 'Migrating' : ''
       return {
         status: 'done',
-        elapsed: conditionElapsed(creationTs?.toString(), conditions, condType) ?? null,
+        elapsed: stepElapsed(i, creationTs, conditions, dataOnly),
         detail: doneDetail(i, conditions),
         eta: null,
       }
@@ -237,9 +319,19 @@ export function derivePhaseStates(
       const isPaused =
         (phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
         !options?.cutoverTriggered
+      const now = new Date().toISOString()
+      // While paused awaiting admin cutover, keep showing total time elapsed since the
+      // migration began (not just since data copy finished) - this is the "how long has
+      // this whole migration been running" figure users expect to watch tick up while
+      // waiting, and it's what's been shown here all along. Once cutover is actually
+      // triggered (no longer paused), switch to this step's own elapsed like every other
+      // active step.
+      const elapsed = isPaused
+        ? durationBetween(creationTs?.toString(), now)
+        : stepElapsedUntil(i, creationTs, conditions, dataOnly, now)
       return {
         status: isPaused ? 'paused' : 'active',
-        elapsed: creationTs ? calculateTimeElapsed(creationTs.toString(), migration.status) : null,
+        elapsed,
         detail: activeDetail(migration, i),
         eta: null,
       }
@@ -271,6 +363,11 @@ export function isMigrationFailed(migration: Migration): boolean {
  * Maps K8s Phase to a human-readable status label and semantic color key.
  */
 export function getPhaseLabel(phase: Phase | string | undefined): string {
+  // A Migration's Status.Phase is set to "Pending" the instant it's created (before any
+  // worker pod exists) - the backend never actually assigns Phase.Unknown. A falsy phase
+  // here just means the frontend hasn't received status yet, not a distinct backend state,
+  // so it should read the same as a fresh migration: "Pending".
+  if (!phase) return 'Pending'
   switch (phase) {
     case Phase.Pending:               return 'Pending'
     case Phase.Validating:            return 'Validating'
@@ -290,13 +387,14 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     case Phase.DataCopied:            return 'Data Copied'
     case Phase.Failed:                return 'Failed'
     case Phase.Unknown:               return 'Unknown'
-    default:                          return String(phase ?? 'Unknown')
+    default:                          return String(phase)
   }
 }
 
 export type PhaseColorKey = 'info' | 'success' | 'error' | 'warning' | 'default'
 
 export function getPhaseColorKey(phase: Phase | string | undefined): PhaseColorKey {
+  if (!phase) return 'default'
   switch (phase) {
     case Phase.Succeeded:
     case Phase.DataCopied:            return 'success'

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"testing"
+	"time"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
@@ -323,6 +324,202 @@ func TestCreateDataCopiedCondition(t *testing.T) {
 			}
 			if hasCondition != tt.wantCondition {
 				t.Errorf("hasDataCopiedCondition = %v, want %v", hasCondition, tt.wantCondition)
+			}
+		})
+	}
+}
+
+func TestCreatePodRunningCondition(t *testing.T) {
+	startedAt := metav1.Now()
+
+	tests := []struct {
+		name          string
+		pod           *corev1.Pod
+		wantCondition bool
+	}{
+		{
+			name:          "pod with StartTime creates PodRunning condition",
+			pod:           &corev1.Pod{Status: corev1.PodStatus{StartTime: &startedAt}},
+			wantCondition: true,
+		},
+		{
+			name:          "pod without StartTime (still scheduled, not running) produces no condition",
+			pod:           &corev1.Pod{Status: corev1.PodStatus{StartTime: nil}},
+			wantCondition: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migration := makeMigration()
+
+			got := CreatePodRunningCondition(migration, tt.pod)
+
+			hasCondition := false
+			for _, c := range got {
+				if c.Type == constants.MigrationConditionTypePodRunning {
+					hasCondition = true
+					if tt.pod.Status.StartTime != nil && !c.LastTransitionTime.Time.Equal(tt.pod.Status.StartTime.Time) {
+						t.Errorf("LastTransitionTime = %v, want %v", c.LastTransitionTime.Time, tt.pod.Status.StartTime.Time)
+					}
+					break
+				}
+			}
+			if hasCondition != tt.wantCondition {
+				t.Errorf("hasPodRunningCondition = %v, want %v", hasCondition, tt.wantCondition)
+			}
+		})
+	}
+}
+
+// TestCreateSingleEventCondition covers createSingleEventCondition directly - the shared
+// helper CreateCutoverTriggeredCondition and CreateSucceededCondition both delegate to - so
+// the append-vs-update and first-match-wins behavior only needs testing once instead of being
+// duplicated across every function that uses it.
+func TestCreateSingleEventCondition(t *testing.T) {
+	matchesFoo := func(message string) bool { return message == "foo happened" }
+
+	t.Run("no matching event leaves conditions unchanged", func(t *testing.T) {
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent(constants.MigrationReason, "something else"),
+		}}
+
+		got := createSingleEventCondition(nil, eventList, matchesFoo, "FooCondition", "foo done")
+
+		if len(got) != 0 {
+			t.Errorf("got %d conditions, want 0", len(got))
+		}
+	})
+
+	t.Run("wrong reason ignored even if message matches", func(t *testing.T) {
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent("OtherReason", "foo happened"),
+		}}
+
+		got := createSingleEventCondition(nil, eventList, matchesFoo, "FooCondition", "foo done")
+
+		if len(got) != 0 {
+			t.Errorf("got %d conditions, want 0", len(got))
+		}
+	})
+
+	t.Run("matching event appends a new condition with the fixed message and type", func(t *testing.T) {
+		ts := metav1.Now()
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			{Reason: constants.MigrationReason, Message: "foo happened", LastTimestamp: ts},
+		}}
+
+		got := createSingleEventCondition(nil, eventList, matchesFoo, "FooCondition", "foo done")
+
+		if len(got) != 1 {
+			t.Fatalf("got %d conditions, want 1", len(got))
+		}
+		if got[0].Type != "FooCondition" || got[0].Message != "foo done" || got[0].Reason != constants.MigrationReason {
+			t.Errorf("condition = %+v, want type=FooCondition message='foo done' reason=%s", got[0], constants.MigrationReason)
+		}
+		if !got[0].LastTransitionTime.Time.Equal(ts.Time) {
+			t.Errorf("LastTransitionTime = %v, want %v", got[0].LastTransitionTime.Time, ts.Time)
+		}
+	})
+
+	t.Run("matching event updates an existing condition of the same type in place, not duplicated", func(t *testing.T) {
+		existing := []corev1.PodCondition{
+			{Type: "FooCondition", Reason: constants.MigrationReason, Message: "stale", LastTransitionTime: metav1.Now()},
+		}
+		newTs := metav1.NewTime(metav1.Now().Add(time.Minute))
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			{Reason: constants.MigrationReason, Message: "foo happened", LastTimestamp: newTs},
+		}}
+
+		got := createSingleEventCondition(existing, eventList, matchesFoo, "FooCondition", "foo done")
+
+		if len(got) != 1 {
+			t.Fatalf("got %d conditions, want 1 (updated in place, not appended)", len(got))
+		}
+		if got[0].Message != "foo done" {
+			t.Errorf("Message = %q, want %q", got[0].Message, "foo done")
+		}
+		if !got[0].LastTransitionTime.Time.Equal(newTs.Time) {
+			t.Errorf("LastTransitionTime not updated: got %v, want %v", got[0].LastTransitionTime.Time, newTs.Time)
+		}
+	})
+
+	t.Run("only the first matching event is used, matching the break-on-first-match behavior", func(t *testing.T) {
+		ts1 := metav1.Now()
+		ts2 := metav1.NewTime(ts1.Add(time.Hour))
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			{Reason: constants.MigrationReason, Message: "foo happened", LastTimestamp: ts1},
+			{Reason: constants.MigrationReason, Message: "foo happened", LastTimestamp: ts2},
+		}}
+
+		got := createSingleEventCondition(nil, eventList, matchesFoo, "FooCondition", "foo done")
+
+		if len(got) != 1 {
+			t.Fatalf("got %d conditions, want 1", len(got))
+		}
+		if !got[0].LastTransitionTime.Time.Equal(ts1.Time) {
+			t.Errorf("LastTransitionTime = %v, want the FIRST matching event's time %v", got[0].LastTransitionTime.Time, ts1.Time)
+		}
+	})
+}
+
+func TestCreateCutoverTriggeredCondition(t *testing.T) {
+	tests := []struct {
+		name          string
+		events        []corev1.Event
+		wantCondition bool
+	}{
+		{
+			name: "'Admin cutover triggered' creates CutoverTriggered condition",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "Admin cutover triggered"),
+			},
+			wantCondition: true,
+		},
+		{
+			name: "'Admin cutover triggered during wait' variant also matches",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, "Admin cutover triggered during wait"),
+			},
+			wantCondition: true,
+		},
+		{
+			name: "wrong reason ignored",
+			events: []corev1.Event{
+				makeEvent("OtherReason", "Admin cutover triggered"),
+			},
+			wantCondition: false,
+		},
+		{
+			name:          "empty events produces no condition",
+			events:        []corev1.Event{},
+			wantCondition: false,
+		},
+		{
+			name: "unrelated event ignored",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason, constants.EventMessageWaitingForAdminCutOver),
+			},
+			wantCondition: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			migration := makeMigration()
+			eventList := &corev1.EventList{Items: tt.events}
+
+			got := CreateCutoverTriggeredCondition(migration, eventList)
+
+			hasCondition := false
+			for _, c := range got {
+				if c.Type == constants.MigrationConditionTypeCutoverTriggered {
+					hasCondition = true
+					break
+				}
+			}
+			if hasCondition != tt.wantCondition {
+				t.Errorf("hasCutoverTriggeredCondition = %v, want %v", hasCondition, tt.wantCondition)
 			}
 		})
 	}

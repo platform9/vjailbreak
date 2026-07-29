@@ -35,6 +35,55 @@ function formatFullTs(ts: Date | string | undefined): string {
   })
 }
 
+const DISPLAY_TYPE: Record<string, string> = {
+  PodRunning: 'Migration Started',
+  CutoverTriggered: 'Cutover',
+}
+
+function displayType(type: string | undefined): string {
+  if (!type) return '—'
+  return DISPLAY_TYPE[type] ?? type
+}
+
+
+function buildCreatedEntry(creationTimestamp: string | Date | undefined): Condition | null {
+  if (!creationTimestamp) return null
+  return {
+    type: 'Created',
+    status: 'True',
+    reason: '',
+    message: 'Migration created',
+    lastTransitionTime: creationTimestamp,
+  } as unknown as Condition
+}
+
+// 'Cutover' has a real backend timestamp only for admin-gated migrations (CutoverTriggered
+// condition, fires the instant an admin actually clicks cutover). For immediate/automatic
+// cutover migrations there's no such event - cutover starts the moment the last disk's data
+// copy finishes, so that's what's synthesized here as a stand-in, once conversion (Migrating)
+// has actually started (i.e. cutover has definitely already happened by then).
+function buildSyntheticCutoverEntry(conditions: Condition[]): Condition | null {
+  const hasRealCutoverTrigger = conditions.some((c) => c.type === 'CutoverTriggered')
+  if (hasRealCutoverTrigger) return null
+
+  const hasStartedConverting = conditions.some((c) => c.type === 'Migrating')
+  if (!hasStartedConverting) return null
+
+  const dataCopyEntries = conditions.filter((c) => c.type === 'DataCopy' && c.lastTransitionTime)
+  if (dataCopyEntries.length === 0) return null
+  const lastDataCopy = dataCopyEntries.reduce((a, b) =>
+    new Date(String(a.lastTransitionTime)).getTime() > new Date(String(b.lastTransitionTime)).getTime() ? a : b
+  )
+
+  return {
+    type: 'Cutover',
+    status: 'True',
+    reason: '',
+    message: 'Cutover started immediately after data copy',
+    lastTransitionTime: lastDataCopy.lastTransitionTime,
+  } as unknown as Condition
+}
+
 interface MigrationEventsTabProps {
   migration: Migration
 }
@@ -44,7 +93,14 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
   const [sort, setSort] = useState<SortOrder>('oldest')
   const [search, setSearch] = useState('')
 
-  const conditions = migration.status?.conditions ?? []
+  const rawConditions = migration.status?.conditions ?? []
+  const createdEntry = buildCreatedEntry(migration.metadata?.creationTimestamp)
+  const syntheticCutoverEntry = buildSyntheticCutoverEntry(rawConditions)
+  const conditions = [
+    ...(createdEntry ? [createdEntry] : []),
+    ...rawConditions,
+    ...(syntheticCutoverEntry ? [syntheticCutoverEntry] : []),
+  ]
 
   const counts = useMemo(
     () => ({
@@ -219,7 +275,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
                     }}
                   >
                     <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
-                      {condition.type ?? '—'}
+                      {displayType(condition.type)}
                     </Typography>
                     <Chip
                       label={condition.status ?? 'Unknown'}

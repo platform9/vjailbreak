@@ -9,6 +9,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { Migration, Phase } from '../../api/migrations'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
+import { durationBetween } from '../../utils/phaseUtils'
 
 // ─── Copying Disk Blocks ─────────────────────────────────────────────────────
 
@@ -222,17 +223,9 @@ function AwaitingCutoverDetail({
 
 // ─── Success ──────────────────────────────────────────────────────────────────
 
-function calcMigrationElapsed(
-  start: Date | string | undefined,
-  endMs: number
-): string {
+function calcMigrationElapsed(start: Date | string | undefined, endMs: number): string {
   if (!start || !endMs) return ''
-  const diffMs = endMs - new Date(start).getTime()
-  if (diffMs <= 0) return ''
-  const hours = Math.floor(diffMs / 3_600_000)
-  const mins = Math.floor((diffMs % 3_600_000) / 60_000)
-  if (hours > 0) return `${hours}h ${mins}m total`
-  return `${mins}m total`
+  return durationBetween(start, new Date(endMs).toISOString()) ?? ''
 }
 
 function SuccessStatBox({
@@ -315,7 +308,14 @@ function SuccessDetail({ migration }: { migration: Migration }) {
             mb: 0.75,
           }}
         >
-          Migration complete{elapsed ? ` · ${elapsed.toUpperCase()}` : ''}
+          Migration complete
+          {elapsed && (
+            <>
+              {' · '}
+              <Box component="span" sx={{ textTransform: 'none' }}>{elapsed}</Box>
+              {' total'}
+            </>
+          )}
         </Typography>
         <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
           {vmName} is running in PCD

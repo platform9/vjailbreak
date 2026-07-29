@@ -18,10 +18,12 @@ package controller
 
 import (
 	"context"
+	"testing"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -81,3 +83,26 @@ var _ = ginkgo.Describe("Migration Controller", func() {
 		})
 	})
 })
+
+func TestIsPodRunningOrTerminal(t *testing.T) {
+	tests := []struct {
+		name  string
+		phase corev1.PodPhase
+		want  bool
+	}{
+		{name: "pending pod is not yet running or terminal", phase: corev1.PodPending, want: false},
+		{name: "unknown pod is not yet running or terminal", phase: corev1.PodUnknown, want: false},
+		{name: "running pod counts", phase: corev1.PodRunning, want: true},
+		{name: "failed pod counts (terminal)", phase: corev1.PodFailed, want: true},
+		{name: "succeeded pod counts (terminal)", phase: corev1.PodSucceeded, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &corev1.Pod{Status: corev1.PodStatus{Phase: tt.phase}}
+			if got := isPodRunningOrTerminal(pod); got != tt.want {
+				t.Errorf("isPodRunningOrTerminal(phase=%s) = %v, want %v", tt.phase, got, tt.want)
+			}
+		})
+	}
+}
