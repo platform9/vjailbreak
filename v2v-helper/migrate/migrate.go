@@ -1474,6 +1474,25 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 			utils.PrintLog("FixLegacyMkinitrd completed successfully")
 		}
 	}
+
+	// Pre-conversion RHEL-family fix: recreate the /boot/grub/grub.cfg compat
+	// symlink that grubby (used internally by virt-v2v's Grub2 bootloader
+	// driver) expects, when it's missing or broken. Without it,
+	// virt-v2v-in-place fails with "error opening /boot/grub/grub.cfg for
+	// read: No such file or directory" (Platform9 Jira VJAILB-218). See
+	// virtv2v.FixGrubCompatSymlink for the full explanation.
+	if virtv2v.ShouldFixGrubCompatSymlink(osRelease, vminfo.UEFI) {
+		utils.PrintLog("RHEL-family BIOS guest detected: running pre-conversion FixGrubCompatSymlink")
+		if err := virtv2v.FixGrubCompatSymlink(vminfo.VMDisks); err != nil {
+			// Non-fatal: log and continue. If this guest genuinely needed the
+			// fix and it didn't apply, virt-v2v-in-place will fail with its
+			// usual grubby error below and that failure will still surface
+			// clearly in the migration logs.
+			utils.PrintLog(fmt.Sprintf("Warning: FixGrubCompatSymlink failed (continuing): %v", err))
+		} else {
+			utils.PrintLog("FixGrubCompatSymlink completed successfully")
+		}
+	}
 	// Inject VMware Tools cleanup script for Linux guests when requested
 	if removeVMwareTools && strings.ToLower(vminfo.OSType) == constants.OSFamilyLinux {
 		firstbootscriptname := "vmware_tools_cleanup"

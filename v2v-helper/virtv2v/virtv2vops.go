@@ -280,6 +280,15 @@ func MountPersistenceScriptArgs(osRelease string) string {
 	return "--force-uuid"
 }
 
+// ShouldFixGrubCompatSymlink reports whether FixGrubCompatSymlink should be
+// run for this guest. RHEL-family (RHEL/CentOS/Rocky/Alma) BIOS guests are the
+// ones affected, because they're the ones that ship grubby -- see
+// FixGrubCompatSymlink for the full story. UEFI guests use a different
+// bootloader path entirely, so the check is skipped there.
+func ShouldFixGrubCompatSymlink(osRelease string, uefi bool) bool {
+	return IsRHELFamily(osRelease) && !uefi
+}
+
 func GetPartitions(disk string) ([]string, error) {
 	// Execute lsblk command to get partition information
 	cmd := exec.Command("lsblk", "-no", "NAME", disk)
@@ -1180,6 +1189,80 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	}
 
 	log.Printf("FixLegacyMkinitrd: wrapper installed successfully at /sbin/mkinitrd (original at /sbin/mkinitrd.orig)")
+	return nil
+}
+
+// Paths involved in FixGrubCompatSymlink.
+const (
+	grubbyPath       = "/sbin/grubby"
+	grubCompatConfig = "/boot/grub2/grub.cfg"
+	grubCompatDir    = "/boot/grub"
+	grubCompatLink   = "/boot/grub/grub.cfg"
+	grubCompatTarget = "../grub2/grub.cfg"
+)
+
+// FixGrubCompatSymlink ensures /boot/grub/grub.cfg exists as a working symlink
+// to /boot/grub2/grub.cfg on RHEL-family BIOS guests, before virt-v2v-in-place
+// runs.
+//
+// virt-v2v's Grub2 bootloader driver (common/mldrivers/linux_bootloaders.ml in
+// virt-v2v) delegates kernel enumeration and default-kernel updates to grubby
+// whenever /sbin/grubby is present on the guest. Grubby has its own,
+// independent bootloader-config auto-detection that expects the classic RHEL
+// compatibility path /boot/grub/grub.cfg (normally a symlink to
+// ../grub2/grub.cfg) rather than /boot/grub2/grub.cfg directly. When that
+// symlink is missing or broken, grubby fails with:
+//
+//	error opening /boot/grub/grub.cfg for read: No such file or directory
+//
+// which virt-v2v-in-place surfaces as a fatal "command" error and aborts the
+// whole conversion (exit status 1), even though guest inspection, disk copy,
+// and everything else already succeeded. See Red Hat KB solution 7050461,
+// RHBZ #1152369, and Platform9 Jira VJAILB-218 (two RHEL 7.9 guests hit this
+// exact failure).
+//
+// This must be called BEFORE ConvertDisk / virt-v2v-in-place, same as
+// FixLegacyMkinitrd, so the guest disk is already in a state virt-v2v/grubby
+// can handle correctly. It is intentionally conservative: it only acts when
+// grubby and a real grub2 config are both present, and only when the compat
+// symlink is actually missing or broken.
+func FixGrubCompatSymlink(disks []vm.VMDisk) error {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	// 1. Only relevant if grubby is actually present -- it's the component
+	//    that hardcodes the /boot/grub/grub.cfg expectation.
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, grubbyPath); err != nil {
+		log.Printf("FixGrubCompatSymlink: %s not found on guest, skipping", grubbyPath)
+		return nil
+	}
+
+	// 2. Need a real GRUB2 config to link to.
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, grubCompatConfig); err != nil {
+		log.Printf("FixGrubCompatSymlink: %s not found on guest, skipping", grubCompatConfig)
+		return nil
+	}
+
+	// 3. If /boot/grub/grub.cfg already resolves to a readable file (either a
+	//    real file or a working symlink), there is nothing to fix. "stat"
+	//    follows symlinks, so a dangling/broken symlink fails here exactly
+	//    like grubby's own open() call would -- which is the condition we
+	//    need to repair.
+	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, grubCompatLink); err == nil {
+		log.Printf("FixGrubCompatSymlink: %s already present and readable, skipping", grubCompatLink)
+		return nil
+	}
+
+	log.Printf("FixGrubCompatSymlink: %s missing or broken, recreating compat symlink to %s", grubCompatLink, grubCompatTarget)
+
+	if out, err := RunCommandInGuestAllVolumes(disks, "mkdir-p", true, grubCompatDir); err != nil {
+		return fmt.Errorf("FixGrubCompatSymlink: failed to ensure %s exists: %v: %s", grubCompatDir, err, strings.TrimSpace(out))
+	}
+
+	if out, err := RunCommandInGuestAllVolumes(disks, "ln-sf", true, grubCompatTarget, grubCompatLink); err != nil {
+		return fmt.Errorf("FixGrubCompatSymlink: failed to create %s symlink: %v: %s", grubCompatLink, err, strings.TrimSpace(out))
+	}
+
+	log.Printf("FixGrubCompatSymlink: created %s -> %s", grubCompatLink, grubCompatTarget)
 	return nil
 }
 

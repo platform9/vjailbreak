@@ -192,6 +192,62 @@ func TestFixLegacyMkinitrdOnlyForSUSE(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// ShouldFixGrubCompatSymlink / FixGrubCompatSymlink
+//
+// The actual guestfish execution cannot run in unit tests (no real guest disk
+// to attach), so this exercises the pure gating logic that decides whether
+// FixGrubCompatSymlink would be invoked for a given guest, mirroring the
+// TestFixLegacyMkinitrdOnlyForSUSE pattern above.
+// ---------------------------------------------------------------------------
+
+func TestShouldFixGrubCompatSymlink(t *testing.T) {
+	tests := []struct {
+		name      string
+		osRelease string
+		uefi      bool
+		want      bool
+	}{
+		// RHEL-family + BIOS -> fix should run
+		{name: "RHEL 7 BIOS", osRelease: "red hat enterprise linux server 7.9 (maipo)", uefi: false, want: true},
+		{name: "RHEL 8 BIOS", osRelease: "red hat enterprise linux 8", uefi: false, want: true},
+		{name: "CentOS 7 BIOS", osRelease: "centos linux 7", uefi: false, want: true},
+		{name: "Rocky Linux 9 BIOS", osRelease: "rocky linux 9", uefi: false, want: true},
+		{name: "AlmaLinux 9 BIOS", osRelease: "almalinux 9", uefi: false, want: true},
+
+		// RHEL-family + UEFI -> different bootloader path, skip
+		{name: "RHEL 8 UEFI", osRelease: "red hat enterprise linux 8", uefi: true, want: false},
+		{name: "Rocky Linux 9 UEFI", osRelease: "rocky linux 9", uefi: true, want: false},
+
+		// Non-RHEL-family -> grubby isn't the RHEL-patched variant, skip
+		{name: "Ubuntu BIOS", osRelease: `NAME="Ubuntu" VERSION_ID="22.04"`, uefi: false, want: false},
+		{name: "SUSE BIOS", osRelease: "suse linux enterprise server 15", uefi: false, want: false},
+		{name: "Windows BIOS", osRelease: "windows server 2019", uefi: false, want: false},
+		{name: "empty string", osRelease: "", uefi: false, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ShouldFixGrubCompatSymlink(tt.osRelease, tt.uefi)
+			assert.Equal(t, tt.want, got,
+				"ShouldFixGrubCompatSymlink(%q, uefi=%v)", tt.osRelease, tt.uefi)
+		})
+	}
+}
+
+// TestGrubCompatSymlinkPaths locks in the exact paths FixGrubCompatSymlink
+// operates on, since these mirror the manual workaround already validated
+// against real failing guests in VJAILB-218 (grubby error referenced
+// /boot/grub/grub.cfg specifically, resolved via a symlink to
+// ../grub2/grub.cfg) -- a typo here would silently break the fix.
+func TestGrubCompatSymlinkPaths(t *testing.T) {
+	assert.Equal(t, "/sbin/grubby", grubbyPath)
+	assert.Equal(t, "/boot/grub2/grub.cfg", grubCompatConfig)
+	assert.Equal(t, "/boot/grub", grubCompatDir)
+	assert.Equal(t, "/boot/grub/grub.cfg", grubCompatLink)
+	assert.Equal(t, "../grub2/grub.cfg", grubCompatTarget)
+}
+
+// ---------------------------------------------------------------------------
 // RunMountPersistenceScript – flag selection logic
 //
 // The actual guestfish execution cannot run in unit tests, but we can verify
