@@ -28,7 +28,7 @@ describe('MigrationEventsTab', () => {
     render(
       <MigrationEventsTab
         migration={buildMigration('2026-01-01T00:00:00Z', [
-          condition('PodRunning', '2026-01-01T00:50:00Z', 'Migration pod started running'),
+          condition('PodRunning', '2026-01-01T00:50:00Z', 'Migration started running'),
         ])}
       />
     )

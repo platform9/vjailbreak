@@ -136,7 +136,7 @@ func CreatePodRunningCondition(migration *vjailbreakv1alpha1.Migration, pod *cor
 	statuscondition := GeneratePodCondition(constants.MigrationConditionTypePodRunning,
 		corev1.ConditionTrue,
 		constants.MigrationReason,
-		"Migration pod started running",
+		"Migration started running",
 		*pod.Status.StartTime)
 
 	if idx == -1 {

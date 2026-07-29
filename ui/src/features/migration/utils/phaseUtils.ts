@@ -257,9 +257,10 @@ export function derivePhaseStates(
   const creationTs = migration.metadata?.creationTimestamp
 
   if (!phase) {
+    const queuedElapsed = durationBetween(creationTs?.toString(), new Date().toISOString())
     return DESIGN_PHASE_DEFS.map((_, i) =>
       i === 0
-        ? { status: 'active', elapsed: null, detail: 'Queued for agent.', eta: null }
+        ? { status: 'active', elapsed: queuedElapsed, detail: 'Queued for agent.', eta: null }
         : { status: 'pending', elapsed: null, detail: pendingDetail(i), eta: null }
     )
   }
@@ -278,10 +279,15 @@ export function derivePhaseStates(
       if (dataOnly && i === 3) {
         return { status: 'pending', elapsed: null, detail: 'Skipped — no cutover in data-only migration.', eta: null }
       }
+      // Done's total intentionally excludes Pending time (agent-queue wait before the pod
+      // even started running) - it should read as "how long the actual migration work took",
+      // not "how long since the object was created". Falls back to creationTs for migrations
+      // from before the PodRunning condition existed.
+      const doneStart = stepEndTimestamp(conditions, 0, dataOnly) ?? creationTs?.toString()
       const elapsed = i >= 0 && i <= 4
         ? stepElapsed(i, creationTs, conditions, dataOnly)
         : i === 5
-          ? conditionElapsed(creationTs?.toString(), conditions, dataOnly ? 'DataCopied' : 'Migrated')
+          ? conditionElapsed(doneStart, conditions, dataOnly ? 'DataCopied' : 'Migrated')
           : null
       const detail = (dataOnly && i === 5) ? 'Disk copy and conversion complete.' : doneDetail(i, conditions)
       return { status: 'done', elapsed, detail, eta: null }
@@ -319,16 +325,12 @@ export function derivePhaseStates(
       const isPaused =
         (phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
         !options?.cutoverTriggered
-      const now = new Date().toISOString()
-      // While paused awaiting admin cutover, keep showing total time elapsed since the
-      // migration began (not just since data copy finished) - this is the "how long has
-      // this whole migration been running" figure users expect to watch tick up while
-      // waiting, and it's what's been shown here all along. Once cutover is actually
-      // triggered (no longer paused), switch to this step's own elapsed like every other
-      // active step.
-      const elapsed = isPaused
-        ? durationBetween(creationTs?.toString(), now)
-        : stepElapsedUntil(i, creationTs, conditions, dataOnly, now)
+      // While paused awaiting admin cutover, this counts up from when data copy actually
+      // finished (i.e. how long cutover has been waiting to be triggered) - not cumulative
+      // since the whole migration began. Once cutover is actually triggered, this naturally
+      // switches basis to CutoverTriggered's own timestamp via stepStartTimestamp's fallback,
+      // same as every other active step's elapsed.
+      const elapsed = stepElapsedUntil(i, creationTs, conditions, dataOnly, new Date().toISOString())
       return {
         status: isPaused ? 'paused' : 'active',
         elapsed,

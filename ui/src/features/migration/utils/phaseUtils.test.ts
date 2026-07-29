@@ -71,6 +71,19 @@ describe('derivePhaseStates — Pending/Validating split via PodRunning conditio
     expect(states[0].elapsed).toBe('50m 0s') // Pending: creation -> PodRunning
     expect(states[1].elapsed).toBe('2m 0s') // Validating: PodRunning -> Validated, NOT creation -> Validated (52m)
   })
+
+  it('excludes the Pending wait from Done\'s total - "how long the migration actually took", not since object creation', () => {
+    const conditions = [
+      condition('PodRunning', 50),
+      condition('Validated', 52),
+      { ...condition('DataCopy', 60), reason: 'Copying disk 0' },
+      condition('Migrating', 65),
+      condition('Migrated', 70)
+    ]
+    const states = derivePhaseStates(buildMigration(Phase.Succeeded, conditions))
+
+    expect(states[5].elapsed).toBe('20m 0s') // Done: PodRunning(50) -> Migrated(70), NOT creation(0) -> Migrated(70) (70m)
+  })
 })
 
 describe('derivePhaseStates — admin-initiated cutover via CutoverTriggered condition', () => {
@@ -171,7 +184,7 @@ describe('derivePhaseStates — active migration', () => {
     expect(states[4].status).toBe('pending')
   })
 
-  it('keeps showing total time since creation while paused awaiting admin - unchanged by the Cutover-step fixes', () => {
+  it('shows time elapsed since data copy finished while paused awaiting admin, not cumulative since creation', () => {
     vi.useFakeTimers()
     try {
       vi.setSystemTime(new Date(at(45))) // "now" = 45 minutes after creation
@@ -180,7 +193,7 @@ describe('derivePhaseStates — active migration', () => {
       )
 
       expect(states[3].status).toBe('paused')
-      expect(states[3].elapsed).toBe('45m 0s') // total since creation(0) -> now(45), NOT since DataCopy(30) -> now (15m)
+      expect(states[3].elapsed).toBe('15m 0s') // DataCopy(30) -> now(45): how long cutover has been waiting, NOT creation(0) -> now (45m)
     } finally {
       vi.useRealTimers()
     }
@@ -242,6 +255,18 @@ describe('derivePhaseStates — no phase yet', () => {
 
     expect(states[0].status).toBe('active')
     expect(states.slice(1).every((s) => s.status === 'pending')).toBe(true)
+  })
+
+  it('shows live elapsed time for the queued Pending step, not a blank dash', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date(at(29))) // "now" = 29 minutes after creation
+      const states = derivePhaseStates(buildMigration(undefined, []))
+
+      expect(states[0].elapsed).toBe('29m 0s') // creation(0) -> now(29), same as a running migration's active step
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
