@@ -81,6 +81,25 @@ Nova/Neutron/Cinder failures                      → run openstack CLI directly
 
 Pull the per-migration debug log and the `v2v-helper` pod logs before anything else — see [support-bundle.md](support-bundle.md). Check the `vjailbreak-settings` ConfigMap for the `CLEANUP_*` and `PERIODIC_SYNC_*` values relevant to the phase in question.
 
+### Step 3.5: Second-Order Analysis (MANDATORY for Convert and Data Copy failures)
+
+**Identifying the error string is NOT the end of debugging.** After classifying the phase and finding the error, you MUST answer:
+
+> "WHY does the underlying tool (guestfish / libguestfs / virt-v2v / nbdkit) behave this way for THIS guest OS and disk layout?"
+
+Route by tool error:
+
+| Error contains | Ask | Reference |
+|---|---|---|
+| `guestfish: multi-boot` | How many OS roots does each disk have individually? Is this Btrfs/Snapper? | [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) |
+| `inspect-os` failure | Is guest using Btrfs? Multiple disks? Snapshots? | [tool-internals.md §inspect-os](tool-internals.md#inspect-os) |
+| `resolv.conf` immutable | Did source have `chattr +i` set? | [guest-os-issues.md](guest-os-issues.md) |
+| `No more available PCI slots` | Is image using `virtio-blk` vs `virtio-scsi`? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) |
+| `initramfs` / dracut / mkinitrd | Does guest use dracut or legacy mkinitrd? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) |
+| `nbdkit` / VDDK / transports | Is ESXi reachable by hostname? Thumbprint match? | [tool-internals.md §nbdkit](tool-internals.md#nbdkit) |
+
+**Do not stop at "code bug in X.go".** Explain what guest-OS or environment characteristic triggered the bug.
+
 ### Step 4: Decide Retry vs. Refill-and-Restart vs. Fix Code
 
 Use the retry-vs-cleanup decision tree in [migration-lifecycle.md](migration-lifecycle.md) — it is keyed by phase and by whether the failure is a config problem or a runtime/environment blip. If the failure points to a code bug, identify the owning source file:
@@ -121,6 +140,7 @@ openstack server event list <server-id> --insecure
 | No VMs found during discovery | Discovery | VMware credential/permission issue | Check `VMwareCreds` revalidation status |
 | Neutron port-create fails / "port already in use" | Mapping | Subnet mismatch, or stale port from a prior attempt | See [networking.md](networking.md); retry-vs-refill tree in migration-lifecycle.md |
 | Missing OS type for a powered-off VM | Validate | VMware Tools unavailable (VM off) | Manually fill OS/IP in the migration form |
+| `guestfish: multi-boot operating systems are not supported` | Convert | guestfish `-i` inspects all disks together; finds 2+ OS roots (common: OpenSUSE Btrfs+Snapper subvolumes, or 2-disk VM where both disks have OS-like content) | Test each disk individually: `guestfish --ro -a /dev/vdb : run : inspect-os`; see [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) |
 | `virt-v2v` rename `/etc/resolv.conf` fails | Convert | Immutable attribute set on source | `chattr -i /etc/resolv.conf` on source, retry |
 | `No more available PCI slots` | Convert / disk attach | Image using `virtio-blk` instead of `virtio-scsi` | Rebuild image with `hw_disk_bus=scsi` |
 | Hivex/registry read errors during inspection (Windows) | Convert | Dynamic disk (LDM) on boot disk | Convert to basic disk pre-migration |
@@ -148,6 +168,7 @@ openstack server event list <server-id> --insecure
 ## References
 
 ### Internal Skill Docs
+- [tool-internals.md](tool-internals.md) — guestfish `-i` multi-boot detection, libguestfs inspect-os, Btrfs/Snapper, virt-v2v pipeline, nbdkit/VDDK failures
 - [architecture.md](architecture.md) — pods, CRDs, credentials, settings, scaling, compatibility, known limitations
 - [migration-lifecycle.md](migration-lifecycle.md) — phase-by-phase flow, retry/cleanup decision tree, cutover, post-migration options
 - [copy-methods.md](copy-methods.md) — Normal NFC, Storage-Accelerated XCOPY (Pure/NetApp), Hot-Add Proxy
