@@ -106,3 +106,34 @@ func TestIsPodRunningOrTerminal(t *testing.T) {
 		})
 	}
 }
+
+func TestIsMigrationAppEvent(t *testing.T) {
+	tests := []struct {
+		name   string
+		reason string
+		want   bool
+	}{
+		{name: "v2v-helper's own event is accepted", reason: "Migration", want: true},
+		{
+			// A kubelet image-pull-retry event's Reason is "Failed",
+			// not "Migration" — even though its Message text can coincidentally contain
+			// "Failed to pull image...", which SetupMigrationPhase's keyword matching would
+			// otherwise mistake for a real migration failure.
+			name:   "kubelet image-pull-failure event is rejected",
+			reason: "Failed",
+			want:   false,
+		},
+		{name: "kubelet scheduling-backoff event is rejected", reason: "FailedScheduling", want: false},
+		{name: "kubelet image-pull-backoff event is rejected", reason: "BackOff", want: false},
+		{name: "empty reason is rejected", reason: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			event := corev1.Event{Reason: tt.reason}
+			if got := isMigrationAppEvent(event); got != tt.want {
+				t.Errorf("isMigrationAppEvent(reason=%q) = %v, want %v", tt.reason, got, tt.want)
+			}
+		})
+	}
+}
