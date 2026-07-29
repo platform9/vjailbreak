@@ -1198,27 +1198,39 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 	return nil
 }
 
-// detectBootVolume identifies which volume contains the boot partition
+// detectBootVolume confirms the guest is inspectable with every disk attached and
+// returns whatever the boot-detection command reported.
+//
+// All disks are attached for a single probe. Probing them one at a time cannot
+// work when the root filesystem spans several disks - a multi-device btrfs, an
+// LVM VG across two PVs, or mdraid - because none of the disks is individually
+// mountable. That used to surface as a bare "No boot volume detected" warning
+// with the real cause discarded.
+//
+// The concrete boot disk index is always re-derived afterwards by
+// handleLinuxOSDetection or handleWindowsBootDetection, so this function does not
+// try to guess it.
 func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
 	bootVolumeIndex = -1
 
 	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
 
-	for idx := range vminfo.VMDisks {
-		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
-		if cmdErr != nil || ans == "" {
-			continue
-		}
-
-		utils.PrintLog(fmt.Sprintf("Boot volume detected: Disk %d (%s)", idx, vminfo.VMDisks[idx].Name))
-		osPath = strings.TrimSpace(ans)
-		bootVolumeIndex = idx
-		break
+	if len(vminfo.VMDisks) == 0 {
+		utils.PrintLog("WARNING: No disks attached; cannot detect boot volume")
+		return -1, "", nil
 	}
 
-	if bootVolumeIndex < 0 {
-		utils.PrintLog("WARNING: No boot volume detected")
+	ans, cmdErr := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, getBootCommand, false)
+	if cmdErr != nil {
+		// Not fatal - the OS-specific handlers re-derive the boot disk and will
+		// fail with a more specific error if the guest is genuinely unusable.
+		utils.PrintLog(fmt.Sprintf("WARNING: No boot volume detected: %v", cmdErr))
+		return -1, "", nil
 	}
+
+	osPath = strings.TrimSpace(ans)
+	utils.PrintLog(fmt.Sprintf("Guest inspected successfully across %d disk(s); boot disk index is resolved during OS detection",
+		len(vminfo.VMDisks)))
 
 	return bootVolumeIndex, osPath, nil
 }
