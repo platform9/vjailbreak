@@ -408,6 +408,9 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 
 loop:
 	for i := range events.Items {
+		if !isMigrationAppEvent(events.Items[i]) {
+			continue
+		}
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
 		case strings.Contains(events.Items[i].Message, constants.EventMessageMigrationSucessful) &&
@@ -580,6 +583,11 @@ func isPodRunningOrTerminal(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodRunning ||
 		pod.Status.Phase == corev1.PodFailed ||
 		pod.Status.Phase == corev1.PodSucceeded
+}
+
+// isMigrationAppEvent reports whether an event was emitted by v2v-helper itself.
+func isMigrationAppEvent(event corev1.Event) bool {
+	return event.Reason == constants.MigrationReason
 }
 
 // GetPod retrieves the pod associated with a migration
