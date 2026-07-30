@@ -2232,7 +2232,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			return errors.Wrap(err, "failed to convert disks")
 		}
-		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert volumes: %s", err), portids, vcenterSettings); cleanuperror != nil {
+		if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to convert disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 			// combine both errors
 			return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
 		}
