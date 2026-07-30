@@ -51,7 +51,9 @@ export default function NetworkAndStorageMappingStep({
   stepNumber = '3',
   loading = false,
   showHeader = true,
-  subnetWarnings = {}
+  subnetWarnings = {},
+  allowPartialMapping = false,
+  templateMappingPool
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
 
@@ -89,7 +91,11 @@ export default function NetworkAndStorageMappingStep({
     [openstackNetworks]
   )
 
-  const { handleArrayCredsMappingsChange } = useFilteredMappings({
+  const {
+    handleArrayCredsMappingsChange,
+    handleNetworkMappingsChange,
+    handleStorageMappingsChange
+  } = useFilteredMappings({
     params,
     vmwareNetworks,
     openstackNetworkNames,
@@ -98,7 +104,8 @@ export default function NetworkAndStorageMappingStep({
     arrayCredsNames,
     storageCopyMethod,
     validatedArrayCreds,
-    onChange
+    onChange,
+    templatePool: templateMappingPool
   })
 
   // Calculate unmapped networks and storage
@@ -145,8 +152,19 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <FieldLabel label="Map Networks" required={hasSourceNetworks} align="flex-start" />
-                {!hasSourceNetworks ? (
+                <FieldLabel
+                  label="Map Networks"
+                  required={hasSourceNetworks && !allowPartialMapping}
+                  align="flex-start"
+                />
+                {allowPartialMapping ? (
+                  hasSourceNetworks && (
+                    <Typography variant="body2" color="text.secondary">
+                      {vmwareNetworks.length - unmappedNetworks.length} of {vmwareNetworks.length}{' '}
+                      mapped
+                    </Typography>
+                  )
+                ) : !hasSourceNetworks ? (
                   <Typography variant="body2" color="text.secondary">
                     Not required
                   </Typography>
@@ -160,11 +178,15 @@ export default function NetworkAndStorageMappingStep({
                   </Typography>
                 )}
               </Box>
-              {hasSourceNetworks ? (
+              {/* Template mode always offers the mapping table: choosing a cluster is the
+                  only prerequisite, so there is nothing to explain or warn about. The
+                  "no network interfaces" notice below is migration-only. */}
+              {hasSourceNetworks || allowPartialMapping ? (
                 <>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Select source and target networks to automatically create mappings. All networks
-                    must be mapped to proceed.
+                    {allowPartialMapping
+                      ? 'Map only what this template should preset. Unmapped sources stay open for whoever uses it, and several sources can share one target.'
+                      : 'Select source and target networks to automatically create mappings. All networks must be mapped to proceed.'}
                   </Typography>
                   <ResourceMappingTable
                     sourceItems={vmwareNetworks}
@@ -172,7 +194,7 @@ export default function NetworkAndStorageMappingStep({
                     sourceLabel="VMware Network"
                     targetLabel="PCD Network"
                     values={params.networkMappings || []}
-                    onChange={(value) => onChange('networkMappings')(value)}
+                    onChange={handleNetworkMappingsChange}
                     oneToManyMapping
                     fieldPrefix="networkMapping"
                     data-testid="network-mapping-table"
@@ -210,8 +232,15 @@ export default function NetworkAndStorageMappingStep({
                   mb: 1
                 }}
               >
-                <FieldLabel label="Map Storage" required align="flex-start" />
-                {storageFullyMapped ? (
+                <FieldLabel label="Map Storage" required={!allowPartialMapping} align="flex-start" />
+                {allowPartialMapping ? (
+                  vmWareStorage.length > 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      {vmWareStorage.length - unmappedStorage.length} of {vmWareStorage.length}{' '}
+                      mapped
+                    </Typography>
+                  )
+                ) : storageFullyMapped ? (
                   <Typography variant="body2" color="success.main">
                     All storage mapped ✓
                   </Typography>
@@ -285,7 +314,7 @@ export default function NetworkAndStorageMappingStep({
                     sourceLabel="VMware Datastore"
                     targetLabel="PCD Volume Type"
                     values={params.storageMappings || []}
-                    onChange={(value) => onChange('storageMappings')(value)}
+                    onChange={handleStorageMappingsChange}
                     oneToManyMapping
                     fieldPrefix="storageMapping"
                     data-testid="storage-mapping-table"
@@ -338,7 +367,7 @@ export default function NetworkAndStorageMappingStep({
                     sourceLabel="VMware Datastore"
                     targetLabel="PCD Volume Type"
                     values={params.storageMappings || []}
-                    onChange={(value) => onChange('storageMappings')(value)}
+                    onChange={handleStorageMappingsChange}
                     oneToManyMapping
                     fieldPrefix="storageMapping"
                   />

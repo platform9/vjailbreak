@@ -72,6 +72,31 @@ export function sourceClusterLabel(
   return sourceCluster.replace(/-[0-9a-f]{5}$/i, '')
 }
 
+export interface TemplateMappingRow {
+  kind: 'Network' | 'Storage' | 'Storage array'
+  source: string
+  target: string
+}
+
+// Every mapping a template carries, labelled by kind. Storage-accelerated copy maps
+// datastores to array credentials rather than volume types, so leaving arrayCredsMappings
+// out hides the entire storage side of such a template.
+export function buildTemplateMappingRows(template: SavedTemplate): TemplateMappingRow[] {
+  return [
+    ...template.networkMappings.map((m) => ({ ...m, kind: 'Network' as const })),
+    ...template.storageMappings.map((m) => ({ ...m, kind: 'Storage' as const })),
+    ...template.arrayCredsMappings.map((m) => ({ ...m, kind: 'Storage array' as const }))
+  ]
+}
+
+export function countTemplateMappings(template: SavedTemplate): number {
+  return (
+    template.networkMappings.length +
+    template.storageMappings.length +
+    template.arrayCredsMappings.length
+  )
+}
+
 export interface AdvancedOptionRow {
   label: string
   value: string
@@ -102,6 +127,30 @@ export function buildAdvancedOptionRows(
   }
   if (template.imageProfiles.length > 0) {
     rows.push({ label: 'Image profiles', value: template.imageProfiles.join(', ') })
+  }
+  if (template.dataCopyStartTime) {
+    rows.push({ label: 'Data copy starts', value: template.dataCopyStartTime })
+  }
+  if (template.cutoverStartTime) {
+    rows.push({ label: 'Cutover window starts', value: template.cutoverStartTime })
+  }
+  if (template.cutoverEndTime) {
+    rows.push({ label: 'Cutover window ends', value: template.cutoverEndTime })
+  }
+  if (template.dataOnly) {
+    rows.push({ label: 'Data only (no VM creation)', value: 'Enabled' })
+  }
+  if (template.preserveSourceTags) {
+    rows.push({ label: 'Preserve source tags', value: 'Enabled' })
+  }
+  if (template.customMetadata.length > 0) {
+    rows.push({
+      label: 'Custom metadata',
+      value: template.customMetadata.map(({ key, value }) => `${key}=${value}`).join(', ')
+    })
+  }
+  if (template.proxyVMRef) {
+    rows.push({ label: 'Proxy VM', value: template.proxyVMRef })
   }
   if (template.firstBootScript) {
     rows.push({ label: 'Post-migration script', value: template.firstBootScript })
@@ -142,9 +191,11 @@ export function buildAdvancedOptionRows(
   if (template.spec?.migrationStrategy?.performHealthChecks) {
     rows.push({ label: 'Health checks', value: 'Enabled' })
   }
-  if (template.spec?.migrationStrategy?.arrayOffload) {
-    rows.push({ label: 'Array offload', value: 'Enabled' })
-  }
+  // No "Array offload" row on purpose. MigrationPlanStrategy.ArrayOffload exists in the
+  // CRD but has no producer or consumer anywhere in the repo — no controller or
+  // v2v-helper code reads it and nothing sets it — so surfacing it would advertise a
+  // setting that cannot be configured and would do nothing if it were. Array offload as
+  // a capability is storageCopyMethod: StorageAcceleratedCopy, which is fully wired.
 
   return rows
 }

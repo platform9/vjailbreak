@@ -7,6 +7,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import { ActionButton, SurfaceCard } from 'src/components'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import {
+  countTemplateMappings,
   cutoverOptionLabel,
   dataCopyMethodChipSx,
   DATA_COPY_METHOD_LABEL,
@@ -25,7 +26,7 @@ export interface TemplateCardProps {
 }
 
 export default function TemplateCard({ template, onOpenDetail, onUse, onEdit }: TemplateCardProps) {
-  const mappingCount = template.networkMappings.length + template.storageMappings.length
+  const mappingCount = countTemplateMappings(template)
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
   const cloneMutation = useCloneTemplate()
   const deleteMutation = useDeleteTemplate()

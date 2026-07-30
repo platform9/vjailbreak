@@ -1,5 +1,10 @@
 import { Box, Alert, Autocomplete, Checkbox, Chip, TextField } from '@mui/material'
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
+import {
+  hasOsFamilySelected,
+  isProfileApplicable,
+  reconcileImageProfiles
+} from '../utils/imageProfiles'
 import { Step, RHFAutocomplete } from 'src/shared/components/forms'
 import { FormGrid } from 'src/components'
 import { FieldLabel } from 'src/components/design-system/ui/FieldLabel'
@@ -27,6 +32,13 @@ interface SecurityGroupAndServerGroupProps {
   openstackNetworks?: PCDNetworkInfo[]
   stepNumber?: string
   showHeader?: boolean
+  // Template authoring: there is no VM selection to infer an OS family from, so offer
+  // every profile in the system. Applying the template narrows the saved selection down
+  // to the profiles that fit the VMs actually chosen.
+  showAllProfiles?: boolean
+  // Profiles saved by an applied template, kept whole so one becomes selected again as
+  // soon as a VM of its OS family is chosen.
+  templateImageProfiles?: string[]
 }
 
 export default function SecurityGroupAndServerGroup({
@@ -35,8 +47,11 @@ export default function SecurityGroupAndServerGroup({
   openstackCredentials,
   openstackNetworks = [],
   stepNumber = '4',
-  showHeader = true
+  showHeader = true,
+  showAllProfiles = false,
+  templateImageProfiles
 }: SecurityGroupAndServerGroupProps) {
+  const userRemovedProfilesRef = useRef<Set<string>>(new Set())
   const securityGroupOptions: SecurityGroupOption[] =
     openstackCredentials?.status?.openstack?.securityGroups || []
 
@@ -46,28 +61,24 @@ export default function SecurityGroupAndServerGroup({
   const hasL2Network = hasSelectedLayer2Network(params.networkMappings, openstackNetworks)
 
   const hasWindowsVMSelected = useMemo(
-    () => Boolean(params?.vms?.some((vm) => vm.osFamily === 'windowsGuest')),
+    () => hasOsFamilySelected(params?.vms, 'windows'),
     [params?.vms]
   )
 
-  const hasLinuxVMSelected = useMemo(
-    () => Boolean(params?.vms?.some((vm) => vm.osFamily === 'linuxGuest')),
-    [params?.vms]
-  )
+  const hasLinuxVMSelected = useMemo(() => hasOsFamilySelected(params?.vms, 'linux'), [params?.vms])
 
   const { data: volumeImageProfiles = [], isLoading: loadingProfiles } =
     useVolumeImageProfilesQuery()
 
   const applicableProfiles = useMemo(() => {
     const list = Array.isArray(volumeImageProfiles) ? volumeImageProfiles : []
-    return list.filter((p) => {
-      const fam = p.spec?.osFamily || ''
-      if (fam === 'any' || !fam) return true
-      if (fam === 'windowsGuest') return hasWindowsVMSelected
-      if (fam === 'linuxGuest') return hasLinuxVMSelected
-      return false
-    })
-  }, [volumeImageProfiles, hasWindowsVMSelected, hasLinuxVMSelected])
+    // Applicability is decided by the selected VMs' OS families, which don't exist while
+    // authoring a template — filtering there would leave the field permanently empty.
+    if (showAllProfiles) return list
+    return list.filter((profile) =>
+      isProfileApplicable(profile, hasWindowsVMSelected, hasLinuxVMSelected)
+    )
+  }, [volumeImageProfiles, hasWindowsVMSelected, hasLinuxVMSelected, showAllProfiles])
 
   const selectedImageProfiles: string[] = useMemo(
     () => (Array.isArray(params?.imageProfiles) ? params.imageProfiles : []),
@@ -107,19 +118,39 @@ export default function SecurityGroupAndServerGroup({
 
   useEffect(() => {
     if (loadingProfiles) return
-    if (selectedImageProfiles.length === 0) return
     // Applicability is VM-OS-family gated (hasWindowsVMSelected/hasLinuxVMSelected), which
     // is undetermined — not "neither" — before any VM is selected (e.g. right after
     // applying a saved template, which intentionally doesn't restore VM selection). Pruning
     // here would permanently wipe a real, saved profile choice before the user even gets to
-    // pick VMs. Only prune once VM selection is actually known.
+    // pick VMs. Only reconcile once VM selection is actually known.
     if (!params?.vms || params.vms.length === 0) return
-    const applicableNames = new Set(applicableProfiles.map((p) => p.metadata?.name))
-    const pruned = selectedImageProfiles.filter((name) => applicableNames.has(name))
-    if (pruned.length !== selectedImageProfiles.length) {
-      onChange('imageProfiles')(pruned)
-    }
-  }, [applicableProfiles, selectedImageProfiles, loadingProfiles, onChange, params?.vms])
+    if (selectedImageProfiles.length === 0 && !templateImageProfiles?.length) return
+
+    const applicableNames = new Set(
+      applicableProfiles
+        .map((profile) => profile.metadata?.name)
+        .filter((name): name is string => Boolean(name))
+    )
+
+    // Prune and re-apply together: selecting a Linux VM prunes a template's Windows
+    // profile, and adding a Windows VM later has to bring it back.
+    const { next } = reconcileImageProfiles({
+      current: selectedImageProfiles,
+      pool: templateImageProfiles,
+      applicableNames,
+      suppressedProfiles: userRemovedProfilesRef.current
+    })
+
+    if (next === selectedImageProfiles) return
+    onChange('imageProfiles')(next)
+  }, [
+    applicableProfiles,
+    selectedImageProfiles,
+    loadingProfiles,
+    onChange,
+    params?.vms,
+    templateImageProfiles
+  ])
 
   return (
     <Box>
@@ -223,7 +254,18 @@ export default function SecurityGroupAndServerGroup({
               }
 
               setProfileConflictError('')
-              onChange('imageProfiles')(values.map((v) => v.metadata.name))
+
+              // Record deliberate deselections so a template can't re-add them, and clear
+              // the record for anything selected again. Only a user edit can tell these
+              // apart from a profile pruned because its VM was de-selected.
+              const nextNames = values.map((v) => v.metadata.name)
+              const nextSet = new Set(nextNames)
+              selectedImageProfiles.forEach((name) => {
+                if (!nextSet.has(name)) userRemovedProfilesRef.current.add(name)
+              })
+              nextSet.forEach((name) => userRemovedProfilesRef.current.delete(name))
+
+              onChange('imageProfiles')(nextNames)
             }}
             renderTags={(value, getTagProps) =>
               value.map((option, index) => (

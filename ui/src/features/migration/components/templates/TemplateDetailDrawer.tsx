@@ -16,6 +16,7 @@ import { useTemplateTenantLookup } from '../../hooks/useTemplateTenantLookup'
 import { useTemplateGroupLookup } from '../../hooks/useTemplateGroupLookup'
 import {
   buildAdvancedOptionRows,
+  buildTemplateMappingRows,
   cutoverOptionLabel,
   dataCopyMethodChipSx,
   DATA_COPY_METHOD_LABEL,
@@ -153,10 +154,7 @@ export default function TemplateDetailDrawer({
     day: 'numeric'
   })
 
-  const mappings = [
-    ...template.networkMappings.map((m) => ({ ...m, kind: 'Network' })),
-    ...template.storageMappings.map((m) => ({ ...m, kind: 'Storage' }))
-  ]
+  const mappings = buildTemplateMappingRows(template)
 
   const copyMethodLabel = storageCopyMethodLabel(template.spec.storageCopyMethod)
   const advancedOptionRows = buildAdvancedOptionRows(

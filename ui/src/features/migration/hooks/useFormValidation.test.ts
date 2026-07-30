@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { useFormValidation } from './useFormValidation'
+import { deriveSourceCatalog, useFormValidation } from './useFormValidation'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
+import type { VmData } from '../api/migration-templates/model'
 
 const baseSelectedMigrationOptions: SelectedMigrationOptionsType = {
   dataCopyMethod: false,
@@ -51,5 +52,164 @@ describe('useFormValidation - Tags & Metadata step (step5Complete)', () => {
       true
     )
     expect(result.current.step5Complete).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Template authoring mode
+// ---------------------------------------------------------------------------
+
+const vm = (name: string, networks: string[], datastores: string[]): VmData => ({
+  id: name,
+  name,
+  networks,
+  datastores
+})
+
+describe('deriveSourceCatalog', () => {
+  it('returns an empty list when there is no VM inventory', () => {
+    expect(deriveSourceCatalog(undefined, 'networks')).toEqual([])
+    expect(deriveSourceCatalog([], 'datastores')).toEqual([])
+  })
+
+  it('unions the requested field across every VM', () => {
+    const vms = [
+      vm('web-01', ['VM Network'], ['datastore1']),
+      vm('db-01', ['Mgmt Network'], ['datastore-nfs'])
+    ]
+
+    expect(deriveSourceCatalog(vms, 'networks')).toEqual(['Mgmt Network', 'VM Network'])
+    expect(deriveSourceCatalog(vms, 'datastores')).toEqual(['datastore-nfs', 'datastore1'])
+  })
+
+  it('de-duplicates names shared by several VMs', () => {
+    const vms = [
+      vm('web-01', ['VM Network', 'Mgmt Network'], ['datastore1']),
+      vm('web-02', ['VM Network'], ['datastore1'])
+    ]
+
+    expect(deriveSourceCatalog(vms, 'networks')).toEqual(['Mgmt Network', 'VM Network'])
+    expect(deriveSourceCatalog(vms, 'datastores')).toEqual(['datastore1'])
+  })
+
+  it('sorts case-insensitively so dropdown order is stable', () => {
+    const vms = [vm('web-01', ['zeta-net', 'Alpha-net', 'mid-net'], [])]
+    expect(deriveSourceCatalog(vms, 'networks')).toEqual(['Alpha-net', 'mid-net', 'zeta-net'])
+  })
+
+  it('tolerates VMs with the field absent', () => {
+    const vms: VmData[] = [{ id: 'a', name: 'a', datastores: ['datastore1'] }, vm('b', ['VM Network'], [])]
+
+    expect(deriveSourceCatalog(vms, 'networks')).toEqual(['VM Network'])
+    expect(deriveSourceCatalog(vms, 'datastores')).toEqual(['datastore1'])
+  })
+
+  it('yields a catalog that is a superset of any VM subset — the template-mode guarantee', () => {
+    const clusterVms = [
+      vm('web-01', ['VM Network'], ['datastore1']),
+      vm('db-01', ['Mgmt Network'], ['datastore-nfs']),
+      vm('app-01', ['vMotion'], ['datastore2'])
+    ]
+    const clusterCatalog = deriveSourceCatalog(clusterVms, 'networks')
+    const subsetCatalog = deriveSourceCatalog([clusterVms[1]], 'networks')
+
+    expect(subsetCatalog.every((name) => clusterCatalog.includes(name))).toBe(true)
+  })
+})
+
+const renderTemplateMode = (
+  params: Partial<FormValues>,
+  clusterVms: VmData[] | undefined,
+  templateMode = true
+) =>
+  renderHook(() =>
+    useFormValidation({
+      params,
+      fieldErrors: {},
+      selectedMigrationOptions: baseSelectedMigrationOptions,
+      vmwareCredsValidated: true,
+      openstackCredsValidated: true,
+      rdmDisks: [],
+      openstackCredentials: undefined,
+      touchedSections: { options: false, tagsMetadata: false },
+      templateMode,
+      clusterVms
+    })
+  )
+
+describe('useFormValidation - template authoring mode', () => {
+  const clusterVms = [
+    vm('web-01', ['VM Network'], ['datastore1']),
+    vm('db-01', ['Mgmt Network'], ['datastore-nfs'])
+  ]
+
+  it('sources the mappable catalog from the cluster inventory, not from selected VMs', () => {
+    // No VMs are ever selected while authoring a template.
+    const { result } = renderTemplateMode({ vms: undefined }, clusterVms)
+
+    expect(result.current.availableVmwareNetworks).toEqual(['Mgmt Network', 'VM Network'])
+    expect(result.current.availableVmwareDatastores).toEqual(['datastore-nfs', 'datastore1'])
+  })
+
+  it('still sources from selected VMs when not in template mode', () => {
+    const { result } = renderTemplateMode(
+      { vms: [vm('only-this', ['VM Network'], ['datastore1'])] },
+      clusterVms,
+      false
+    )
+
+    expect(result.current.availableVmwareNetworks).toEqual(['VM Network'])
+    expect(result.current.availableVmwareDatastores).toEqual(['datastore1'])
+  })
+
+  it('drops the Select VMs step from the rail', () => {
+    const { result } = renderTemplateMode({}, clusterVms)
+
+    expect(result.current.sectionNavItems.map((i) => i.id)).not.toContain('select-vms')
+  })
+
+  it('keeps the Select VMs step in the rail for a real migration', () => {
+    const { result } = renderTemplateMode({}, clusterVms, false)
+
+    expect(result.current.sectionNavItems.map((i) => i.id)).toContain('select-vms')
+  })
+
+  it('treats a partial mapping as a complete step — a template need not map everything', () => {
+    const { result } = renderTemplateMode(
+      { networkMappings: [{ source: 'VM Network', target: 'Physnet1' }] },
+      clusterVms
+    )
+
+    // 'Mgmt Network' and both datastores are deliberately left unmapped.
+    expect(result.current.unmappedNetworksCount).toBe(1)
+    expect(result.current.isStep3Complete).toBe(true)
+  })
+
+  it('reports the step incomplete only when nothing at all has been mapped', () => {
+    const { result } = renderTemplateMode({}, clusterVms)
+    expect(result.current.isStep3Complete).toBe(false)
+  })
+
+  it('counts an array-creds-only mapping as configured', () => {
+    const { result } = renderTemplateMode(
+      {
+        storageCopyMethod: 'StorageAcceleratedCopy',
+        arrayCredsMappings: [{ source: 'datastore1', target: 'pure-array-1' }]
+      },
+      clusterVms
+    )
+
+    expect(result.current.isStep3Complete).toBe(true)
+  })
+
+  it('requires every source mapped for a real migration, unlike template mode', () => {
+    const selected = [vm('web-01', ['VM Network', 'Mgmt Network'], ['datastore1'])]
+    const { result } = renderTemplateMode(
+      { vms: selected, networkMappings: [{ source: 'VM Network', target: 'Physnet1' }] },
+      undefined,
+      false
+    )
+
+    expect(result.current.isStep3Complete).toBe(false)
   })
 })
