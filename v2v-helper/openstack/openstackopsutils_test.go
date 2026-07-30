@@ -1,4 +1,4 @@
-package utils
+package openstack
 
 import (
 	"encoding/json"
