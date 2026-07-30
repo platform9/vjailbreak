@@ -446,7 +446,10 @@ func TestFormatGuestfishCommand(t *testing.T) {
 func TestBuildPlanProbeScript(t *testing.T) {
 	got := buildPlanProbeScript([]string{"/dev/sdb", "/dev/sda6"})
 
+	// inspect-os must be re-run in this appliance or inspect-get-mountpoints
+	// fails with "no inspection data" - inspection state is per-process.
 	want := "run\n" +
+		"inspect-os\n" +
 		"echo " + planProbeUUIDMarker + ` "/dev/sdb"` + "\n" +
 		`- vfs-uuid "/dev/sdb"` + "\n" +
 		"echo " + planProbeMPMarker + ` "/dev/sdb"` + "\n" +
@@ -457,6 +460,20 @@ func TestBuildPlanProbeScript(t *testing.T) {
 		`- inspect-get-mountpoints "/dev/sda6"` + "\n"
 
 	assert.Equal(t, want, got)
+}
+
+func TestBuildPlanProbeScriptRunsInspectOSBeforeMarkers(t *testing.T) {
+	// Regression guard: both the openSUSE and Ubuntu runs of 2026-07-30 logged
+	// "inspect_get_mountpoints: no inspection data: call guestfs_inspect_os
+	// first" because this script omitted inspect-os, which silently reduced every
+	// mount plan to the root alone and broke UEFI ESP detection.
+	script := buildPlanProbeScript([]string{"/dev/sda1"})
+
+	inspectIdx := strings.Index(script, "inspect-os\n")
+	markerIdx := strings.Index(script, planProbeUUIDMarker)
+
+	assert.NotEqual(t, -1, inspectIdx, "probe script must run inspect-os")
+	assert.Less(t, inspectIdx, markerIdx, "inspect-os must precede the first marker")
 }
 
 // ---------------------------------------------------------------------------
