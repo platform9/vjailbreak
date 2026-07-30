@@ -863,12 +863,8 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 }
 
 // GetBootableVolumeIndex returns the index of the disk holding the bootable
-// partition.
-//
-// Three appliance boots regardless of partition count: list the partitions,
-// resolve every partition's device and number in one batch, then read the
-// bootable flag and disk index for all of them in a second batch. Doing this one
-// partition at a time previously cost 4N+1 boots.
+// partition, in three appliance boots regardless of partition count: list, then
+// resolve every partition, then inspect them all. Per-partition cost 4N+1.
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, "list-partitions", false)
 	if err != nil {
@@ -1038,10 +1034,8 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 		"/etc/SuSE-release",   // SUSE 11 and older
 	}
 
-	// Read every candidate in one appliance boot rather than paying a boot per
-	// file. The reads have to be error tolerant, which on its own would make an
-	// unreadable file look identical to a missing one - so probe with exists too
-	// and keep the distinction for the error message.
+	// One boot for all candidates. The reads must be error tolerant, which alone
+	// would make an unreadable file look missing, so probe with exists as well.
 	cmds := make([]guestfishCmd, 0, len(releaseFiles)*2)
 	for _, file := range releaseFiles {
 		cmds = append(cmds,
@@ -1208,8 +1202,7 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 
 	log.Printf("FixLegacyMkinitrd: old mkinitrd detected (no dracut), installing LVM path translation wrapper")
 
-	// Back up the original, install the wrapper and make it executable, in one
-	// boot. Not tolerated: any failure leaves the guest half-patched.
+	// One boot. Not tolerated: a partial failure leaves the guest half-patched.
 	if _, err := runCommandsInGuestAllVolumes(disks, true,
 		guestfishCmd{Name: "cp", Args: []string{"/sbin/mkinitrd", "/sbin/mkinitrd.orig"}},
 		guestfishCmd{Name: "upload", Args: []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"}},
@@ -1233,9 +1226,8 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
-	// Upload, chmod and run in a single appliance boot. The script writes its
-	// diagnostics to stderr and the answer to stdout, so only the "sh" output
-	// matters here.
+	// One boot. The script writes diagnostics to stderr and its answer to stdout,
+	// so only the "sh" slot matters.
 	const runIdx = 2
 	out, err := runCommandsInGuestAllVolumes(disks, true,
 		guestfishCmd{Name: "upload", Args: []string{scriptPath, "/tmp/get-bootable-partition.sh"}},
@@ -1267,8 +1259,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 	defer os.RemoveAll(mountPoint)
 
-	// guestmount's -i shares inspect_mount_handle() with guestfish and fails the
-	// same way, so mount the resolved plan instead.
+	// guestmount's -i shares inspect_mount_handle() with guestfish, so it fails the
+	// same way; mount the resolved plan instead.
 	plan, err := resolveMountPlan(disks)
 	if err != nil {
 		return fmt.Errorf("failed to resolve guest mount plan: %w", err)
@@ -1292,8 +1284,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
 	mountCmd := exec.Command("guestmount", buildArgs(plan.Mounts)...)
 	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
-		// guestmount cannot tolerate one failed mount, so retry with just the
-		// root: a stale fstab entry should not break network persistence.
+		// guestmount cannot tolerate one failed mount; a stale fstab entry should
+		// not break network persistence outright.
 		log.Printf("guestmount with the full mount plan failed (%v: %s); retrying with the root filesystem only",
 			mountErr, strings.TrimSpace(string(out)))
 

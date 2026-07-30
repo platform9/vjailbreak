@@ -1648,10 +1648,9 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 		return -1, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
-	// Step 4: The boot disk index and OS path are both derived by the OS-specific
-	// handlers in step 5. There used to be a probe here that ran a guestfish
-	// command per disk, but every one of its results was overwritten below, so it
-	// only cost appliance boots.
+	// Step 4: both values are derived by the OS-specific handlers in step 5. A
+	// per-disk guestfish probe used to run here, but everything it returned was
+	// overwritten below, so it only cost appliance boots.
 	bootVolumeIndex, osPath := -1, ""
 	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
 

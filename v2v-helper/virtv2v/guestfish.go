@@ -4,18 +4,15 @@ package virtv2v
 
 // Mount-plan resolution for guestfish.
 //
-// guestfish's -i option aborts with "multi-boot operating systems are not
-// supported" whenever inspect_os() returns more than one root (libguestfs
-// common/options/inspect.c). It counts roots; it does not compare operating
-// systems. A btrfs filesystem spanning several devices trips it, because every
-// member carries a full superblock and libblkid has no "btrfs_member" type for
-// libguestfs' "_member" filter to catch (libguestfs daemon/listfs.ml).
+// guestfish's -i aborts with "multi-boot operating systems are not supported"
+// whenever inspect_os() returns more than one root (common/options/inspect.c).
+// It counts roots, it does not compare them, so a btrfs filesystem spanning
+// several devices trips it: every member carries a full superblock and libblkid
+// has no "btrfs_member" type for libguestfs' "_member" filter (daemon/listfs.ml).
 //
-// So we resolve the mounts ourselves: enumerate roots without -i, collapse roots
-// that are members of one filesystem by UUID, then mount explicitly. The mount
-// sequence mirrors inspect_mount_root() - shortest mount point first, a failed
-// "/" is fatal, everything else best effort - so a single-root guest gets
-// exactly what -i was already doing.
+// Instead we enumerate roots without -i, collapse members of one filesystem by
+// UUID, and mount explicitly, mirroring inspect_mount_root: shortest mount point
+// first, a failed "/" fatal, everything else best effort.
 
 import (
 	"bytes"
@@ -42,14 +39,10 @@ const (
 // guestfishCmd is one command in a batch. Tolerate prefixes it with "-" so a
 // failure does not abort the rest of the batch.
 //
-// Batched commands must NOT be ones libguestfs declares as RBufferOut: those
-// print with full_write(1, ...), writing straight to fd 1 and bypassing the
-// stdio buffer that `echo` uses (generator/fish.ml). With stdout on a pipe that
-// buffer is not flushed per line, so an RBufferOut result overtakes the markers
-// still sitting in it and splitGuestfishBatchOutput attributes output to the
-// wrong command. Everything used here (RString, RBool, RInt, RStringList,
-// RHashtable, RErr) goes through printf, so ordering holds. Watch out for
-// "read-file", which is RBufferOut - use "cat" (RString) instead.
+// Never batch an RBufferOut command: those write straight to fd 1 with
+// full_write(), bypassing the stdio buffer `echo` uses (generator/fish.ml), so
+// their output overtakes the markers and lands in the wrong slot. "read-file" is
+// RBufferOut; "cat" is RString and is safe.
 type guestfishCmd struct {
 	Name     string
 	Args     []string
@@ -87,9 +80,8 @@ func parseInspectOSOutput(out string) []string {
 	return roots
 }
 
-// parseMountpointsOutput parses `inspect-get-mountpoints`. guestfish renders a
-// hashtable as "key: value" per line and this one is keyed by mount point, so a
-// line reads "/boot: /dev/sda2". The value may contain a colon of its own.
+// parseMountpointsOutput parses `inspect-get-mountpoints`, which guestfish
+// renders as "mountpoint: device" per line. The device may contain a colon.
 func parseMountpointsOutput(out string) []mountSpec {
 	var specs []mountSpec
 	for _, line := range strings.Split(out, "\n") {
@@ -112,8 +104,7 @@ func parseMountpointsOutput(out string) []mountSpec {
 }
 
 // quoteGuestfishArg double-quotes an argument for guestfish's stdin parser.
-// Backslash is escaped first, or a path containing "\n" would be reinterpreted
-// as a newline.
+// Backslash is escaped first, or "\n" in a path becomes a newline.
 func quoteGuestfishArg(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 2)
@@ -163,9 +154,8 @@ func buildGuestfishMountScript(plan mountPlan, write bool) string {
 	var b strings.Builder
 	b.WriteString("run\n")
 	for _, spec := range plan.Mounts {
-		// A "-" prefix stops guestfish exiting if that one command fails.
-		// inspect-get-mountpoints may return absent or unmountable filesystems,
-		// and inspect_mount_root ignores those for everything except "/".
+		// "-" stops guestfish exiting if that one command fails; fstab can name
+		// filesystems that are absent, and inspect_mount_root tolerates those.
 		if spec.MountPoint != "/" {
 			b.WriteString("- ")
 		}
@@ -175,10 +165,9 @@ func buildGuestfishMountScript(plan mountPlan, write bool) string {
 	return b.String()
 }
 
-// buildGuestfishBatchScript renders several commands into one script, separated
-// by echo markers so the outputs can be split apart again. Every guestfish
-// invocation boots the supermin appliance, so batching independent commands is
-// the difference between one boot and N.
+// buildGuestfishBatchScript renders several commands into one script separated by
+// echo markers. Each guestfish invocation boots the appliance (~25s), so batching
+// independent commands is the difference between one boot and N.
 func buildGuestfishBatchScript(plan mountPlan, write bool, cmds []guestfishCmd) string {
 	var b strings.Builder
 	b.WriteString(buildGuestfishMountScript(plan, write))
@@ -230,17 +219,15 @@ func splitGuestfishBatchOutput(out string, n int) []string {
 	return results
 }
 
-// buildPlanProbeScript asks each candidate root for its UUID and mount points.
-// Both are error tolerant so one unusable root cannot abort the probe, and both
-// are wrapped in markers so interleaved output can be attributed back.
+// buildPlanProbeScript asks each candidate root for its UUID and mount points,
+// error tolerant so one unusable root cannot abort the probe.
 func buildPlanProbeScript(roots []string) string {
 	var b strings.Builder
 	b.WriteString("run\n")
-	// inspect-get-mountpoints reads the inspection data that only inspect-os
-	// populates (daemon/inspect.ml search_for_root), and that state does not
-	// survive across guestfish processes - so it has to be re-run here or every
-	// mountpoints query fails with "no inspection data". Its output lands before
-	// the first marker and is discarded by parsePlanProbeOutput.
+	// Required: inspect-get-mountpoints reads state only inspect-os populates, and
+	// that state does not survive across guestfish processes. Without this every
+	// mountpoints query fails with "no inspection data" and plans lose /boot.
+	// Output lands before the first marker, so the parser discards it.
 	b.WriteString("inspect-os\n")
 	for _, root := range roots {
 		fmt.Fprintf(&b, "echo %s %s\n", planProbeUUIDMarker, quoteGuestfishArg(root))
@@ -327,9 +314,9 @@ func groupRootsByUUID(roots []string, uuids map[string]string) [][]string {
 	return groups
 }
 
-// rootPreferenceRank ranks representatives of one filesystem, lower being
-// better. Any member mounts the same filesystem, but downstream part-to-dev,
-// device-index and fstab handling assume a partition.
+// rootPreferenceRank ranks representatives of one filesystem, lower being better.
+// Any member mounts the same filesystem, but downstream part-to-dev and
+// device-index assume a partition.
 func rootPreferenceRank(root string) int {
 	switch {
 	case strings.Contains(root, ":"): // a mountable such as btrfsvol:...
@@ -506,10 +493,8 @@ func resolveMountPlan(disks []vm.VMDisk) (mountPlan, error) {
 }
 
 // runCommandsInGuestAllVolumes runs several commands in ONE appliance boot and
-// returns their outputs in order, verbatim. Unlike RunCommandInGuestAllVolumes
-// the output is NOT lowercased, because some of it is device paths that may
-// legitimately contain upper case (e.g. an LVM volume group named VolGroup00).
-// The returned slice always has one entry per command, even on error.
+// returns one output per command, in order and verbatim. Not lowercased, unlike
+// RunCommandInGuestAllVolumes: device paths can be upper case (VolGroup00).
 func runCommandsInGuestAllVolumes(disks []vm.VMDisk, write bool, cmds ...guestfishCmd) ([]string, error) {
 	if len(cmds) == 0 {
 		return nil, nil
