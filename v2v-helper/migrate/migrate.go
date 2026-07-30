@@ -1174,18 +1174,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	return vminfo, nil
 }
 
-// getBootCommand returns the appropriate command to detect boot volume based on OS type
-func (migobj *Migrate) getBootCommand(osType string) string {
-	switch strings.ToLower(osType) {
-	case constants.OSFamilyWindows:
-		return "ls /Windows"
-	case constants.OSFamilyLinux:
-		return "ls /boot"
-	default:
-		return "inspect-os"
-	}
-}
-
 // attachAllVolumes attaches all volumes and updates their paths in vminfo
 func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) error {
 	for idx, vmdisk := range vminfo.VMDisks {
@@ -1196,43 +1184,6 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 		vminfo.VMDisks[idx].Path = path
 	}
 	return nil
-}
-
-// detectBootVolume confirms the guest is inspectable with every disk attached and
-// returns whatever the boot-detection command reported.
-//
-// All disks are attached for a single probe. Probing them one at a time cannot
-// work when the root filesystem spans several disks - a multi-device btrfs, an
-// LVM VG across two PVs, or mdraid - because none of the disks is individually
-// mountable. That used to surface as a bare "No boot volume detected" warning
-// with the real cause discarded.
-//
-// The concrete boot disk index is always re-derived afterwards by
-// handleLinuxOSDetection or handleWindowsBootDetection, so this function does not
-// try to guess it.
-func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
-	bootVolumeIndex = -1
-
-	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
-
-	if len(vminfo.VMDisks) == 0 {
-		utils.PrintLog("WARNING: No disks attached; cannot detect boot volume")
-		return -1, "", nil
-	}
-
-	ans, cmdErr := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, getBootCommand, false)
-	if cmdErr != nil {
-		// Not fatal - the OS-specific handlers re-derive the boot disk and will
-		// fail with a more specific error if the guest is genuinely unusable.
-		utils.PrintLog(fmt.Sprintf("WARNING: No boot volume detected: %v", cmdErr))
-		return -1, "", nil
-	}
-
-	osPath = strings.TrimSpace(ans)
-	utils.PrintLog(fmt.Sprintf("Guest inspected successfully across %d disk(s); boot disk index is resolved during OS detection",
-		len(vminfo.VMDisks)))
-
-	return bootVolumeIndex, osPath, nil
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
@@ -1681,9 +1632,6 @@ func blockDriverFromMetadata(metadata map[string]string) string {
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
-	// Step 1: Determine boot command based on OS type
-	getBootCommand := migobj.getBootCommand(vminfo.OSType)
-
 	// Step 2: Attach all volumes
 	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
 		return -1, err
@@ -1700,11 +1648,12 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 		return -1, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
-	// Step 4: Detect boot volume
-	bootVolumeIndex, osPath, err := migobj.detectBootVolume(vminfo, getBootCommand)
-	if err != nil {
-		return -1, err
-	}
+	// Step 4: The boot disk index and OS path are both derived by the OS-specific
+	// handlers in step 5. There used to be a probe here that ran a guestfish
+	// command per disk, but every one of its results was overwritten below, so it
+	// only cost appliance boots.
+	bootVolumeIndex, osPath := -1, ""
+	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
 
 	// Step 5: Handle OS-specific detection and validation
 	var osRelease string
