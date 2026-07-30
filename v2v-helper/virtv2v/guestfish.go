@@ -41,6 +41,15 @@ const (
 
 // guestfishCmd is one command in a batch. Tolerate prefixes it with "-" so a
 // failure does not abort the rest of the batch.
+//
+// Batched commands must NOT be ones libguestfs declares as RBufferOut: those
+// print with full_write(1, ...), writing straight to fd 1 and bypassing the
+// stdio buffer that `echo` uses (generator/fish.ml). With stdout on a pipe that
+// buffer is not flushed per line, so an RBufferOut result overtakes the markers
+// still sitting in it and splitGuestfishBatchOutput attributes output to the
+// wrong command. Everything used here (RString, RBool, RInt, RStringList,
+// RHashtable, RErr) goes through printf, so ordering holds. Watch out for
+// "read-file", which is RBufferOut - use "cat" (RString) instead.
 type guestfishCmd struct {
 	Name     string
 	Args     []string
@@ -227,6 +236,12 @@ func splitGuestfishBatchOutput(out string, n int) []string {
 func buildPlanProbeScript(roots []string) string {
 	var b strings.Builder
 	b.WriteString("run\n")
+	// inspect-get-mountpoints reads the inspection data that only inspect-os
+	// populates (daemon/inspect.ml search_for_root), and that state does not
+	// survive across guestfish processes - so it has to be re-run here or every
+	// mountpoints query fails with "no inspection data". Its output lands before
+	// the first marker and is discarded by parsePlanProbeOutput.
+	b.WriteString("inspect-os\n")
 	for _, root := range roots {
 		fmt.Fprintf(&b, "echo %s %s\n", planProbeUUIDMarker, quoteGuestfishArg(root))
 		fmt.Fprintf(&b, "- vfs-uuid %s\n", quoteGuestfishArg(root))
