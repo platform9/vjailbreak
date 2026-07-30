@@ -3,15 +3,14 @@
 package virtv2v
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
-// ---------------------------------------------------------------------------
 // parseInspectOSOutput
-// ---------------------------------------------------------------------------
 
 func TestParseInspectOSOutput(t *testing.T) {
 	tests := []struct {
@@ -56,9 +55,7 @@ func TestParseInspectOSOutput(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // parseMountpointsOutput
-// ---------------------------------------------------------------------------
 
 func TestParseMountpointsOutput(t *testing.T) {
 	tests := []struct {
@@ -104,14 +101,10 @@ func TestParseMountpointsOutput(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // parsePlanProbeOutput
-// ---------------------------------------------------------------------------
 
 func TestParsePlanProbeOutput(t *testing.T) {
-	// Exactly the shape buildPlanProbeScript produces for the failing
-	// openSUSE 15.5 guest: two roots that are two members of one btrfs
-	// filesystem, so both report the same UUID (the btrfs fsid).
+	// Two members of one btrfs filesystem: same UUID (the fsid).
 	out := strings.Join([]string{
 		planProbeUUIDMarker + " /dev/sdb",
 		"b1f0a2c4-1111-4222-8333-444455556666",
@@ -140,9 +133,7 @@ func TestParsePlanProbeOutput(t *testing.T) {
 }
 
 func TestParsePlanProbeOutputToleratesMissingUUID(t *testing.T) {
-	// "- vfs-uuid" is error tolerant, so a root can come back with no UUID at
-	// all. That must not be silently treated as "same filesystem as everything
-	// else with no UUID".
+	// "- vfs-uuid" is error tolerant, so a root can come back with no UUID.
 	out := strings.Join([]string{
 		planProbeUUIDMarker + " /dev/sda2",
 		planProbeMPMarker + " /dev/sda2",
@@ -156,9 +147,7 @@ func TestParsePlanProbeOutputToleratesMissingUUID(t *testing.T) {
 	assert.Equal(t, []mountSpec{{Device: "/dev/sda2", MountPoint: "/"}}, mounts["/dev/sda2"])
 }
 
-// ---------------------------------------------------------------------------
 // groupRootsByUUID
-// ---------------------------------------------------------------------------
 
 func TestGroupRootsByUUID(t *testing.T) {
 	tests := []struct {
@@ -219,9 +208,7 @@ func TestGroupRootsByUUID(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // chooseRootFromGroup
-// ---------------------------------------------------------------------------
 
 func TestChooseRootFromGroup(t *testing.T) {
 	tests := []struct {
@@ -230,8 +217,7 @@ func TestChooseRootFromGroup(t *testing.T) {
 		want  string
 	}{
 		{
-			// A partition beats a bare member disk: downstream part-to-dev,
-			// device-index and fstab handling all assume a partition.
+			// Downstream part-to-dev and device-index assume a partition.
 			name:  "partition preferred over bare disk",
 			group: []string{"/dev/sdb", "/dev/sda6"},
 			want:  "/dev/sda6",
@@ -270,13 +256,10 @@ func TestChooseRootFromGroup(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // sortMountsShortestFirst
-// ---------------------------------------------------------------------------
 
 func TestSortMountsShortestFirst(t *testing.T) {
-	// Mirrors compare_keys_len in libguestfs common/options/inspect.c: shortest
-	// mount point first so "/" is mounted before anything nested under it.
+	// Mirrors compare_keys_len in libguestfs common/options/inspect.c.
 	mounts := []mountSpec{
 		{Device: "/dev/sda9", MountPoint: "/var/log"},
 		{Device: "/dev/sda2", MountPoint: "/boot"},
@@ -293,9 +276,7 @@ func TestSortMountsShortestFirst(t *testing.T) {
 	assert.Equal(t, []string{"/", "/var", "/boot", "/var/log"}, got)
 }
 
-// ---------------------------------------------------------------------------
 // quoteGuestfishArg
-// ---------------------------------------------------------------------------
 
 func TestQuoteGuestfishArg(t *testing.T) {
 	tests := []struct {
@@ -307,8 +288,7 @@ func TestQuoteGuestfishArg(t *testing.T) {
 		{name: "space is protected", in: "/tmp/x.sh --flag", want: `"/tmp/x.sh --flag"`},
 		{name: "double quote escaped", in: `a"b`, want: `"a\"b"`},
 		{name: "backslash escaped", in: `a\b`, want: `"a\\b"`},
-		// Escaping the backslash first is what stops "\n" in a path from being
-		// reinterpreted as a newline by guestfish's double-quote parser.
+		// Escaping backslash first stops guestfish reading "\n" as a newline.
 		{name: "backslash n is not a newline", in: `a\nb`, want: `"a\\nb"`},
 		{name: "empty", in: "", want: `""`},
 	}
@@ -320,9 +300,7 @@ func TestQuoteGuestfishArg(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // mountCommandLine / buildGuestfishMountScript
-// ---------------------------------------------------------------------------
 
 func TestMountCommandLine(t *testing.T) {
 	tests := []struct {
@@ -375,8 +353,7 @@ func TestBuildGuestfishMountScript(t *testing.T) {
 
 	got := buildGuestfishMountScript(plan, true)
 
-	// "/" must be fatal on failure, everything else best effort - this mirrors
-	// inspect_mount_root in libguestfs common/options/inspect.c.
+	// "/" fatal on failure, everything else best effort, per inspect_mount_root.
 	want := "run\n" +
 		`mount "/dev/sda6" "/"` + "\n" +
 		`- mount "/dev/sda2" "/boot"` + "\n"
@@ -384,9 +361,7 @@ func TestBuildGuestfishMountScript(t *testing.T) {
 }
 
 func TestBuildGuestfishMountScriptNeverEmitsInspector(t *testing.T) {
-	// Regression guard. Reintroducing -i anywhere in this path resurrects the
-	// "multi-boot operating systems are not supported" failure on any guest
-	// whose root filesystem spans more than one device.
+	// Regression guard: reintroducing -i resurrects the multi-boot failure.
 	plan := mountPlan{
 		Root:   "/dev/sda6",
 		Mounts: []mountSpec{{Device: "/dev/sda6", MountPoint: "/"}},
@@ -400,9 +375,7 @@ func TestBuildGuestfishMountScriptNeverEmitsInspector(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
 // formatGuestfishCommand
-// ---------------------------------------------------------------------------
 
 func TestFormatGuestfishCommand(t *testing.T) {
 	tests := []struct {
@@ -423,8 +396,7 @@ func TestFormatGuestfishCommand(t *testing.T) {
 			want:    `upload "/home/fedora/get-bootable-partition.sh" "/tmp/get-bootable-partition.sh"`,
 		},
 		{
-			// RunMountPersistenceScript passes script + flags as ONE argv token.
-			// Quoting keeps it one token on stdin instead of splitting on space.
+			// RunMountPersistenceScript passes script + flags as one argv token.
 			name:    "single arg containing spaces stays one token",
 			command: "sh",
 			args:    []string{"/tmp/generate-mount-persistence.sh --replace-fstab"},
@@ -439,9 +411,111 @@ func TestFormatGuestfishCommand(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
+// buildGuestfishBatchScript / splitGuestfishBatchOutput
+
+func TestBuildGuestfishBatchScript(t *testing.T) {
+	plan := mountPlan{
+		Root:   "/dev/sda6",
+		Mounts: []mountSpec{{Device: "/dev/sda6", MountPoint: "/"}},
+	}
+
+	got := buildGuestfishBatchScript(plan, true, []guestfishCmd{
+		{Name: "upload", Args: []string{"/home/fedora/x.sh", "/tmp/x.sh"}},
+		{Name: "chmod", Args: []string{"0755", "/tmp/x.sh"}},
+		{Name: "stat", Args: []string{"/sbin/dracut"}, Tolerate: true},
+	})
+
+	want := "run\n" +
+		`mount "/dev/sda6" "/"` + "\n" +
+		"echo " + guestfishBatchMarker + " 0\n" +
+		`upload "/home/fedora/x.sh" "/tmp/x.sh"` + "\n" +
+		"echo " + guestfishBatchMarker + " 1\n" +
+		`chmod "0755" "/tmp/x.sh"` + "\n" +
+		"echo " + guestfishBatchMarker + " 2\n" +
+		`- stat "/sbin/dracut"` + "\n"
+
+	assert.Equal(t, want, got)
+}
+
+func TestSplitGuestfishBatchOutput(t *testing.T) {
+	tests := []struct {
+		name string
+		out  string
+		n    int
+		want []string
+	}{
+		{
+			name: "one line per command",
+			out: strings.Join([]string{
+				guestfishBatchMarker + " 0", "/dev/sda",
+				guestfishBatchMarker + " 1", "1",
+				guestfishBatchMarker + " 2", "true",
+				"",
+			}, "\n"),
+			n:    3,
+			want: []string{"/dev/sda", "1", "true"},
+		},
+		{
+			// A tolerated failure prints nothing, so its slot stays empty
+			// rather than absorbing the next command's output.
+			name: "tolerated failure yields an empty slot",
+			out: strings.Join([]string{
+				guestfishBatchMarker + " 0",
+				guestfishBatchMarker + " 1", "dracut found",
+				"",
+			}, "\n"),
+			n:    2,
+			want: []string{"", "dracut found"},
+		},
+		{
+			name: "multi-line output is preserved",
+			out: strings.Join([]string{
+				guestfishBatchMarker + " 0", "/dev/sda1", "/dev/sda2",
+				"",
+			}, "\n"),
+			n:    1,
+			want: []string{"/dev/sda1\n/dev/sda2"},
+		},
+		{
+			name: "output before any marker is discarded",
+			out:  "noise\n" + guestfishBatchMarker + " 0\nok\n",
+			n:    1,
+			want: []string{"ok"},
+		},
+		{
+			name: "missing trailing markers leave empty slots",
+			out:  guestfishBatchMarker + " 0\nok\n",
+			n:    3,
+			want: []string{"ok", "", ""},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, splitGuestfishBatchOutput(tt.out, tt.n))
+		})
+	}
+}
+
+func TestGuestfishBatchRoundTrip(t *testing.T) {
+	// Whatever buildGuestfishBatchScript numbers, splitGuestfishBatchOutput must
+	// be able to take apart again.
+	cmds := []guestfishCmd{
+		{Name: "part-to-dev", Args: []string{"/dev/sda1"}},
+		{Name: "part-to-partnum", Args: []string{"/dev/sda1"}},
+	}
+	plan := mountPlan{Root: "/dev/sda1", Mounts: []mountSpec{{Device: "/dev/sda1", MountPoint: "/"}}}
+
+	script := buildGuestfishBatchScript(plan, false, cmds)
+	for i := range cmds {
+		assert.Contains(t, script, "echo "+guestfishBatchMarker+" "+strconv.Itoa(i)+"\n")
+	}
+
+	simulated := guestfishBatchMarker + " 0\n/dev/sda\n" + guestfishBatchMarker + " 1\n1\n"
+	assert.Equal(t, []string{"/dev/sda", "1"}, splitGuestfishBatchOutput(simulated, len(cmds)))
+}
+
 // buildPlanProbeScript
-// ---------------------------------------------------------------------------
 
 func TestBuildPlanProbeScript(t *testing.T) {
 	got := buildPlanProbeScript([]string{"/dev/sdb", "/dev/sda6"})
@@ -459,9 +533,7 @@ func TestBuildPlanProbeScript(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-// ---------------------------------------------------------------------------
 // planFromProbe - the whole reduction, end to end, without touching guestfish
-// ---------------------------------------------------------------------------
 
 func TestPlanFromProbe(t *testing.T) {
 	t.Run("multi-device btrfs resolves to a single root", func(t *testing.T) {
@@ -505,8 +577,7 @@ func TestPlanFromProbe(t *testing.T) {
 	})
 
 	t.Run("guest without fstab falls back to mounting only the root", func(t *testing.T) {
-		// Windows guests: inspect_get_mountpoints returns just the root
-		// (daemon/inspect.ml).
+		// Windows: inspect_get_mountpoints returns just the root.
 		plan, err := planFromProbe(
 			[]string{"/dev/sda2"},
 			map[string]string{"/dev/sda2": "aaaa"},

@@ -790,11 +790,8 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 	return nil
 }
 
-// Runs command inside temporary qemu-kvm that virt-v2v creates.
-//
-// The guest is mounted from an explicitly resolved mount plan rather than with
-// guestfish's -i option. See guestfish.go for why: -i aborts on any guest whose
-// root filesystem spans more than one device.
+// Runs command inside temporary qemu-kvm that virt-v2v creates. Mounts come from
+// a resolved plan rather than guestfish's -i; see guestfish.go.
 func RunCommandInGuest(path string, command string, write bool) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
@@ -812,8 +809,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		option,
 		"-a",
 		path)
-	// The command text is passed through verbatim - callers already supply a
-	// complete guestfish command line here, not a command plus separate args.
+	// Callers pass a complete guestfish command line here, so no quoting.
 	cmd.Stdin = strings.NewReader(buildGuestfishMountScript(plan, write) + command + "\n")
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.CombinedOutput()
@@ -840,9 +836,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
-	// Commands go on stdin rather than after "--" so that the mount preamble can
-	// be prepended, and so that a failed non-root mount can be tolerated with
-	// guestfish's "-" command prefix.
+	// stdin rather than "--" so the mount preamble can be prepended.
 	cmd.Stdin = strings.NewReader(
 		buildGuestfishMountScript(plan, write) + formatGuestfishCommand(command, args...) + "\n")
 	return cmd, nil
@@ -868,57 +862,75 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(stdoutBuf.String()), nil
 }
 
-// GetDeviceNumberFromPartition returns the device index for a given partition name
-func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
-	command := "part-to-dev"
-	device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", device, err, strings.TrimSpace(device))
-		return -1, err
-	}
-
-	command = "part-to-partnum"
-	num, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
-	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", num, err, strings.TrimSpace(num))
-		return -1, err
-	}
-
-	command = "part-get-bootable"
-	bootable, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device), strings.TrimSpace(num))
-	if err != nil {
-		fmt.Printf("failed to run command (%s): %v: %s\n", bootable, err, strings.TrimSpace(bootable))
-		return -1, err
-	}
-
-	if strings.TrimSpace(bootable) == "true" {
-		command = "device-index"
-		index, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(device))
-		if err != nil {
-			fmt.Printf("failed to run command (%s): %v: %s\n", index, err, strings.TrimSpace(index))
-			return -1, err
-		}
-		return strconv.Atoi(strings.TrimSpace(index))
-	}
-
-	return -1, errors.New("partition is not bootable")
-}
-
+// GetBootableVolumeIndex returns the index of the disk holding the bootable
+// partition.
+//
+// Three appliance boots regardless of partition count: list the partitions,
+// resolve every partition's device and number in one batch, then read the
+// bootable flag and disk index for all of them in a second batch. Doing this one
+// partition at a time previously cost 4N+1 boots.
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
-	command := "list-partitions"
-	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
+	partitionsStr, err := RunCommandInGuestAllVolumes(disks, "list-partitions", false)
 	if err != nil {
-		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
+		return -1, fmt.Errorf("failed to run command (list-partitions): %v: %s", err, strings.TrimSpace(partitionsStr))
 	}
 
-	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
-	for _, partition := range partitions {
-		deviceNum, err := GetDeviceNumberFromPartition(disks, partition)
-		if err == nil {
-			return deviceNum, nil
+	var partitions []string
+	for _, partition := range strings.Split(partitionsStr, "\n") {
+		if partition = strings.TrimSpace(partition); partition != "" {
+			partitions = append(partitions, partition)
 		}
-		// Continue to next partition if this one is not bootable or has an error
 	}
+	if len(partitions) == 0 {
+		return -1, errors.New("bootable volume not found")
+	}
+
+	resolve := make([]guestfishCmd, 0, len(partitions)*2)
+	for _, partition := range partitions {
+		resolve = append(resolve,
+			guestfishCmd{Name: "part-to-dev", Args: []string{partition}, Tolerate: true},
+			guestfishCmd{Name: "part-to-partnum", Args: []string{partition}, Tolerate: true},
+		)
+	}
+	resolved, err := runCommandsInGuestAllVolumes(disks, false, resolve...)
+	if err != nil {
+		return -1, fmt.Errorf("failed to resolve partitions: %w", err)
+	}
+
+	type candidate struct{ device, num string }
+	var candidates []candidate
+	inspect := make([]guestfishCmd, 0, len(partitions)*2)
+	for i := range partitions {
+		device, num := strings.TrimSpace(resolved[i*2]), strings.TrimSpace(resolved[i*2+1])
+		if device == "" || num == "" {
+			continue
+		}
+		candidates = append(candidates, candidate{device: device, num: num})
+		inspect = append(inspect,
+			guestfishCmd{Name: "part-get-bootable", Args: []string{device, num}, Tolerate: true},
+			guestfishCmd{Name: "device-index", Args: []string{device}, Tolerate: true},
+		)
+	}
+	if len(candidates) == 0 {
+		return -1, errors.New("bootable volume not found")
+	}
+
+	inspected, err := runCommandsInGuestAllVolumes(disks, false, inspect...)
+	if err != nil {
+		return -1, fmt.Errorf("failed to inspect partitions: %w", err)
+	}
+
+	for i := range candidates {
+		if strings.TrimSpace(inspected[i*2]) != "true" {
+			continue
+		}
+		index, convErr := strconv.Atoi(strings.TrimSpace(inspected[i*2+1]))
+		if convErr != nil {
+			continue
+		}
+		return index, nil
+	}
+
 	return -1, errors.New("bootable volume not found")
 }
 
@@ -1026,26 +1038,41 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 		"/etc/SuSE-release",   // SUSE 11 and older
 	}
 
-	var errors []string
+	// Read every candidate in one appliance boot rather than paying a boot per
+	// file. The reads have to be error tolerant, which on its own would make an
+	// unreadable file look identical to a missing one - so probe with exists too
+	// and keep the distinction for the error message.
+	cmds := make([]guestfishCmd, 0, len(releaseFiles)*2)
 	for _, file := range releaseFiles {
-		output, err := RunCommandInGuestAllVolumes(disks, "cat", false, file)
-		if err == nil {
+		cmds = append(cmds,
+			guestfishCmd{Name: "exists", Args: []string{file}, Tolerate: true},
+			guestfishCmd{Name: "cat", Args: []string{file}, Tolerate: true},
+		)
+	}
+
+	out, err := runCommandsInGuestAllVolumes(disks, false, cmds...)
+	if err != nil {
+		return "", fmt.Errorf("failed to read OS release files: %w", err)
+	}
+
+	var unreadable []string
+	for i, file := range releaseFiles {
+		exists, content := strings.TrimSpace(out[i*2]) == "true", out[i*2+1]
+		if strings.TrimSpace(content) != "" {
 			log.Printf("Successfully read OS release from %s", file)
-			return output, nil
+			return content, nil
 		}
-
-		// Log the failure and continue to next file
-		log.Printf("Failed to get %s: %v", file, err)
-		errors = append(errors, fmt.Sprintf("%s: %v", file, err))
-
-		// If it's not a "file not found" error, stop trying
-		if !strings.Contains(err.Error(), "No such file or directory") {
-			break
+		if exists {
+			log.Printf("WARNING: %s exists but could not be read", file)
+			unreadable = append(unreadable, file)
 		}
 	}
 
-	// All attempts failed
-	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(errors, "; "))
+	if len(unreadable) > 0 {
+		return "", fmt.Errorf("OS release file(s) present but unreadable: %s", strings.Join(unreadable, ", "))
+	}
+
+	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(releaseFiles, ", "))
 }
 
 // GetWindowsVersion detects the Windows version using guestfish inspect commands
@@ -1115,44 +1142,19 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 
 	log.Printf("Running generate-mount-persistence.sh with %s option(s)", scriptArgs)
 
-	// Upload the script to the guest VM
-	var uploadErr error
-	var uploadOutput string
-
-	command := "upload"
-	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
-
-	if uploadErr != nil {
-		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
-	}
-
-	log.Printf("Successfully uploaded generate-mount-persistence.sh to guest")
-
-	// Make the script executable
-	var chmodErr error
-	var chmodOutput string
-
-	command = "chmod"
-	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
-
-	if chmodErr != nil {
-		return fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
-	}
-
-	log.Printf("Made generate-mount-persistence.sh executable")
-
-	// Run the script with the chosen flag
-	var runErr error
-	var runOutput string
-
-	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptArgs)
-
-	if runErr != nil {
-		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
+	// Upload, chmod and run in a single appliance boot.
+	const runIdx = 2
+	out, err := runCommandsInGuestAllVolumes(disks, true,
+		guestfishCmd{Name: "upload", Args: []string{scriptPath, "/tmp/generate-mount-persistence.sh"}},
+		guestfishCmd{Name: "chmod", Args: []string{"0755", "/tmp/generate-mount-persistence.sh"}},
+		guestfishCmd{Name: "sh", Args: []string{"/tmp/generate-mount-persistence.sh " + scriptArgs}},
+	)
+	if err != nil {
+		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v", err)
 		// Don't return error, just log warning as this is not critical
 		return nil
 	}
+	runOutput := out[runIdx]
 
 	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptArgs)
 	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
@@ -1170,41 +1172,50 @@ const mkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
 func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	// 1. Does /sbin/mkinitrd exist on the guest?
-	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd"); err != nil {
+	// All four probes in one appliance boot rather than one boot each.
+	const (
+		probeMkinitrd = iota
+		probeDracutUsrBin
+		probeDracutSbin
+		probeAlreadyPatched
+	)
+	probes, err := runCommandsInGuestAllVolumes(disks, false,
+		guestfishCmd{Name: "exists", Args: []string{"/sbin/mkinitrd"}, Tolerate: true},
+		guestfishCmd{Name: "exists", Args: []string{"/usr/bin/dracut"}, Tolerate: true},
+		guestfishCmd{Name: "exists", Args: []string{"/sbin/dracut"}, Tolerate: true},
+		guestfishCmd{Name: "exists", Args: []string{"/sbin/mkinitrd.orig"}, Tolerate: true},
+	)
+	if err != nil {
+		log.Printf("FixLegacyMkinitrd: could not probe the guest, skipping: %v", err)
+		return nil
+	}
+
+	if probes[probeMkinitrd] != "true" {
 		log.Printf("FixLegacyMkinitrd: /sbin/mkinitrd not found on guest, skipping")
 		return nil
 	}
 
-	// 2. Is dracut absent? (dracut == modern SUSE, no patch needed)
-	for _, draculPath := range []string{"/usr/bin/dracut", "/sbin/dracut"} {
-		if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, draculPath); err == nil {
-			log.Printf("FixLegacyMkinitrd: dracut found at %s, modern system – skipping", draculPath)
-			return nil
-		}
+	// dracut means a modern SUSE, no patch needed.
+	if probes[probeDracutUsrBin] == "true" || probes[probeDracutSbin] == "true" {
+		log.Printf("FixLegacyMkinitrd: dracut found, modern system – skipping")
+		return nil
 	}
 
-	// 3. Already patched by a previous run?
-	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd.orig"); err == nil {
+	if probes[probeAlreadyPatched] == "true" {
 		log.Printf("FixLegacyMkinitrd: wrapper already installed (/sbin/mkinitrd.orig present), skipping")
 		return nil
 	}
 
 	log.Printf("FixLegacyMkinitrd: old mkinitrd detected (no dracut), installing LVM path translation wrapper")
 
-	// 4. Back up original mkinitrd inside the guest.
-	if out, err := RunCommandInGuestAllVolumes(disks, "cp", true, "/sbin/mkinitrd", "/sbin/mkinitrd.orig"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to backup /sbin/mkinitrd: %v: %s", err, strings.TrimSpace(out))
-	}
-
-	// 5. Upload the wrapper as the new /sbin/mkinitrd.
-	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, mkinitrdLVMWrapperPath, "/sbin/mkinitrd"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to upload wrapper: %v: %s", err, strings.TrimSpace(out))
-	}
-
-	// 6. Ensure the wrapper is executable.
-	if out, err := RunCommandInGuestAllVolumes(disks, "chmod", true, "0755", "/sbin/mkinitrd"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to chmod wrapper: %v: %s", err, strings.TrimSpace(out))
+	// Back up the original, install the wrapper and make it executable, in one
+	// boot. Not tolerated: any failure leaves the guest half-patched.
+	if _, err := runCommandsInGuestAllVolumes(disks, true,
+		guestfishCmd{Name: "cp", Args: []string{"/sbin/mkinitrd", "/sbin/mkinitrd.orig"}},
+		guestfishCmd{Name: "upload", Args: []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"}},
+		guestfishCmd{Name: "chmod", Args: []string{"0755", "/sbin/mkinitrd"}},
+	); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to install wrapper: %w", err)
 	}
 
 	log.Printf("FixLegacyMkinitrd: wrapper installed successfully at /sbin/mkinitrd (original at /sbin/mkinitrd.orig)")
@@ -1222,55 +1233,23 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
-	// Upload the script to the guest VM
-	var uploadErr error
-	var uploadOutput string
-
-	command := "upload"
-	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/get-bootable-partition.sh")
-
-	if uploadErr != nil {
-		return "", fmt.Errorf("failed to upload get-bootable-partition.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
+	// Upload, chmod and run in a single appliance boot. The script writes its
+	// diagnostics to stderr and the answer to stdout, so only the "sh" output
+	// matters here.
+	const runIdx = 2
+	out, err := runCommandsInGuestAllVolumes(disks, true,
+		guestfishCmd{Name: "upload", Args: []string{scriptPath, "/tmp/get-bootable-partition.sh"}},
+		guestfishCmd{Name: "chmod", Args: []string{"0755", "/tmp/get-bootable-partition.sh"}},
+		guestfishCmd{Name: "sh", Args: []string{"/tmp/get-bootable-partition.sh"}},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
 
-	log.Printf("Successfully uploaded get-bootable-partition.sh to guest")
+	result := strings.TrimSpace(out[runIdx])
+	log.Printf("Successfully executed get-bootable-partition.sh, output: %s", result)
 
-	// Make the script executable
-	var chmodErr error
-	var chmodOutput string
-
-	command = "chmod"
-	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/get-bootable-partition.sh")
-
-	if chmodErr != nil {
-		return "", fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
-	}
-
-	log.Printf("Made get-bootable-partition.sh executable")
-
-	// Run the script
-	var runErr error
-
-	cmd, cmdErr := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
-	if cmdErr != nil {
-		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)
-	}
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	log.Printf("Executing %s", cmd.String())
-	runErr = cmd.Run()
-	if stderrBuf.Len() > 0 {
-		log.Printf("get-bootable-partition.sh debug output:\n%s", strings.TrimSpace(stderrBuf.String()))
-	}
-	if runErr != nil {
-		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(stderrBuf.String()))
-	}
-
-	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(stdoutBuf.String()))
-
-	return strings.TrimSpace(stdoutBuf.String()), nil
+	return result, nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
@@ -1288,11 +1267,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 	defer os.RemoveAll(mountPoint)
 
-	// Construct the guestmount command.
-	//
-	// guestmount's -i option shares inspect_mount_handle() with guestfish, so it
-	// fails identically on a guest whose root filesystem spans several devices.
-	// Mount the explicitly resolved plan instead.
+	// guestmount's -i shares inspect_mount_handle() with guestfish and fails the
+	// same way, so mount the resolved plan instead.
 	plan, err := resolveMountPlan(disks)
 	if err != nil {
 		return fmt.Errorf("failed to resolve guest mount plan: %w", err)
@@ -1316,10 +1292,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
 	mountCmd := exec.Command("guestmount", buildArgs(plan.Mounts)...)
 	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
-		// Unlike a guestfish script, guestmount cannot tolerate one failed mount,
-		// and inspect-get-mountpoints is documented as possibly returning
-		// filesystems that are absent or unmountable. Retry with the root alone so
-		// that a stale fstab entry cannot break network persistence outright.
+		// guestmount cannot tolerate one failed mount, so retry with just the
+		// root: a stale fstab entry should not break network persistence.
 		log.Printf("guestmount with the full mount plan failed (%v: %s); retrying with the root filesystem only",
 			mountErr, strings.TrimSpace(string(out)))
 
