@@ -118,13 +118,18 @@ export default function SecurityGroupAndServerGroup({
 
   useEffect(() => {
     if (loadingProfiles) return
-    // Applicability is VM-OS-family gated (hasWindowsVMSelected/hasLinuxVMSelected), which
-    // is undetermined — not "neither" — before any VM is selected (e.g. right after
-    // applying a saved template, which intentionally doesn't restore VM selection). Pruning
-    // here would permanently wipe a real, saved profile choice before the user even gets to
-    // pick VMs. Only reconcile once VM selection is actually known.
-    if (!params?.vms || params.vms.length === 0) return
-    if (selectedImageProfiles.length === 0 && !templateImageProfiles?.length) return
+
+    // No VMs selected — nothing to reconcile against. Applicability is decided by the
+    // selected VMs' OS families, so with none selected it is *undetermined*, not "neither":
+    // reconciling here would prune a real saved profile choice before the operator ever gets
+    // to pick VMs (which is exactly what applying a template looks like).
+    const hasSelectedVms = Boolean(params?.vms?.length)
+    if (!hasSelectedVms) return
+
+    // Nothing selected and nothing a template could restore.
+    const hasAnythingToReconcile =
+      selectedImageProfiles.length > 0 || Boolean(templateImageProfiles?.length)
+    if (!hasAnythingToReconcile) return
 
     const applicableNames = new Set(
       applicableProfiles

@@ -720,3 +720,62 @@ describe('recordUserMappingEdits', () => {
     expect([...suppressed]).toEqual(['vMotion'])
   })
 })
+
+describe('useFilteredMappings - storage copy methods', () => {
+  it('re-applies template storage mappings for HotAdd without pruning them', () => {
+    const harness = driveHook({
+      params: { storageMappings: [] },
+      storageCopyMethod: 'HotAdd',
+      templatePool: TEMPLATE_POOL
+    })
+
+    harness.advance({ vmWareStorage: ['datastore1'] })
+
+    expect(harness.currentParams().storageMappings).toEqual([
+      { source: 'datastore1', target: 'nfs-punesimple' }
+    ])
+  })
+
+  it('leaves a HotAdd mapping whose datastore is no longer selected in place — HotAdd never pruned', () => {
+    const harness = driveHook({
+      params: {
+        storageMappings: [{ source: 'gone-datastore', target: 'nfs-punesimple' }]
+      },
+      storageCopyMethod: 'HotAdd'
+    })
+
+    harness.advance({ vmWareStorage: ['datastore1'] })
+
+    expect(harness.currentParams().storageMappings).toEqual([
+      { source: 'gone-datastore', target: 'nfs-punesimple' }
+    ])
+  })
+
+  it('prunes a stale mapping for normal copy, unlike HotAdd', () => {
+    const harness = driveHook({
+      params: {
+        storageMappings: [{ source: 'gone-datastore', target: 'nfs-punesimple' }]
+      },
+      storageCopyMethod: 'normal'
+    })
+
+    harness.advance({ vmWareStorage: ['datastore1'] })
+
+    expect(harness.currentParams().storageMappings).toEqual([])
+  })
+
+  it('does not touch storageMappings when storage-accelerated copy is selected', () => {
+    const harness = driveHook({
+      params: {
+        storageMappings: [{ source: 'gone-datastore', target: 'nfs-punesimple' }]
+      },
+      storageCopyMethod: 'StorageAcceleratedCopy'
+    })
+
+    harness.advance({ vmWareStorage: ['datastore1'] })
+
+    expect(harness.currentParams().storageMappings).toEqual([
+      { source: 'gone-datastore', target: 'nfs-punesimple' }
+    ])
+  })
+})

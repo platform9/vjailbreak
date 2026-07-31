@@ -61,17 +61,17 @@ func TestShouldSkipVMwareMachineReconciliation_WhenMigrationExists(t *testing.T)
 	scheme := testScheme(t)
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{
-		ObjectMeta: metav1.ObjectMeta{Name: "sarika-centos7-vj-test-4369-cf786", Namespace: constants.NamespaceMigrationSystem},
+		ObjectMeta: metav1.ObjectMeta{Name: "centos7-vm-4369-hash", Namespace: constants.NamespaceMigrationSystem},
 		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-			VMInfo: vjailbreakv1alpha1.VMInfo{Name: "sarika-centos7-vj-test", VMID: "vm-4369"},
+			VMInfo: vjailbreakv1alpha1.VMInfo{Name: "centos7-vm", VMID: "vm-4369"},
 		},
 	}
 	migration := &vjailbreakv1alpha1.Migration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "migration-sarika-centos7-vj-test-4369-cf786",
+			Name:      "migration-centos7-vm-4369-hash",
 			Namespace: constants.NamespaceMigrationSystem,
 			Labels: map[string]string{
-				constants.MigrationVMKeyLabel: "sarika-centos7-vj-test-4369",
+				constants.MigrationVMKeyLabel: "centos7-vm-4369",
 			},
 		},
 	}
@@ -104,14 +104,14 @@ func TestFindVMwareMachinesNotInVcenter_SkipsMachineWithMigration(t *testing.T) 
 
 	protectedVM := &vjailbreakv1alpha1.VMwareMachine{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sarika-centos7-vj-test-4369-cf786",
+			Name:      "centos7-vm-4369-hash",
 			Namespace: constants.NamespaceMigrationSystem,
 			Labels: map[string]string{
 				constants.VMwareCredsLabel: vmwcreds.Name,
 			},
 		},
 		Spec: vjailbreakv1alpha1.VMwareMachineSpec{
-			VMInfo: vjailbreakv1alpha1.VMInfo{Name: "sarika-centos7-vj-test", VMID: "vm-4369"},
+			VMInfo: vjailbreakv1alpha1.VMInfo{Name: "centos7-vm", VMID: "vm-4369"},
 		},
 	}
 	ordinaryVM := &vjailbreakv1alpha1.VMwareMachine{
@@ -128,10 +128,10 @@ func TestFindVMwareMachinesNotInVcenter_SkipsMachineWithMigration(t *testing.T) 
 	}
 	migration := &vjailbreakv1alpha1.Migration{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "migration-sarika-centos7-vj-test-4369-cf786",
+			Name:      "migration-centos7-vm-4369-hash",
 			Namespace: constants.NamespaceMigrationSystem,
 			Labels: map[string]string{
-				constants.MigrationVMKeyLabel: "sarika-centos7-vj-test-4369",
+				constants.MigrationVMKeyLabel: "centos7-vm-4369",
 			},
 		},
 	}

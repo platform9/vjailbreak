@@ -351,7 +351,7 @@ describe('save → spec → load round-trip', () => {
     ],
     securityGroups: ['all-open', 'default'],
     serverGroup: 'aff',
-    firstBootScript: 'echo "sarika"',
+    firstBootScript: 'echo "post-migration setup"',
     networkPersistence: true,
     removeVMwareTools: true,
     imageProfiles: ['default-linux'],
@@ -419,7 +419,7 @@ describe('save → spec → load round-trip', () => {
   })
 
   it('preserves the first-boot script verbatim', () => {
-    expect(roundTrip(fullInput).firstBootScript).toBe('echo "sarika"')
+    expect(roundTrip(fullInput).firstBootScript).toBe('echo "post-migration setup"')
   })
 
   it('preserves image profiles, security groups and server group', () => {

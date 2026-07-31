@@ -194,27 +194,53 @@ export function useFilteredMappings({
     openstackNetworkNames
   ])
 
+  // Normal copy: prune against the selected VMs' datastores, then re-apply from the
+  // template pool. Split from the HotAdd effect below so each only depends on what it
+  // actually reads — HotAdd never consults filteredStorageMappings.
   useEffect(() => {
-    if (storageCopyMethod === 'StorageAcceleratedCopy') return
-
-    // Pruning stays scoped to "normal" exactly as before — HotAdd also uses
-    // storageMappings but has never had them pruned here, and widening that now would be
-    // an unrelated behaviour change. Template re-apply still runs for both.
-    const base = storageCopyMethod === 'normal' ? filteredStorageMappings : params.storageMappings || []
+    if (storageCopyMethod !== 'normal') return
 
     const additions = selectApplicableTemplateMappings({
       pool: templatePool?.storageMappings,
-      current: base,
+      current: filteredStorageMappings,
       availableSources: vmWareStorage,
       availableTargets: openstackStorage,
       suppressedSources: userRemovedStorageSourcesRef.current
     })
-    const desired = additions.length ? [...base, ...additions] : base
+    const desired = additions.length
+      ? [...filteredStorageMappings, ...additions]
+      : filteredStorageMappings
 
     if (mappingsEqual(desired, params.storageMappings)) return
     onChange('storageMappings')(desired)
   }, [
     filteredStorageMappings,
+    onChange,
+    params.storageMappings,
+    storageCopyMethod,
+    templatePool?.storageMappings,
+    vmWareStorage,
+    openstackStorage
+  ])
+
+  // HotAdd also uses storageMappings but has never had them pruned here, and widening
+  // pruning to it would be an unrelated behaviour change — so this only re-applies from
+  // the template pool, and deliberately does not depend on filteredStorageMappings.
+  useEffect(() => {
+    if (storageCopyMethod !== 'HotAdd') return
+
+    const current = params.storageMappings || []
+    const additions = selectApplicableTemplateMappings({
+      pool: templatePool?.storageMappings,
+      current,
+      availableSources: vmWareStorage,
+      availableTargets: openstackStorage,
+      suppressedSources: userRemovedStorageSourcesRef.current
+    })
+    if (additions.length === 0) return
+
+    onChange('storageMappings')([...current, ...additions])
+  }, [
     onChange,
     params.storageMappings,
     storageCopyMethod,
