@@ -5,9 +5,25 @@ import type {
 } from 'src/api/migration-blueprints/model'
 import { CUTOVER_TYPES } from '../../constants'
 import type { SavedTemplate, SaveAsTemplateInput } from './types'
+import type { KeyValuePair } from '../../types'
 
 const ZERO_TIME = '0001-01-01T00:00:00Z'
 const isSetTime = (value?: string) => Boolean(value && value !== ZERO_TIME)
+
+// The blueprint stores custom metadata as a plain map (matching the CRD), while the form
+// edits it as an ordered list of rows. Blank keys are dropped on the way out so a
+// half-filled row never becomes an empty map entry.
+export const customMetadataToMap = (rows: KeyValuePair[] | undefined): Record<string, string> => {
+  const map: Record<string, string> = {}
+  ;(rows || []).forEach(({ key, value }) => {
+    const trimmed = (key || '').trim()
+    if (trimmed) map[trimmed] = value ?? ''
+  })
+  return map
+}
+
+export const customMetadataToRows = (map: Record<string, string> | undefined): KeyValuePair[] =>
+  Object.entries(map || {}).map(([key, value]) => ({ key, value }))
 
 // Mirrors useRetryPrefill.ts's cutoverOption derivation from a MigrationStrategy so
 // the Templates tab and the retry flow agree on what "admin cutover" / "time window"
@@ -42,8 +58,17 @@ export function blueprintToSavedTemplate(blueprint: MigrationBlueprint): SavedTe
     storageCopyMethod: spec.storageCopyMethod || 'normal',
     proxyVMRef: spec.proxyVMRef?.name || '',
     cutoverOption: deriveCutoverOption(spec.migrationStrategy),
+    cutoverStartTime: isSetTime(spec.migrationStrategy?.vmCutoverStart)
+      ? spec.migrationStrategy?.vmCutoverStart || ''
+      : '',
+    cutoverEndTime: isSetTime(spec.migrationStrategy?.vmCutoverEnd)
+      ? spec.migrationStrategy?.vmCutoverEnd || ''
+      : '',
     disconnectSourceNetwork: spec.migrationStrategy?.disconnectSourceNetwork || false,
     fallbackToDHCP: spec.fallbackToDHCP || false,
+    dataOnly: spec.dataOnly || false,
+    preserveSourceTags: spec.preserveSourceTags || false,
+    customMetadata: customMetadataToRows(spec.customMetadata),
     securityGroups: spec.securityGroups || [],
     serverGroup: spec.serverGroup || '',
     firstBootScript: spec.firstBootScript || '',
@@ -98,12 +123,25 @@ export function savedTemplateInputToBlueprintSpec(
       type: input.dataCopyMethod,
       adminInitiatedCutOver: input.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED,
       disconnectSourceNetwork: input.disconnectSourceNetwork || false,
-      ...(input.dataCopyStartTime && { dataCopyStart: input.dataCopyStartTime })
+      ...(input.dataCopyStartTime && { dataCopyStart: input.dataCopyStartTime }),
+      // Without these a time-window cutover could never round-trip: deriveCutoverOption
+      // infers TIME_WINDOW from the presence of these times, so omitting them made the
+      // template come back as "cutover immediately".
+      ...(input.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        input.cutoverStartTime && { vmCutoverStart: input.cutoverStartTime }),
+      ...(input.cutoverOption === CUTOVER_TYPES.TIME_WINDOW &&
+        input.cutoverEndTime && { vmCutoverEnd: input.cutoverEndTime })
     },
     ...(input.securityGroups &&
       input.securityGroups.length > 0 && { securityGroups: input.securityGroups }),
     ...(input.serverGroup && { serverGroup: input.serverGroup }),
     fallbackToDHCP: input.fallbackToDHCP || false,
+    dataOnly: input.dataOnly || false,
+    preserveSourceTags: input.preserveSourceTags || false,
+    ...(() => {
+      const metadata = customMetadataToMap(input.customMetadata)
+      return Object.keys(metadata).length > 0 ? { customMetadata: metadata } : {}
+    })(),
     ...(input.firstBootScript && { firstBootScript: input.firstBootScript }),
     ...(input.postMigrationAction && { postMigrationAction: input.postMigrationAction }),
     ...(Object.keys(advancedOptions).length > 0 && { advancedOptions }),

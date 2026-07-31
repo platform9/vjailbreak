@@ -19,6 +19,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined'
 import ArrowRightAltIcon from '@mui/icons-material/ArrowRightAlt'
 import type { SavedTemplate } from '../../api/migration-blueprints/types'
 import {
+  countTemplateMappings,
   dataCopyMethodChipSx,
   DATA_COPY_METHOD_LABEL,
   sourceClusterLabel
@@ -67,7 +68,7 @@ export default function TemplatesTable({
           </TableHead>
           <TableBody>
             {templates.map((template) => {
-              const mappingCount = template.networkMappings.length + template.storageMappings.length
+              const mappingCount = countTemplateMappings(template)
               const subtitleLine = [
                 sourceClusterLabel(template.sourceCluster, clusterNameLookup),
                 template.targetCluster

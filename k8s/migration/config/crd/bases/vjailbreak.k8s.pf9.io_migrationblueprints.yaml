@@ -139,6 +139,11 @@ spec:
                   CustomMetadata is a map of additional key-value pairs applied as instance
                   metadata to every migrated VM
                 type: object
+              dataOnly:
+                description: |-
+                  DataOnly copies and converts disks to Cinder volumes without creating an
+                  OpenStack VM
+                type: boolean
               description:
                 description: Description is a free-text description of the blueprint
                 type: string

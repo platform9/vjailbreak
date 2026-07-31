@@ -9,8 +9,19 @@ import { isNilOrEmpty } from 'src/utils'
 import type { SectionNavItem } from 'src/components'
 import { CUTOVER_TYPES } from '../constants'
 import type { FormValues, FieldErrors, SelectedMigrationOptionsType } from '../types'
+import type { VmData } from '../api/migration-templates/model'
 
 const stringsCompareFn = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase())
+
+// Sorted, de-duplicated union of a VM-inventory field across the given VMs — the set of
+// source names an operator can map. Exported for unit testing.
+export const deriveSourceCatalog = (
+  vms: VmData[] | undefined,
+  key: 'networks' | 'datastores'
+): string[] => {
+  if (vms === undefined) return []
+  return uniq(flatten(vms.map((vm) => vm[key] || []))).sort(stringsCompareFn)
+}
 
 interface UseFormValidationParams {
   params: Partial<FormValues>
@@ -21,6 +32,11 @@ interface UseFormValidationParams {
   rdmDisks: RdmDisk[]
   openstackCredentials: OpenstackCreds | undefined
   touchedSections: { options: boolean; tagsMetadata: boolean }
+  // Authoring a template rather than starting a migration: there is no VM selection, so
+  // the mappable catalog comes from clusterVms and mappings may stay partial.
+  templateMode?: boolean
+  // Every VM in the selected source cluster. Only read in template mode.
+  clusterVms?: VmData[]
 }
 
 interface UseFormValidationResult {
@@ -59,17 +75,25 @@ export function useFormValidation({
   openstackCredsValidated,
   rdmDisks,
   openstackCredentials,
-  touchedSections
+  touchedSections,
+  templateMode = false,
+  clusterVms
 }: UseFormValidationParams): UseFormValidationResult {
-  const availableVmwareNetworks = useMemo(() => {
-    if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.networks || []))).sort(stringsCompareFn)
-  }, [params.vms])
+  // A migration maps the networks/datastores of the VMs actually selected. A template has
+  // no VM selection, so it maps the union across the whole source cluster instead — a
+  // superset of any subset picked later, so a template can't lack a source the eventual
+  // migration needs.
+  const catalogVms = templateMode ? clusterVms : params.vms
 
-  const availableVmwareDatastores = useMemo(() => {
-    if (params.vms === undefined) return []
-    return uniq(flatten(params.vms.map((vm) => vm.datastores || []))).sort(stringsCompareFn)
-  }, [params.vms])
+  const availableVmwareNetworks = useMemo(
+    () => deriveSourceCatalog(catalogVms, 'networks'),
+    [catalogVms]
+  )
+
+  const availableVmwareDatastores = useMemo(
+    () => deriveSourceCatalog(catalogVms, 'datastores'),
+    [catalogVms]
+  )
 
   const { required: networkMappingRequired } = useNetworkMappingValidation({
     selectedVMs: params.vms || [],
@@ -218,8 +242,19 @@ export function useFormValidation({
   )
 
   const isStep3Complete = useMemo(() => {
-    if (!params.vms || params.vms.length === 0) return false
     if (fieldErrors['networksMapping'] || fieldErrors['storageMapping']) return false
+
+    // Partial mappings are a valid template, so completeness can't mean "every source
+    // mapped" here — it means the operator configured at least one mapping.
+    if (templateMode) {
+      return (
+        (params.networkMappings || []).length > 0 ||
+        (params.storageMappings || []).length > 0 ||
+        (params.arrayCredsMappings || []).length > 0
+      )
+    }
+
+    if (!params.vms || params.vms.length === 0) return false
 
     const networkMapped =
       availableVmwareNetworks.length === 0 ||
@@ -252,7 +287,8 @@ export function useFormValidation({
     params.proxyVMRef,
     availableVmwareNetworks,
     availableVmwareDatastores,
-    fieldErrors
+    fieldErrors,
+    templateMode
   ])
 
   const unmappedNetworksCount = useMemo(() => {
@@ -445,12 +481,21 @@ export function useFormValidation({
         description: 'Pick clusters and credentials',
         status: isStep1Complete ? 'complete' : step1HasErrors ? 'attention' : 'incomplete'
       },
-      {
-        id: 'select-vms',
-        title: 'Select VMs',
-        description: 'Choose VMs and assign required fields',
-        status: isStep2Complete ? 'complete' : step2HasErrors ? 'attention' : 'incomplete'
-      },
+      // Template mode never renders a VM step, so it must not appear in the rail either.
+      ...(templateMode
+        ? []
+        : [
+            {
+              id: 'select-vms',
+              title: 'Select VMs',
+              description: 'Choose VMs and assign required fields',
+              status: (isStep2Complete
+                ? 'complete'
+                : step2HasErrors
+                  ? 'attention'
+                  : 'incomplete') as SectionNavItem['status']
+            }
+          ]),
       {
         id: 'map-resources',
         title: 'Map Networks And Storage',
@@ -486,7 +531,8 @@ export function useFormValidation({
       step2HasErrors,
       step3HasErrors,
       step6HasErrors,
-      step6Complete
+      step6Complete,
+      templateMode
     ]
   )
 

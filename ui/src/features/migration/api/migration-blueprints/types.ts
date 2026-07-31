@@ -1,4 +1,5 @@
 import type { MigrationBlueprintSpec } from 'src/api/migration-blueprints/model'
+import type { KeyValuePair } from '../../types'
 
 // Mirrors FormValues.dataCopyMethod ('hot' | 'cold' | 'mock') — the "Hot" / "Cold"
 // / "Mock" migration-mode tag shown on each template card.
@@ -39,8 +40,13 @@ export interface SavedTemplate {
   storageCopyMethod: SavedTemplateStorageCopyMethod
   proxyVMRef: string
   cutoverOption: string // CUTOVER_TYPES value ('0' | '1' | '2')
+  cutoverStartTime: string
+  cutoverEndTime: string
   disconnectSourceNetwork: boolean
   fallbackToDHCP: boolean
+  dataOnly: boolean
+  preserveSourceTags: boolean
+  customMetadata: KeyValuePair[]
   securityGroups: string[]
   serverGroup: string
   firstBootScript: string
@@ -71,8 +77,13 @@ export interface SaveAsTemplateInput {
   storageCopyMethod?: SavedTemplateStorageCopyMethod
   proxyVMRef?: string
   cutoverOption: string // CUTOVER_TYPES value ('0' | '1' | '2')
+  cutoverStartTime?: string
+  cutoverEndTime?: string
   disconnectSourceNetwork?: boolean
   fallbackToDHCP?: boolean
+  dataOnly?: boolean
+  preserveSourceTags?: boolean
+  customMetadata?: KeyValuePair[]
   securityGroups?: string[]
   serverGroup?: string
   firstBootScript?: string

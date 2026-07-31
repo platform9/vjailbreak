@@ -82,6 +82,9 @@ type MigrationBlueprintSpec struct {
 	ServerGroup string `json:"serverGroup,omitempty"`
 	// FallbackToDHCP falls back to DHCP when static IP assignment is not possible
 	FallbackToDHCP bool `json:"fallbackToDHCP,omitempty"`
+	// DataOnly copies and converts disks to Cinder volumes without creating an
+	// OpenStack VM
+	DataOnly bool `json:"dataOnly,omitempty"`
 	// PreserveSourceTags copies each source VM's vSphere tags and custom
 	// attributes to the migrated VM as instance metadata
 	PreserveSourceTags bool `json:"preserveSourceTags,omitempty"`

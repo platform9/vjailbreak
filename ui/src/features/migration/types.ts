@@ -191,6 +191,16 @@ export interface NetworkAndStorageMappingStepProps {
   loading?: boolean
   showHeader?: boolean
   subnetWarnings?: Record<string, string>
+  // Template authoring: mapping every source is not required, so unmapped sources are
+  // reported neutrally instead of as warnings and the fields are not marked required.
+  allowPartialMapping?: boolean
+  // Mappings saved by an applied template. Re-applied automatically as their sources
+  // appear, so picking VMs restores the mappings the template had for those VMs.
+  templateMappingPool?: {
+    networkMappings?: ResourceMap[]
+    storageMappings?: ResourceMap[]
+    arrayCredsMappings?: ResourceMap[]
+  }
 }
 
 // ---------------------------------------------------------------------------

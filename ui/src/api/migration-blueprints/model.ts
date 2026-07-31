@@ -56,6 +56,7 @@ export interface MigrationBlueprintSpec {
   securityGroups?: string[]
   serverGroup?: string
   fallbackToDHCP?: boolean
+  dataOnly?: boolean
   preserveSourceTags?: boolean
   customMetadata?: Record<string, string>
   useGPUFlavor?: boolean

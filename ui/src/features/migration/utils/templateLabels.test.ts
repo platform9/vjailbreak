@@ -3,9 +3,12 @@ import { CUTOVER_TYPES } from '../constants'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
 import {
   buildAdvancedOptionRows,
+  buildTemplateMappingRows,
+  countTemplateMappings,
   cutoverOptionLabel,
   DATA_COPY_METHOD_LABEL,
-  sourceClusterLabel
+  sourceClusterLabel,
+  storageCopyMethodLabel
 } from './templateLabels'
 
 const makeTemplate = (overrides: Partial<SavedTemplate> = {}): SavedTemplate => ({
@@ -25,6 +28,11 @@ const makeTemplate = (overrides: Partial<SavedTemplate> = {}): SavedTemplate => 
   storageCopyMethod: 'normal',
   proxyVMRef: '',
   cutoverOption: CUTOVER_TYPES.ADMIN_INITIATED,
+  cutoverStartTime: '',
+  cutoverEndTime: '',
+  dataOnly: false,
+  preserveSourceTags: false,
+  customMetadata: [],
   disconnectSourceNetwork: false,
   fallbackToDHCP: false,
   securityGroups: [],
@@ -199,7 +207,7 @@ describe('buildAdvancedOptionRows', () => {
     ])
   })
 
-  it('surfaces health checks and array offload from the raw spec', () => {
+  it('surfaces health checks from the raw spec, and never advertises the inert arrayOffload field', () => {
     const rows = buildAdvancedOptionRows(
       makeTemplate({
         spec: {
@@ -208,9 +216,128 @@ describe('buildAdvancedOptionRows', () => {
         }
       })
     )
-    expect(rows).toEqual([
-      { label: 'Health checks', value: 'Enabled' },
-      { label: 'Array offload', value: 'Enabled' }
-    ])
+    // arrayOffload has no producer or consumer in the repo; showing it would imply a
+    // configurable setting that does nothing.
+    expect(rows).toEqual([{ label: 'Health checks', value: 'Enabled' }])
+  })
+})
+
+describe('buildAdvancedOptionRows — options added after the #428 merge', () => {
+  const rowFor = (template: Parameters<typeof buildAdvancedOptionRows>[0], label: string) =>
+    buildAdvancedOptionRows(template).find((row) => row.label === label)
+
+  it('surfaces the data-only option', () => {
+    expect(rowFor(makeTemplate({ dataOnly: true }), 'Data only (no VM creation)')).toEqual({
+      label: 'Data only (no VM creation)',
+      value: 'Enabled'
+    })
+  })
+
+  it('surfaces preserve-source-tags', () => {
+    expect(rowFor(makeTemplate({ preserveSourceTags: true }), 'Preserve source tags')).toEqual({
+      label: 'Preserve source tags',
+      value: 'Enabled'
+    })
+  })
+
+  it('renders custom metadata as key=value pairs', () => {
+    expect(
+      rowFor(
+        makeTemplate({
+          customMetadata: [
+            { key: 'env', value: 'prod' },
+            { key: 'owner', value: 'platform-ops' }
+          ]
+        }),
+        'Custom metadata'
+      )
+    ).toEqual({ label: 'Custom metadata', value: 'env=prod, owner=platform-ops' })
+  })
+
+  it('surfaces the scheduled data copy start time', () => {
+    expect(
+      rowFor(makeTemplate({ dataCopyStartTime: '2026-08-19T01:15' }), 'Data copy starts')?.value
+    ).toBe('2026-08-19T01:15')
+  })
+
+  it('surfaces both ends of a cutover window', () => {
+    const template = makeTemplate({
+      cutoverStartTime: '2026-08-19T02:00',
+      cutoverEndTime: '2026-08-19T04:00'
+    })
+    expect(rowFor(template, 'Cutover window starts')?.value).toBe('2026-08-19T02:00')
+    expect(rowFor(template, 'Cutover window ends')?.value).toBe('2026-08-19T04:00')
+  })
+
+  it('surfaces the proxy VM used for accelerated copy', () => {
+    expect(rowFor(makeTemplate({ proxyVMRef: 'proxy-vm-1' }), 'Proxy VM')?.value).toBe('proxy-vm-1')
+  })
+
+  it('omits every one of them when unset, so a simple template stays uncluttered', () => {
+    const labels = buildAdvancedOptionRows(makeTemplate()).map((row) => row.label)
+    expect(labels).not.toContain('Data only (no VM creation)')
+    expect(labels).not.toContain('Preserve source tags')
+    expect(labels).not.toContain('Custom metadata')
+    expect(labels).not.toContain('Data copy starts')
+    expect(labels).not.toContain('Cutover window starts')
+    expect(labels).not.toContain('Proxy VM')
+  })
+})
+
+describe('storage copy methods other than normal', () => {
+  it('labels all three copy methods', () => {
+    expect(storageCopyMethodLabel('normal')).toBeTruthy()
+    expect(storageCopyMethodLabel('StorageAcceleratedCopy')).toBeTruthy()
+    expect(storageCopyMethodLabel('HotAdd')).toBeTruthy()
+  })
+
+  it('surfaces datastore→array-credential mappings, which storage-accelerated copy uses instead of volume types', () => {
+    const rows = buildTemplateMappingRows(
+      makeTemplate({
+        storageCopyMethod: 'StorageAcceleratedCopy',
+        storageMappings: [],
+        arrayCredsMappings: [{ source: 'datastore1', target: 'pure-array-1' }]
+      })
+    )
+
+    expect(rows).toEqual([{ kind: 'Storage array', source: 'datastore1', target: 'pure-array-1' }])
+  })
+
+  it('lists network, storage and array mappings together', () => {
+    const rows = buildTemplateMappingRows(
+      makeTemplate({
+        networkMappings: [{ source: 'VM Network', target: 'Physnet1' }],
+        storageMappings: [{ source: 'datastore1', target: 'nfs-punesimple' }],
+        arrayCredsMappings: [{ source: 'datastore2', target: 'pure-array-1' }]
+      })
+    )
+
+    expect(rows.map((row) => row.kind)).toEqual(['Network', 'Storage', 'Storage array'])
+  })
+
+  it('counts array mappings too, so a storage-accelerated template does not read as "0 mappings"', () => {
+    expect(
+      countTemplateMappings(
+        makeTemplate({
+          networkMappings: [{ source: 'VM Network', target: 'Physnet1' }],
+          storageMappings: [],
+          arrayCredsMappings: [
+            { source: 'datastore1', target: 'pure-array-1' },
+            { source: 'datastore2', target: 'pure-array-1' }
+          ]
+        })
+      )
+    ).toBe(3)
+  })
+
+  it('counts nothing for a template with no mappings at all', () => {
+    expect(countTemplateMappings(makeTemplate())).toBe(0)
+  })
+
+  it('shows the proxy VM that vJailbreak-accelerated copy requires', () => {
+    const rows = buildAdvancedOptionRows(
+      makeTemplate({ storageCopyMethod: 'HotAdd', proxyVMRef: 'proxy-vm-1' })
+    )
+    expect(rows.find((row) => row.label === 'Proxy VM')?.value).toBe('proxy-vm-1')
   })
 })

@@ -48,6 +48,7 @@ import { useRetrySubmit } from '../hooks/useRetrySubmit'
 import { Banner } from 'src/components'
 import { RetrySourceDestinationSummary } from '../components/RetryMigration'
 import { useApplyTemplatePrefill } from '../hooks/useApplyTemplatePrefill'
+import { useVMwareMachinesQuery } from 'src/hooks/api/useVMwareMachinesQuery'
 import SaveAsTemplateDialog from '../components/templates/SaveAsTemplateDialog'
 import type { SaveAsTemplateInput } from '../api/migration-blueprints/types'
 import { CUTOVER_TYPES } from '../constants'
@@ -206,6 +207,38 @@ export default function MigrationFormDrawer({
     return clusterObj?.displayName || clusterObj?.name || ''
   }, [sourceData, params.vmwareCluster])
 
+  // Template mode maps against the whole source cluster rather than a VM selection, so
+  // fetch that cluster's inventory. params.vmwareCluster is the dropdown's composite
+  // "credName:datacenter:clusterMetadataName" id.
+  const [clusterCredName, clusterDatacenterName, clusterK8sName] = useMemo(() => {
+    const parts = (params.vmwareCluster || '').split(':')
+    return [parts[0] || '', parts[1] || '', parts[2] || '']
+  }, [params.vmwareCluster])
+
+  // An applied template's saved mappings, kept whole so they can be re-applied as their
+  // sources appear. The mapping step legitimately prunes mappings whose source isn't in
+  // the selected VMs, and at the moment a template is applied no VMs are selected yet —
+  // without this pool the saved mappings would be pruned away before the operator ever
+  // gets to pick VMs.
+  const templateMappingPool = useMemo(() => {
+    if (!templatePrefill) return undefined
+    return {
+      networkMappings: templatePrefill.networkMappings,
+      storageMappings: templatePrefill.storageMappings,
+      arrayCredsMappings: templatePrefill.arrayCredsMappings
+    }
+  }, [templatePrefill])
+
+  const { data: clusterVms } = useVMwareMachinesQuery({
+    vmwareCredsValidated,
+    openstackCredsValidated,
+    enabled: isTemplateMode && Boolean(clusterK8sName),
+    sessionId,
+    vmwareCredName: clusterCredName,
+    clusterName: clusterK8sName,
+    datacenterName: clusterDatacenterName
+  })
+
   const buildSaveTemplateInput = useCallback(
     (fields: { displayName: string; description?: string }): SaveAsTemplateInput => ({
       ...fields,
@@ -225,8 +258,15 @@ export default function MigrationFormDrawer({
       storageCopyMethod: params.storageCopyMethod,
       proxyVMRef: params.proxyVMRef,
       cutoverOption: params.cutoverOption || CUTOVER_TYPES.IMMEDIATE,
+      cutoverStartTime: selectedMigrationOptions.cutoverStartTime
+        ? params.cutoverStartTime
+        : undefined,
+      cutoverEndTime: selectedMigrationOptions.cutoverEndTime ? params.cutoverEndTime : undefined,
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       fallbackToDHCP: params.fallbackToDHCP || false,
+      dataOnly: params.dataOnly || false,
+      preserveSourceTags: params.preserveSourceTags || false,
+      customMetadata: params.customMetadata || [],
       securityGroups: params.securityGroups || [],
       serverGroup: params.serverGroup || '',
       firstBootScript: selectedMigrationOptions.postMigrationScript
@@ -257,8 +297,13 @@ export default function MigrationFormDrawer({
       params.storageCopyMethod,
       params.proxyVMRef,
       params.cutoverOption,
+      params.cutoverStartTime,
+      params.cutoverEndTime,
       params.disconnectSourceNetwork,
       params.fallbackToDHCP,
+      params.dataOnly,
+      params.preserveSourceTags,
+      params.customMetadata,
       params.securityGroups,
       params.serverGroup,
       params.postMigrationScript,
@@ -274,6 +319,8 @@ export default function MigrationFormDrawer({
       selectedMigrationOptions.periodicSyncEnabled,
       selectedMigrationOptions.postMigrationAction,
       selectedMigrationOptions.dataCopyStartTime,
+      selectedMigrationOptions.cutoverStartTime,
+      selectedMigrationOptions.cutoverEndTime,
       targetPCDClusterName,
       selectedVmwareClusterName
     ]
@@ -366,7 +413,9 @@ export default function MigrationFormDrawer({
     openstackCredsValidated,
     rdmDisks,
     openstackCredentials,
-    touchedSections
+    touchedSections,
+    templateMode: isTemplateMode,
+    clusterVms
   })
 
   // Subnet compatibility between selected VM IPs and mapped target networks.
@@ -441,17 +490,25 @@ export default function MigrationFormDrawer({
     setActiveSectionId(id)
   }, [])
 
+  const trackedSections = useMemo(
+    () =>
+      [
+        { ref: section1Ref, id: 'source-destination' },
+        // Step 2 is not rendered in template mode; tracking an unmounted ref would
+        // leave the rail highlighting a step the operator cannot reach.
+        ...(isTemplateMode ? [] : [{ ref: section2Ref, id: 'select-vms' }]),
+        { ref: section3Ref, id: 'map-resources' },
+        { ref: section4Ref, id: 'security' },
+        { ref: tagsMetadataRef, id: 'tags-metadata' },
+        { ref: section5Ref, id: 'options' }
+      ] as Array<{ ref: React.RefObject<HTMLDivElement | null>; id: string }>,
+    [isTemplateMode]
+  )
+
   useSectionTracking({
     open,
     contentRootRef,
-    sections: [
-      { ref: section1Ref, id: 'source-destination' },
-      { ref: section2Ref, id: 'select-vms' },
-      { ref: section3Ref, id: 'map-resources' },
-      { ref: section4Ref, id: 'security' },
-      { ref: tagsMetadataRef, id: 'tags-metadata' },
-      { ref: section5Ref, id: 'options' }
-    ],
+    sections: trackedSections,
     setActiveSectionId
   })
 
@@ -687,9 +744,13 @@ export default function MigrationFormDrawer({
                 </SurfaceCard>
               </Box>
 
-              <Divider />
+              {/* Template mode authors a VM-agnostic configuration, so VM selection is
+                  omitted entirely — not merely hidden. params.vms stays undefined, which
+                  every VM-derived validator already treats as "nothing to check". */}
+              {!isTemplateMode && <Divider />}
 
               {/* Step 2 - VM selection now manages its own data fetching with unique session ID */}
+              {!isTemplateMode && (
               <Box ref={section2Ref} data-testid="migration-form-step-select-vms">
                 <SurfaceCard
                   variant="section"
@@ -748,6 +809,7 @@ export default function MigrationFormDrawer({
                   )}
                 </SurfaceCard>
               </Box>
+              )}
               <Divider />
 
               {/* Step 3 */}
@@ -755,7 +817,11 @@ export default function MigrationFormDrawer({
                 <SurfaceCard
                   variant="section"
                   title="Map Networks And Storage"
-                  subtitle="Ensure all VMware networks and datastores have PCD targets"
+                  subtitle={
+                    isTemplateMode
+                      ? 'Sources come from every VM in the selected cluster — map only what this template should preset'
+                      : 'Ensure all VMware networks and datastores have PCD targets'
+                  }
                   data-testid="migration-form-step3-card"
                 >
                   <NetworkAndStorageMappingStep
@@ -769,6 +835,8 @@ export default function MigrationFormDrawer({
                     storageMappingError={fieldErrors['storageMapping']}
                     showHeader={false}
                     subnetWarnings={subnetWarnings}
+                    allowPartialMapping={isTemplateMode}
+                    templateMappingPool={templateMappingPool}
                   />
                 </SurfaceCard>
               </Box>
@@ -789,6 +857,8 @@ export default function MigrationFormDrawer({
                     openstackNetworks={sortedOpenstackNetworks}
                     stepNumber="4"
                     showHeader={false}
+                    showAllProfiles={isTemplateMode}
+                    templateImageProfiles={templatePrefill?.imageProfiles}
                   />
                 </SurfaceCard>
               </Box>
@@ -845,6 +915,7 @@ export default function MigrationFormDrawer({
                     showHeader={false}
                     hasSubnetMismatch={hasSubnetMismatch}
                     hasPreserveIpDisabled={hasPreserveIpDisabled}
+                    skipDefaultSeeding={skipDefaultSeeding}
                   />
                 </SurfaceCard>
               </Box>
