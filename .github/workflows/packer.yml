@@ -155,7 +155,6 @@ jobs:
 
   build-ui:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -187,7 +186,6 @@ jobs:
 
   build-v2v-helper:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -222,7 +220,6 @@ jobs:
 
   build-controller:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -260,7 +257,6 @@ jobs:
 
   build-vpwned:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -292,7 +288,6 @@ jobs:
 
   build-vjailbreak-ai:
     runs-on: ubuntu-latest
-    if: "!startsWith(github.head_ref, 'pre-release/')"
     needs: determine-release
 
     steps:
@@ -326,7 +321,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai]
     if: |
-      !startsWith(github.head_ref, 'pre-release/') &&
       needs.determine-release.result == 'success' &&
       (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
@@ -427,7 +421,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai, push-images]
     if: |
-      !startsWith(github.head_ref, 'pre-release/') &&
       needs.determine-release.result == 'success' &&
       (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
