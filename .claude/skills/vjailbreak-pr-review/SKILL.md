@@ -148,14 +148,41 @@ If no issues found: write only the verdict paragraph. A clean PR needs no findin
 - Code suggestions: fenced Go/bash blocks
 - Each finding: one clear location, one clear problem, one concrete fix
 
-## Step 5: Generate the Posting Script
+## Step 5: Generate Posting Artifacts
 
-Produce `send_comments.sh` — one `gh pr comment` per finding, one `gh pr review` for the summary. Each block is labeled so the user can delete any section before running.
+Produce two files: `findings.json` (powers the viewer's "Post to GitHub" UI) and `send_comments.sh` (fallback shell script).
+
+### findings.json
+
+This is read by the eval viewer to render per-finding checkboxes. Build it from your findings:
+
+```json
+{
+  "pr": <number>,
+  "repo": "platform9/vjailbreak",
+  "verdict_flag": "--comment",
+  "summary_body": "PR #<number> review — <title>\n\nVerdict: APPROVE / REQUEST CHANGES\n\n<summary paragraph>",
+  "findings": [
+    {
+      "title": "Finding 1 · MINOR · path/to/file.go:739",
+      "body": "`path/to/file.go:739` — <short title>\n\n<full explanation>\n\nFix: <concrete action>"
+    },
+    {
+      "title": "Finding 2 · MISSING TEST · path/to/other_test.go",
+      "body": "..."
+    }
+  ]
+}
+```
+
+Set `verdict_flag` to `"--request-changes"` only for Critical violations or blocking logic bugs.
+
+### send_comments.sh (fallback)
 
 ```bash
 #!/bin/bash
 # Review script for PR #<number>
-# Delete any labeled block you don't want to post, then: bash send_comments.sh
+# Fallback if the viewer UI is unavailable. Delete any labeled block to skip it.
 
 PR=<number>
 REPO=platform9/vjailbreak
@@ -163,34 +190,22 @@ VERDICT="--comment"  # change to "--request-changes" if blocking issues found
 
 # ─── Summary ───────────────────────────────────────────────────────────
 gh pr review $PR --repo $REPO $VERDICT --body "$(cat <<'EOF'
-PR #<number> review — <title>
-
-Verdict: APPROVE / REQUEST CHANGES
-
-<summary paragraph — same content as review.md verdict>
+<summary_body content>
 EOF
 )"
 
 # ─── Finding 1: MINOR · path/to/file.go:739 ───────────────────────────
-# Delete this block to skip
 gh pr comment $PR --repo $REPO --body "$(cat <<'EOF'
-`path/to/file.go:739` — <short title>
-
-<full explanation>
-
-Fix: <concrete action>
+<finding 1 body>
 EOF
 )"
 
 # ─── Finding 2: MISSING TEST · path/to/other_test.go ──────────────────
-# Delete this block to skip
 gh pr comment $PR --repo $REPO --body "$(cat <<'EOF'
-...
+<finding 2 body>
 EOF
 )"
 ```
-
-Use `--request-changes` only for Critical violations or blocking logic bugs.
 
 ## Step 6: Save Outputs and Launch Eval Viewer
 
@@ -203,10 +218,14 @@ rm -rf "$WORKSPACE/pr-<number>"
 RUN_DIR="$WORKSPACE/pr-<number>/run/outputs"
 mkdir -p "$RUN_DIR"
 
-# Write review.md and send_comments.sh (content from Steps 4 and 5)
+# Write all three output files
 cat > "$RUN_DIR/review.md" << 'MDEOF'
 <review.md content>
 MDEOF
+
+cat > "$RUN_DIR/findings.json" << 'JSONEOF'
+<findings.json content>
+JSONEOF
 
 cat > "$RUN_DIR/send_comments.sh" << 'SHEOF'
 <send_comments.sh content>
@@ -224,7 +243,7 @@ cd "$EVAL_VIEWER"
 python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
 ```
 
-The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The review.md will render as formatted Markdown with syntax-highlighted code blocks. Use the **Post to GitHub** section to post findings directly from the UI.
+The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The **Post to GitHub** section shows checkboxes for the summary and each finding — check the ones you want, then click **Post Selected to GitHub**. The `send_comments.sh` is a fallback if the server is unavailable.
 
 ## Reference: Module Paths
 
