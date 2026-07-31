@@ -24,7 +24,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:main
+          image: quay.io/platform9/vjailbreak-ai:test2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
