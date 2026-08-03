@@ -67,12 +67,29 @@ Agent nodes require a **minimum of 60 GiB disk storage**. Flavors with less than
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
-## L2-Only Network Limitations
+## Scaling in L2-Only Networks
 
-:::caution
-Agent scale-up is **not currently supported** in L2-only network environments (networks without DHCP). In these environments, only the primary vJailbreak VM can be used for migrations.
+Agent scale-up **is supported** in L2-only network environments — networks that have no OpenStack-managed DHCP/IPAM and instead rely on an external DHCP server on the segment.
 
-If you require additional migration capacity in an L2-only network, consider using a larger flavor for the primary vJailbreak VM.
+### How it works
+
+1. **L2 detection.** vJailbreak inspects the networks attached to the primary vJailbreak VM and treats any network tagged `simple_network` in Neutron as an L2-only network.
+2. **Port pre-creation.** For each L2 network, vJailbreak pre-creates a Neutron port with no fixed IP and port security disabled, and attaches the new agent VM to that port instead of requesting an address from OpenStack.
+3. **Config drive.** The agent VM is booted with a config drive, because the OpenStack metadata service at `169.254.169.254` is not reachable before the guest has an IP. The join configuration (master IP and cluster token) is delivered through the config drive to `/etc/pf9/k3s.env`.
+4. **Wait for the guest to get an IP.** On first boot, the agent's provisioning script waits until the guest has **both** a global IPv4 address and a default route — normally handed out by the external DHCP server on the L2 segment. The check is retried every 60 seconds and does not time out, so the agent will keep waiting until the lease is granted.
+5. **Agent addition and join.** Once the guest has an IP and a default route, the agent-addition sequence runs and the node joins the vJailbreak master at `https://<master-ip>:6443`. Pre-baked container images are then imported locally, so no registry access is required.
+6. **Status convergence.** The agent's `VjailbreakNode` progresses `CreatingVM` → `VMCreated` → `Ready`. Because OpenStack reports no address for a port without a fixed IP, the agent's IP is blank in the dashboard while it is provisioning and is populated once the node reports `Ready`.
+
+### Requirements
+
+- The L2 network must be **tagged `simple_network`** in Neutron. This tag is what triggers the L2 code path.
+- An **external DHCP server (or equivalent address source) must be reachable on the L2 segment**, and it must provide an IPv4 address, a **default route**, and DNS/routing such that the vJailbreak master is reachable on port `6443`. An address alone is not sufficient — the default route is also required.
+- **Do not select security groups** when scaling up on an L2 network. L2 ports are created with port security disabled and any security group selection is ignored; the dashboard disables the selector for these networks.
+- The hypervisor and image must support **config drive**.
+- **IPv4 only.** IPv6-only L2 segments are not supported.
+
+:::note
+If an agent stays in `VMCreated` and never becomes `Ready`, the guest most likely never received a DHCP lease or a default route. Open the agent VM console and check `/var/log/pf9-install.log` — the wait loop logs which of the two conditions is still missing.
 :::
 
 ## Logging into Agent VMs
