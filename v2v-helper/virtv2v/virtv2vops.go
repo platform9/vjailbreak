@@ -1069,26 +1069,29 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(releaseFiles, ", "))
 }
 
-// GetWindowsVersion detects the Windows version using guestfish inspect commands
+// GetWindowsVersion detects the Windows version using guestfish inspect commands.
+//
+// It takes the root from the resolved mount plan rather than re-running
+// inspect-os, which fixed two bugs and saved an appliance boot. inspect-os can
+// report one filesystem several times - a Windows LDM volume is listed once per
+// member disk - and the whole multi-line output was passed as a single argument,
+// producing "unterminated double quote". RunCommandInGuestAllVolumes also
+// lowercases its output, which corrupts a case-sensitive device-mapper name such
+// as /dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1. The plan's root is
+// deduplicated and verbatim.
 func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
-	var osPath string
-	var err error
-
-	osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
-
+	plan, err := resolveMountPlan(disks)
 	if err != nil {
-		return "", fmt.Errorf("failed to inspect OS: %v", err)
+		return "", fmt.Errorf("failed to inspect OS: %w", err)
 	}
-
-	osPath = strings.TrimSpace(osPath)
-	if osPath == "" {
-		return "", fmt.Errorf("empty OS path from inspect-os")
+	if plan.Root == "" {
+		return "", errors.New("empty OS path from inspect-os")
 	}
 
 	var productName string
-	productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
+	productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, plan.Root)
 
 	if err != nil {
 		log.Printf("Failed to get Windows product name: %v", err)

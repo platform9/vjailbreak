@@ -576,6 +576,24 @@ func TestPlanFromProbe(t *testing.T) {
 		}, plan.Mounts)
 	})
 
+	t.Run("windows LDM volume listed twice collapses, case preserved", func(t *testing.T) {
+		// Observed on a Windows 2022 dynamic-disk guest: Ldm.list_ldm_volumes()
+		// reports the volume once per member disk, so inspect-os returns the same
+		// device path twice. The root must collapse to one entry and keep its
+		// case - device-mapper names are case sensitive.
+		const ldm = "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1"
+
+		plan, err := planFromProbe(
+			[]string{ldm, ldm},
+			map[string]string{ldm: "1234abcd"},
+			nil,
+		)
+
+		assert.NoError(t, err)
+		assert.Equal(t, ldm, plan.Root)
+		assert.Equal(t, []mountSpec{{Device: ldm, MountPoint: "/"}}, plan.Mounts)
+	})
+
 	t.Run("genuine multi-boot is rejected with a useful message", func(t *testing.T) {
 		roots := []string{"/dev/sda1", "/dev/sdb1"}
 		uuids := map[string]string{"/dev/sda1": "aaaa", "/dev/sdb1": "bbbb"}
