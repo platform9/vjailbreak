@@ -55,7 +55,8 @@ describe('buildClearAllIpsUpdate', () => {
 // handleClearAllIPs also updating bulkEditOverrides, the persisted preserveIP flag
 // would silently snap back to the dialog-open value ("true") even though the user
 // just turned Preserve IP off via Clear All — undermining anything downstream that
-// reads nic.preserveIP (e.g. the Persist source network interfaces gate).
+// reads nic.preserveIP (e.g. the Persist source network interfaces gate, and the
+// subnet-mismatch recompute which reads the IP via useNetworkIPsMap).
 describe('useBulkIPEdit — Clear All end-to-end', () => {
   it('Clear All + Apply persists preserveIP=false and empties the IP, not the stale dialog-open value', async () => {
     const vm: VmDataWithFlavor = {

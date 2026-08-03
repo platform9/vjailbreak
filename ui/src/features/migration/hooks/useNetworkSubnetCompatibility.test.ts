@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { computeSubnetCheckSignature, useNetworkSubnetCompatibility } from './useNetworkSubnetCompatibility'
 import type { OpenstackCreds } from 'src/api/openstack-creds/model'
@@ -93,13 +93,80 @@ describe('computeSubnetCheckSignature', () => {
   })
 })
 
-describe('useNetworkSubnetCompatibility — stale response race', () => {
-  // checkNetworkSubnetCompatibility can take over a second in practice. If the user
-  // clears the IP while that call for the pre-edit IP is still in flight, clearTimeout
-  // only cancels the pending *timer* — it can't cancel an already-running async body.
-  // Without the requestId guard, that stale call lands after the correct (cleared)
-  // result and silently reinstates the pre-edit warning.
+describe('useNetworkSubnetCompatibility', () => {
+  const openstackCredentials = {
+    metadata: { name: 'creds-1', namespace: 'default' }
+  } as unknown as OpenstackCreds
+  const networkMappings = [{ source: 'VM Network', target: 'secondnetwork' }]
+  const selectedVMs: VmData[] = [{ id: 'vm-1', name: 'vm-1', datastores: [] }]
+
+  beforeEach(() => {
+    vi.mocked(checkNetworkSubnetCompatibility).mockReset()
+  })
+
+  it('recomputes and shows a warning when the mapping is first made', async () => {
+    vi.mocked(checkNetworkSubnetCompatibility).mockResolvedValueOnce({
+      all_compatible: false,
+      results: [{ ip: '10.96.9.11', is_compatible: false, reason: 'out of subnet' }],
+      subnet_cidrs: ['192.168.0.0/24']
+    })
+
+    const { result } = renderHook(() =>
+      useNetworkSubnetCompatibility({
+        networkMappings,
+        openstackCredentials,
+        selectedVMs,
+        networkIPsMap: new Map([['VM Network', ['10.96.9.11']]]),
+        openstackNetworks: []
+      })
+    )
+
+    await waitFor(() => expect(result.current['VM Network']).toContain('10.96.9.11'), {
+      timeout: 1000
+    })
+  })
+
+  it('recomputes when the VM IP changes after the mapping already exists (selection/mapping unchanged)', async () => {
+    vi.mocked(checkNetworkSubnetCompatibility)
+      .mockResolvedValueOnce({
+        all_compatible: false,
+        results: [{ ip: '10.96.9.11', is_compatible: false, reason: 'out of subnet' }],
+        subnet_cidrs: ['192.168.0.0/24']
+      })
+      .mockResolvedValueOnce({
+        all_compatible: true,
+        results: [{ ip: '192.168.0.50', is_compatible: true, reason: '' }],
+        subnet_cidrs: ['192.168.0.0/24']
+      })
+
+    const { result, rerender } = renderHook(
+      ({ networkIPsMap }) =>
+        useNetworkSubnetCompatibility({
+          networkMappings,
+          openstackCredentials,
+          selectedVMs,
+          networkIPsMap,
+          openstackNetworks: []
+        }),
+      { initialProps: { networkIPsMap: new Map([['VM Network', ['10.96.9.11']]]) } }
+    )
+
+    await waitFor(() => expect(result.current['VM Network']).toContain('10.96.9.11'), {
+      timeout: 1000
+    })
+
+    // IP edited to one that now falls inside the subnet — mapping itself is unchanged.
+    rerender({ networkIPsMap: new Map([['VM Network', ['192.168.0.50']]]) })
+
+    await waitFor(() => expect(result.current['VM Network']).toBeUndefined(), { timeout: 1000 })
+  })
+
   it('does not let a slow, superseded API call overwrite a newer result', async () => {
+    // checkNetworkSubnetCompatibility can take over a second in practice. If the user
+    // clears the IP while that call for the pre-edit IP is still in flight, clearTimeout
+    // only cancels the pending *timer* — it can't cancel an already-running async body.
+    // Without the requestId guard, that stale call lands after the correct (cleared)
+    // result and silently reinstates the pre-edit warning.
     let resolveFirstCall!: (value: unknown) => void
     const firstCallPromise = new Promise((resolve) => {
       resolveFirstCall = resolve
@@ -107,12 +174,6 @@ describe('useNetworkSubnetCompatibility — stale response race', () => {
     vi.mocked(checkNetworkSubnetCompatibility).mockImplementationOnce(
       () => firstCallPromise as ReturnType<typeof checkNetworkSubnetCompatibility>
     )
-
-    const openstackCredentials = {
-      metadata: { name: 'creds-1', namespace: 'default' }
-    } as unknown as OpenstackCreds
-    const networkMappings = [{ source: 'VM Network', target: 'secondnetwork' }]
-    const selectedVMs: VmData[] = [{ id: 'vm-1', name: 'vm-1', datastores: [] }]
 
     const { result, rerender } = renderHook(
       ({ networkIPsMap }) =>
@@ -144,4 +205,37 @@ describe('useNetworkSubnetCompatibility — stale response race', () => {
 
     expect(result.current['VM Network']).toBeUndefined()
   }, 10000)
+
+  it('clears warnings immediately when all VMs are deselected', () => {
+    const { result, rerender } = renderHook(
+      ({ selectedVMs }) =>
+        useNetworkSubnetCompatibility({
+          networkMappings,
+          openstackCredentials,
+          selectedVMs,
+          networkIPsMap: new Map([['VM Network', ['10.96.9.11']]]),
+          openstackNetworks: []
+        }),
+      { initialProps: { selectedVMs } }
+    )
+
+    rerender({ selectedVMs: [] })
+    expect(result.current).toEqual({})
+  })
+
+  it('skips the API call for L2 (simple_network) target networks', async () => {
+    const { result } = renderHook(() =>
+      useNetworkSubnetCompatibility({
+        networkMappings,
+        openstackCredentials,
+        selectedVMs,
+        networkIPsMap: new Map([['VM Network', ['10.96.9.11']]]),
+        openstackNetworks: [{ name: 'secondnetwork', tags: ['simple_network'] } as never]
+      })
+    )
+
+    await new Promise((r) => setTimeout(r, 500))
+    expect(checkNetworkSubnetCompatibility).not.toHaveBeenCalled()
+    expect(result.current['VM Network']).toBeUndefined()
+  })
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   checkNetworkSubnetCompatibility,
   CheckNetworkSubnetCompatibilityResponse
@@ -15,21 +15,26 @@ interface UseNetworkSubnetCompatibilityParams {
   openstackNetworks: PCDNetworkInfo[]
 }
 
+const DEBOUNCE_MS = 350
+
 /**
- * Signature used to decide whether a recompute is needed. Must change whenever
- * either the network mappings OR the per-network IP data changes — keying off
- * mappings alone misses IP edits/clears made after a mapping is created, which
- * leaves the subnet-mismatch warning stuck showing the pre-edit IP.
+ * Primitive signature of everything that should trigger a recompute: which
+ * source->target mappings exist, and the current IPs behind each source
+ * network. Built from primitives (not object refs) so the effect below re-fires
+ * on real content changes only — an IP edited/cleared after a mapping already
+ * exists changes this signature just like a new mapping would, so the
+ * subnet-mismatch warning never gets stuck showing a pre-edit IP.
  */
 export function computeSubnetCheckSignature(
   mappings: Array<{ source?: string; target?: string }>,
   networkIPsMap: Map<string, string[]>
 ): string {
-  const mappingsKey = mappings.map((m) => `${m.source}|${m.target}`).join(',')
-  const ipsKey = mappings
-    .map((m) => `${m.source}:${[...(networkIPsMap.get(m.source ?? '') ?? [])].sort().join(',')}`)
+  return mappings
+    .map((m) => {
+      const ips = [...(networkIPsMap.get(m.source ?? '') ?? [])].sort()
+      return `${m.source}>${m.target}:${ips.join(',')}`
+    })
     .join('|')
-  return `${mappingsKey}::${ipsKey}`
 }
 
 export function useNetworkSubnetCompatibility({
@@ -40,46 +45,48 @@ export function useNetworkSubnetCompatibility({
   openstackNetworks
 }: UseNetworkSubnetCompatibilityParams): Record<string, string> {
   const [subnetWarnings, setSubnetWarnings] = useState<Record<string, string>>({})
-  const prevSignatureRef = useRef<string>('')
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const apiCacheRef = useRef<Map<string, CheckNetworkSubnetCompatibilityResponse>>(new Map())
-  const prevCredNameRef = useRef<string | undefined>(undefined)
   // Bumped on every recompute that actually starts. The check-compatibility API call
   // can take over a second — if the user edits/clears an IP while an older call for
-  // the pre-edit IP is still in flight, clearTimeout only cancels the *timer*, not an
-  // already-firing async body. Without this guard the stale call lands after the new
-  // (correct) result and silently overwrites it back to the pre-edit warning text.
+  // the pre-edit IP is still in flight, only the latest result should be allowed to
+  // win, otherwise a stale response can land after the fresh one and clobber it.
   const requestIdRef = useRef(0)
 
+  const completeMappings = useMemo(
+    () => (networkMappings || []).filter((m) => m.source && m.target),
+    [networkMappings]
+  )
+
+  const signature = useMemo(
+    () => computeSubnetCheckSignature(completeMappings, networkIPsMap),
+    [completeMappings, networkIPsMap]
+  )
+
+  const credName = openstackCredentials?.metadata.name
+  const credsNamespace = openstackCredentials?.metadata.namespace
+
+  const networksKey = useMemo(
+    () =>
+      openstackNetworks
+        .map((n) => `${n.name}:${Array.isArray(n.tags) && n.tags.includes('simple_network') ? 1 : 0}`)
+        .sort()
+        .join(','),
+    [openstackNetworks]
+  )
+
   useEffect(() => {
-    const completeMappings = (networkMappings || []).filter((m) => m.source && m.target)
-
-    const signature = computeSubnetCheckSignature(completeMappings, networkIPsMap)
-    if (signature === prevSignatureRef.current) return
-    prevSignatureRef.current = signature
-    const requestId = ++requestIdRef.current
-
-    if (!openstackCredentials || completeMappings.length === 0 || selectedVMs.length === 0) {
+    if (!credName || completeMappings.length === 0 || selectedVMs.length === 0) {
       setSubnetWarnings({})
       return
     }
 
-    const credName = openstackCredentials.metadata.name
-    if (credName !== prevCredNameRef.current) {
-      apiCacheRef.current.clear()
-      prevCredNameRef.current = credName
-    }
+    const requestId = ++requestIdRef.current
 
-    const credsNamespace = openstackCredentials.metadata.namespace
-
-    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-
-    debounceTimerRef.current = setTimeout(async () => {
+    const timer = setTimeout(async () => {
       const nextWarnings: Record<string, string> = {}
 
       await Promise.all(
         completeMappings.map(async (mapping) => {
-          const ips = networkIPsMap.get(mapping.source) ?? []
+          const ips = networkIPsMap.get(mapping.source ?? '') ?? []
           if (ips.length === 0) return
 
           const isL2Network = openstackNetworks.some(
@@ -88,20 +95,14 @@ export function useNetworkSubnetCompatibility({
           )
           if (isL2Network) return
 
-          const cacheKey = `${mapping.target}|${[...ips].sort().join(',')}`
-          const cached = apiCacheRef.current.get(cacheKey)
-
           try {
-            const result =
-              cached ??
-              (await checkNetworkSubnetCompatibility({
+            const result: CheckNetworkSubnetCompatibilityResponse =
+              await checkNetworkSubnetCompatibility({
                 ips,
-                network_name: mapping.target,
+                network_name: mapping.target as string,
                 creds_name: credName,
-                creds_namespace: credsNamespace
-              }))
-
-            if (!cached) apiCacheRef.current.set(cacheKey, result)
+                creds_namespace: credsNamespace as string
+              })
 
             if (!result.all_compatible) {
               const incompatibleIPs = result.results
@@ -109,11 +110,12 @@ export function useNetworkSubnetCompatibility({
                 .map((r) => r.ip)
               const cidrList =
                 result.subnet_cidrs?.length > 0 ? ` (${result.subnet_cidrs.join(', ')})` : ''
-              nextWarnings[mapping.source] =
+              nextWarnings[mapping.source as string] =
                 `${incompatibleIPs.length} IP address(es) of the selected VMs [${incompatibleIPs.join(', ')}] do not lie within the subnet of destination network ${mapping.target} ${cidrList}. ` +
                 `Ensure fallback to DHCP is enabled, otherwise it may lead to migration failures`
             }
           } catch {
+            // Ignore transient API errors; the next recompute will retry.
           }
         })
       )
@@ -123,12 +125,15 @@ export function useNetworkSubnetCompatibility({
       // clobbering the newer one.
       if (requestIdRef.current !== requestId) return
       setSubnetWarnings(nextWarnings)
-    }, 350)
+    }, DEBOUNCE_MS)
 
-    return () => {
-      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
-    }
-  }, [networkMappings, openstackCredentials, selectedVMs, networkIPsMap, openstackNetworks])
+    return () => clearTimeout(timer)
+    // signature + networksKey capture every input that should drive a recompute as
+    // stable primitives; completeMappings/networkIPsMap/openstackNetworks are read
+    // from the closure but intentionally left out of the deps so the effect re-fires
+    // on content changes rather than on every new array/object reference.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature, networksKey, credName, credsNamespace, selectedVMs.length])
 
   return subnetWarnings
 }
