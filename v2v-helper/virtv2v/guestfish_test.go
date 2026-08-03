@@ -46,6 +46,18 @@ func TestParseInspectOSOutput(t *testing.T) {
 			out:  "btrfsvol:/dev/sda6/@/.snapshots/1/snapshot\n",
 			want: []string{"btrfsvol:/dev/sda6/@/.snapshots/1/snapshot"},
 		},
+		{
+			// Windows LDM: Ldm.list_ldm_volumes() reports the volume once per
+			// member disk, so inspect-os emits the same path twice.
+			name: "exact duplicates are dropped",
+			out:  "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1\n/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1\n",
+			want: []string{"/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1"},
+		},
+		{
+			name: "distinct roots are kept (genuine multi-boot)",
+			out:  "/dev/sda1\n/dev/sdb1\n",
+			want: []string{"/dev/sda1", "/dev/sdb1"},
+		},
 	}
 
 	for _, tt := range tests {

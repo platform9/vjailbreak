@@ -68,13 +68,21 @@ var (
 	mountPlanCache   = map[string]mountPlan{}
 )
 
+// parseInspectOSOutput returns the roots inspect-os reported, without exact
+// duplicates. libguestfs can report one filesystem more than once - a Windows LDM
+// volume is listed per member disk - and dropping those here rather than relying
+// on the UUID grouping matters, because the UUID comes from a tolerated command:
+// if vfs-uuid failed we would otherwise reject the guest as "multi-boot" with the
+// same device listed twice.
 func parseInspectOSOutput(out string) []string {
 	var roots []string
+	seen := make(map[string]bool)
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || seen[line] {
 			continue
 		}
+		seen[line] = true
 		roots = append(roots, line)
 	}
 	return roots

@@ -1086,19 +1086,23 @@ func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to inspect OS: %w", err)
 	}
-	if plan.Root == "" {
-		return "", errors.New("empty OS path from inspect-os")
-	}
 
-	var productName string
-	productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, plan.Root)
-
+	// inspect-get-product-name reads the per-process inspection state that only
+	// inspect-os populates, so the two must run in the SAME guestfish process -
+	// the same trap as inspect-get-mountpoints in buildPlanProbeScript. Mounts are
+	// not needed: inspect-os calls umount_all() first and the product name comes
+	// from in-memory inspection data.
+	const productIdx = 1
+	out, err := runGuestfishScript(disks, buildGuestfishBatchScript(mountPlan{}, false, []guestfishCmd{
+		{Name: "inspect-os"},
+		{Name: "inspect-get-product-name", Args: []string{plan.Root}, Tolerate: true},
+	}))
 	if err != nil {
 		log.Printf("Failed to get Windows product name: %v", err)
 		return "Windows (version unknown)", nil
 	}
 
-	productName = strings.TrimSpace(productName)
+	productName := strings.TrimSpace(splitGuestfishBatchOutput(out, 2)[productIdx])
 	if productName == "" {
 		return "Windows (version unknown)", nil
 	}
