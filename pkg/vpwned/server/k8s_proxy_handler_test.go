@@ -213,6 +213,16 @@ func TestHandleK8sProxy_AllowedPaths(t *testing.T) {
 		{"get pod", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusOK},
 		{"stream pod logs", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod/log", http.StatusOK},
 		{"patch pod (admin cutover)", http.MethodPatch, "/vpw/v1/k8s/api/v1/namespaces/migration-system/pods/my-pod", http.StatusOK},
+		// configmaps — read only
+		{"list configmaps", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps", http.StatusOK},
+		{"get migration configmap", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/migration-config-testvm", http.StatusOK},
+		{"get settings configmap", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/vjailbreak-settings", http.StatusOK},
+		// configmaps — writes and other namespaces blocked
+		{"post configmap forbidden", http.MethodPost, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps", http.StatusForbidden},
+		{"put configmap forbidden", http.MethodPut, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/migration-config-testvm", http.StatusForbidden},
+		{"patch configmap forbidden", http.MethodPatch, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/migration-config-testvm", http.StatusForbidden},
+		{"delete configmap forbidden", http.MethodDelete, "/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/migration-config-testvm", http.StatusForbidden},
+		{"configmaps kube-system forbidden", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/kube-system/configmaps", http.StatusForbidden},
 		// secrets — allowed CRUD
 		{"list secrets", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets", http.StatusOK},
 		{"get secret", http.MethodGet, "/vpw/v1/k8s/api/v1/namespaces/migration-system/secrets/my-secret", http.StatusOK},
