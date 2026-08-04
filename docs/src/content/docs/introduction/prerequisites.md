@@ -53,9 +53,6 @@ The required privileges depend on which features you use. The base set below is 
 | `Cryptographer.Access` | Base access to cryptographic operations on the VM |
 | `Cryptographer.Decrypt` | Decrypt the VM's disks for read access during migration |
 
-:::note[What's required vs. commonly assumed]
-Commonly, teams provision only `Cryptographer.Access` + `Cryptographer.Decrypt` for third-party tools that need to read encrypted VM disks. In practice, **`Cryptographer.AddDisk` is also required**. Without it, VDDK fails at disk-open with a generic `Error 1 (Unknown error)` — "Unexpected error when trying to retrieve token for disk" — that gives no indication it's a permissions issue. This privilege governs the NBD access-token retrieval step used by third-party backup/migration tools to open encrypted disks remotely, and is easy to miss since it isn't obviously the cause from the error text.
-:::
 
 ## Troubleshooting
 
