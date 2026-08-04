@@ -65,9 +65,9 @@ Error 1 (Unknown error): Unexpected error when trying to retrieve token for disk
 Unable to locate appropriate transport mode
 ```
 
-**Cause**: Missing `Cryptographer.AddDisk` privilege on the migration service account (or the account lacks one of the other two `Cryptographer.*` privileges). This is the most common encrypted-VM permissions failure and does not surface as a permissions error in the message text.
+**Cause**: Missing `Cryptographer.Access` and/or `Cryptographer.Decrypt` privilege on the migration service account. This is the most common encrypted-VM permissions failure and does not surface as a permissions error in the message text.
 
-**Fix**: Verify the account role includes all three: `Cryptographer.Access`, `Cryptographer.Decrypt`, `Cryptographer.AddDisk`. Re-check with `govc permissions.ls` against the target VM.
+**Fix**: Verify the account role includes both `Cryptographer.Access` and `Cryptographer.Decrypt`. Re-check with `govc permissions.ls` against the target VM.
 
 #### Additional Privileges: vJailbreak Accelerated Copy Migrations
 
