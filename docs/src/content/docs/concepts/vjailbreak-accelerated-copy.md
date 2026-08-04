@@ -33,7 +33,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
 - **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
-- **Datastore accessibility**: The Proxy VM must have access to the same datastore as the source VM's disks, and that datastore's VMFS version and block size must match the datastore where the Proxy VM resides. If they differ, the hot-add disk-attach step fails. Any datastore type works (NFS, VMFS, vSAN) — no shared storage array is required. The simplest way to meet this is to place the Proxy VM on the same host or cluster as the source VMs.
+- **Datastore accessibility**: The HotAdd proxy must have access to the same datastore as the target virtual machine, and the VMFS version and data block sizes for the target VM must be the same as the datastore where the HotAdd proxy resides.
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
 ## Prerequisites
