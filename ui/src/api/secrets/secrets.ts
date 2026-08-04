@@ -166,7 +166,7 @@ export const createOpenstackCredsSecret = async (
     secretData.OS_INSECURE = credentials.OS_INSECURE.toString()
   }
 
-  return createSecret(name, secretData, namespace)
+  return upsertSecret(name, secretData, namespace)
 }
 
 // Function to create VMware credentials secret
@@ -197,7 +197,7 @@ export const createVMwareCredsSecret = async (
     VCENTER_INSECURE: credentials.VCENTER_INSECURE ? 'true' : 'false'
   }
 
-  return createSecret(name, secretData, namespace)
+  return upsertSecret(name, secretData, namespace)
 }
 
 // Function to create BMConfig user-data secret
