@@ -33,7 +33,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
 - **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
-- **Datastore accessibility**: The ESXi host running the Proxy VM must have access to the datastore(s) holding the source VM's disks. Hot-add attaches the source's snapshot VMDKs directly to the Proxy VM, so the Proxy VM's host must be able to see those datastores — otherwise the disk-attach step fails. The datastores do **not** need to be a shared storage array (any type — NFS, VMFS, vSAN — works), but they must be reachable from the Proxy VM's host. Placing the Proxy VM on the same host/cluster as the source VMs is the simplest way to guarantee this.
+- **Datastore accessibility**: The Proxy VM must have access to the same datastore as the source VM's disks, and that datastore's VMFS version and block size must match the datastore where the Proxy VM resides. If they differ, the hot-add disk-attach step fails. Any datastore type works (NFS, VMFS, vSAN) — no shared storage array is required. The simplest way to meet this is to place the Proxy VM on the same host or cluster as the source VMs.
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
 ## Prerequisites
@@ -54,7 +54,7 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 - The Proxy VM must have **disk.EnableUUID = TRUE** set in vCenter VM settings
 - vCenter must allow disk attach/detach operations on the Proxy VM
 - The Proxy VM must be powered on and reachable over SSH
-- The ESXi host running the Proxy VM must be able to access the datastore(s) where the source VM's disks reside (see **Datastore accessibility** under [Requirements](#requirements))
+- The Proxy VM must be on the same datastore as the source VM's disks, with a matching VMFS version and block size (see **Datastore accessibility** under [Requirements](#requirements))
 
 
 ## Setting Up the Proxy VM
