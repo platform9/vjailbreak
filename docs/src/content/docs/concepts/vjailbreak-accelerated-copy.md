@@ -33,6 +33,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
 - **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
+- **Datastore accessibility**: The ESXi host running the Proxy VM must have access to the datastore(s) holding the source VM's disks. Hot-add attaches the source's snapshot VMDKs directly to the Proxy VM, so the Proxy VM's host must be able to see those datastores — otherwise the disk-attach step fails. The datastores do **not** need to be a shared storage array (any type — NFS, VMFS, vSAN — works), but they must be reachable from the Proxy VM's host. Placing the Proxy VM on the same host/cluster as the source VMs is the simplest way to guarantee this.
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
 ## Prerequisites
@@ -53,6 +54,7 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 - The Proxy VM must have **disk.EnableUUID = TRUE** set in vCenter VM settings
 - vCenter must allow disk attach/detach operations on the Proxy VM
 - The Proxy VM must be powered on and reachable over SSH
+- The ESXi host running the Proxy VM must be able to access the datastore(s) where the source VM's disks reside (see **Datastore accessibility** under [Requirements](#requirements))
 
 
 ## Setting Up the Proxy VM
@@ -265,6 +267,7 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 - **Cold copy only**: The source VM is powered off before disk attachment — live (hot) copy of the running VM's active disks is not supported
 - **Same vCenter**: Proxy VM and source VM must be managed by the same vCenter instance
 - **VMware Tools required**: The Proxy VM must have VMware Tools running so vJailbreak can retrieve its guest IP
+- **Maximum 60 disks per Proxy VM (including its own boot disk)**: vSphere allows at most **60** virtual disks per VM (4 SCSI controllers × 15 disks). The Proxy VM's own boot disk counts toward this total, so the constraint is **Proxy VM boot disk + attached source disks ≤ 60** — a Proxy VM with a single boot disk can have up to **59** source disks attached at any one time. This is a shared ceiling across **all** migrations using the same Proxy VM concurrently, not a per-migration limit. To migrate more disks in parallel, register additional Proxy VMs and distribute migrations across them.
 
 ## Troubleshooting
 
