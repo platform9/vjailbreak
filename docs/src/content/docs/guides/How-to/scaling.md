@@ -67,17 +67,23 @@ Agent nodes require a **minimum of 60 GiB disk storage**. Flavors with less than
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
-## Scaling in L2-Only Networks
+## Scaling in L2-Only Networks (PCD)    
 
-Agent scale-up **is supported** in L2-only network environments — networks that have no PCD-managed DHCP/IPAM and instead rely on an external DHCP server on the segment.
+Agent scale-up **is supported** in L2-only network environments in pcd. 
 
 ### How it works
 
-1. **L2 detection.** vJailbreak inspects the networks attached to the primary vJailbreak VM and treats any network tagged `simple_network` in Neutron as an L2-only network.
-2. **Port pre-creation.** For each L2 network, vJailbreak pre-creates a Neutron port with no fixed IP and port security disabled, and attaches the new agent VM to that port instead of requesting an address from OpenStack.
-3. **Wait for the guest to get an IP.** On first boot, the agent's provisioning script waits until the guest has **both** a global IPv4 address and a default route — normally handed out by the external DHCP server on the L2 segment. The check is retried every 60 seconds and does not time out, so the agent will keep waiting until the lease is granted.
-4. **Agent addition and join.** Once the guest has an IP and a default route, the agent-addition sequence runs and the node joins the vJailbreak master at `https://<master-ip>:6443`. Pre-baked container images are then imported locally, so no registry access is required.
-5. **Status convergence.** The agent's `VjailbreakNode` progresses `CreatingVM` → `VMCreated` → `Ready`. Because OpenStack reports no address for a port without a fixed IP, the agent's IP is blank in the dashboard while it is provisioning and is populated once the node reports `Ready`.
+1.**vJailbreak recognises the L2-only network** and creates the agent VM on it without
+   asking PCD to assign an IP address.
+2.**The agent VM waits for its IP address.** On first boot it waits for the external DHCP
+   server on that network to give it an IP address and a default route. It keeps retrying
+   every minute for as long as it takes, so a slow lease is not a problem.
+3.**The agent joins vJailbreak.** As soon as the guest has an IP address, the agent setup
+   runs and the agent joins the primary vJailbreak VM. Everything it needs is already built
+   into the image, so it does not require internet access.
+4.**The agent becomes available.** While the agent is still coming up, the Agents tab shows
+   no IP address for it. Once it reports `Ready`, its IP address appears and it starts
+   picking up migrations.
 
 :::note
 If an agent stays in `VMCreated` and never becomes `Ready`, the guest most likely never received a DHCP lease or a default route. Open the agent VM console and check `/var/log/pf9-install.log` — the wait loop logs which of the two conditions is still missing.
