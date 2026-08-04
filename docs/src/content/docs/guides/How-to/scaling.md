@@ -67,12 +67,19 @@ Agent nodes require a **minimum of 60 GiB disk storage**. Flavors with less than
 
 Agent nodes can be scaled down by selecting the agent and using the "Scale Down" button.
 
-## L2-Only Network Limitations
+## Scaling in L2-Only Networks (PCD)
 
-:::caution
-Agent scale-up is **not currently supported** in L2-only network environments (networks without DHCP). In these environments, only the primary vJailbreak VM can be used for migrations.
+Agent scale-up **is supported** in L2-only network environments in PCD.
 
-If you require additional migration capacity in an L2-only network, consider using a larger flavor for the primary vJailbreak VM.
+### How it works
+
+1. **vJailbreak recognises the L2-only network** and creates the agent VM on it without asking PCD to assign an IP address.
+2. **The agent VM waits for its IP address.** On first boot it waits for the external DHCP server on that network to give it an IP address and a default route. It keeps retrying every minute for as long as it takes, so a slow lease is not a problem.
+3. **The agent joins vJailbreak.** As soon as the guest has an IP address, the agent setup runs and the agent joins the primary vJailbreak VM. Everything it needs is already built into the image, so it does not require internet access.
+4. **The agent becomes available.** While the agent is still coming up, the Agents tab shows no IP address for it. Once it reports `Ready`, its IP address appears and it starts picking up migrations.
+
+:::note
+If an agent stays in `VMCreated` and never becomes `Ready`, the guest most likely never received a DHCP lease or a default route. Open the agent VM console and check `/var/log/pf9-install.log` — the wait loop logs which of the two conditions is still missing.
 :::
 
 ## Logging into Agent VMs
