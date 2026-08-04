@@ -1,0 +1,23 @@
+{
+  "skill_name": "vjb-security-review",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Do a security review of the vJailbreak repo at /Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak — I'm particularly worried about credentials leaking into logs and whether the kubernetes RBAC is too permissive. Give me a structured findings report.",
+      "expected_output": "Structured security findings covering logging and RBAC categories, with file:line references, severity ratings, and a summary table. Should find the OpenstackCredsSpec cleartext fields and check role.yaml for broad secret permissions.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Check the vJailbreak deployment YAML files at /Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/deploy/ for security issues — things like containers running as root, host mounts, missing resource limits, and how secrets are injected into pods.",
+      "expected_output": "Findings about pod security contexts (runAsUser: 0 in controller), hostPath mounts, resource limits, and secretKeyRef env var injection. Should reference specific files and line numbers.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Review the vJailbreak UI code at /Users/omkard/Documents/goworkspace/src/github.com/platform9/vjailbreak/ui/src/ for security vulnerabilities related to token handling, and also check if any sensitive data is being logged anywhere in the Go backend code.",
+      "expected_output": "UI findings around VITE_API_TOKEN env var exposure and axios token handling, plus backend logging findings checking for credential struct logging patterns. Should note the redactingWriter mitigation in v2v-helper.",
+      "files": []
+    }
+  ]
+}

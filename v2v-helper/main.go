@@ -217,11 +217,13 @@ func main() {
 }
 
 func logMigrationParams(migrationparams *utils.MigrationParams) {
+	openstackAuthURL := strings.TrimSpace(os.Getenv("OS_AUTH_URL"))
 	utils.PrintLog(fmt.Sprintf(
 		`Received migration parameters:
 SOURCE_VM_NAME=%v
 OS_FAMILY=%v
 TYPE=%v
+OPENSTACK_AUTH_URL=%v,
 TARGET_FLAVOR_ID=%v
 TARGET_AVAILABILITY_ZONE=%v
 DISCONNECT_SOURCE_NETWORK=%v
@@ -240,6 +242,7 @@ ACKNOWLEDGE_NETWORK_CONFLICT_RISK=%v`,
 		migrationparams.SourceVMName,
 		migrationparams.OpenstackOSType,
 		migrationparams.MigrationType,
+		openstackAuthURL,
 		migrationparams.TARGET_FLAVOR_ID,
 		migrationparams.TargetAvailabilityZone,
 		migrationparams.DisconnectSourceNetwork,
