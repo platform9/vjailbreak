@@ -21,8 +21,7 @@ AI analysis is experimental and requires an Anthropic API key configured in **Se
 
 1. Navigate to **Settings → AI** in the vJailbreak UI.
 2. Enter your Anthropic API key (`sk-ant-...`).
-3. Enter the vJailbreak admin key (generated at first boot — check `install.sh` output or deployment notes).
-4. Click **Save API Keys**.
+3. Click **Save API Keys**.
 
 The key is stored in a Kubernetes Secret in `migration-system` and never exposed after saving. The AI service restarts automatically to pick up the new key.
 
