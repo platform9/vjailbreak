@@ -466,7 +466,22 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 
 	// Always use libvirtxml mode to convert all disks
 	args = append(args, "-i", "libvirtxml", xmlFile)
-	if strings.ToLower(ostype) != constants.OSFamilyWindows {
+	// EXPERIMENT ONLY - branch experiment/megh/ldm-root-first. DO NOT MERGE.
+	//
+	// Upstream states a Windows system disk on a Dynamic Disk (LDM) cannot be
+	// converted (virt-v2v.pod, "System disk on a Dynamic Disk is not supported",
+	// RHBZ 2140548). There is no code guard enforcing it, and no published root
+	// cause. Passing --root gets us past virt-v2v's interactive root prompt so we
+	// can observe what actually happens on first boot and stop guessing.
+	//
+	// Conversion is expected to SUCCEED here. The question is only what the guest
+	// does when it boots.
+	if strings.ToLower(ostype) == constants.OSFamilyWindows {
+		// Both roots reported for an LDM volume are the same device, so "first" is
+		// unambiguous.
+		log.Printf("EXPERIMENT: Windows guest, forcing --root first to bypass the interactive prompt")
+		args = append(args, "--root", "first")
+	} else {
 		// --root expects a root *filesystem* device, not a raw disk or LVM PV.
 		// get-bootable-partition.sh may return a bare disk name (e.g. /dev/sda) when
 		// GRUB's MBR signature is on an LVM PV disk that has no mountable partition.
