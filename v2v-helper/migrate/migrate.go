@@ -1348,7 +1348,22 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
 
-	if !migobj.Convert {
+	// EXPERIMENT BRANCH - DO NOT MERGE.
+	//
+	// Conversion is hard-disabled so a Windows LDM guest can be migrated as a
+	// straight copy and booted on an emulated SATA controller (hw_disk_bus=sata via
+	// a VolumeImageProfile). virt-v2v cannot convert a Windows system disk on a
+	// Dynamic Disk, and forcing it to try wedges the process with half-written
+	// disks. See docs/ldm-boot-on-emulated-bus.md.
+	//
+	// Skipping this leaves the disks byte-identical to the source: no virtio driver
+	// injection, no NTFS fix, no firstboot scripts, no VMware Tools removal.
+	const experimentSkipConversion = true
+
+	if experimentSkipConversion || !migobj.Convert {
+		if experimentSkipConversion {
+			utils.PrintLog("EXPERIMENT: conversion phase hard-disabled on this build; virt-v2v will NOT run")
+		}
 		return nil
 	}
 
