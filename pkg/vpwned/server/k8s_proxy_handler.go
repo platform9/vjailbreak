@@ -36,6 +36,7 @@ var allowedRoutes = []allowedRoute{
 	// Pods — read and admin-cutover patch
 	{http.MethodGet, regexp.MustCompile(`^/api/v1/namespaces/migration-system/pods(/[^/?]+(/log)?)?$`)},
 	{http.MethodPatch, regexp.MustCompile(`^/api/v1/namespaces/migration-system/pods/[^/?]+$`)},
+	{http.MethodGet, regexp.MustCompile(`^/api/v1/namespaces/migration-system/configmaps(/[^/?]+)?$`)},
 	// Secrets — full CRUD, migration-system only
 	{http.MethodGet, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets(/[^/?]+)?$`)},
 	{http.MethodPost, regexp.MustCompile(`^/api/v1/namespaces/migration-system/secrets$`)},

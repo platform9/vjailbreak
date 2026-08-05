@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import axios from 'src/api/axios'
+import { getMigrationConfigMap } from 'src/api/migrations/migrations'
 import { normalizeVmDisks, resolveFlavorDisplay } from './migrationDetailFields'
+
+vi.mock('src/api/axios', () => ({
+  default: { get: vi.fn() }
+}))
 
 const flavors = [
   { id: 'flavor-1', name: 'm1.small' },
@@ -73,3 +79,49 @@ describe('normalizeVmDisks', () => {
     ])
   })
 })
+
+/**
+ * The flavor shown above comes from TARGET_FLAVOR_ID in the migration ConfigMap,
+ * which the details page fetches through the vpwned k8s proxy. That proxy rejects
+ * any path missing from its allowlist with a 403, so the path is pinned here
+ * against a mirror of the backend regex in pkg/vpwned/server/k8s_proxy_handler.go
+ */
+const PROXY_PREFIX = '/dev-api/sdk/vpw/v1/k8s'
+const ALLOWED_CONFIGMAP_PATH = /^\/api\/v1\/namespaces\/migration-system\/configmaps(\/[^/?]+)?$/
+
+describe('getMigrationConfigMap — source of the flavor above', () => {
+  const mockedGet = vi.mocked(axios.get)
+
+  beforeEach(() => {
+    mockedGet.mockReset()
+    mockedGet.mockResolvedValue({ data: { TARGET_FLAVOR_ID: 'flavor-1' } })
+  })
+
+  it('requests the migration ConfigMap through the k8s proxy', async () => {
+    const result = await getMigrationConfigMap('testvm')
+
+    expect(mockedGet).toHaveBeenCalledWith({
+      endpoint:
+        '/dev-api/sdk/vpw/v1/k8s/api/v1/namespaces/migration-system/configmaps/migration-config-testvm',
+    })
+    expect(result).toEqual({ data: { TARGET_FLAVOR_ID: 'flavor-1' } })
+  })
+
+  it('builds a path the vpwned k8s proxy allowlist accepts', async () => {
+    await getMigrationConfigMap('testvm')
+
+    const { endpoint } = mockedGet.mock.calls[0][0]
+    expect(endpoint.startsWith(PROXY_PREFIX)).toBe(true)
+    expect(endpoint.slice(PROXY_PREFIX.length)).toMatch(ALLOWED_CONFIGMAP_PATH)
+  })
+
+  it('honours an explicit namespace', async () => {
+    await getMigrationConfigMap('testvm', 'other-ns')
+
+    expect(mockedGet).toHaveBeenCalledWith({
+      endpoint:
+        '/dev-api/sdk/vpw/v1/k8s/api/v1/namespaces/other-ns/configmaps/migration-config-testvm',
+    })
+  })
+})
+
