@@ -46,6 +46,29 @@ The required privileges depend on which features you use. The base set below is 
 | `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
 | `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
+### Additional privileges required for encrypted VMs
+
+| Privilege | Purpose |
+|---|---|
+| `Cryptographer.Access` | Base access to cryptographic operations on the VM |
+| `Cryptographer.Decrypt` | Decrypt the VM's disks for read access during migration |
+
+
+## Troubleshooting
+
+### `VixDiskLib_Open` token-retrieval failure
+
+**Symptom**: Migration fails during disk open with:
+
+```
+Error 1 (Unknown error): Unexpected error when trying to retrieve token for disk
+Unable to locate appropriate transport mode
+```
+
+**Cause**: Missing `Cryptographer.Access` and/or `Cryptographer.Decrypt` privilege on the migration service account. This is the most common encrypted-VM permissions failure and does not surface as a permissions error in the message text.
+
+**Fix**: Verify the account role includes both `Cryptographer.Access` and `Cryptographer.Decrypt`. Re-check with `govc permissions.ls` against the target VM.
+
 #### Additional Privileges: vJailbreak Accelerated Copy Migrations
 
 Required when using the **vJailbreak Accelerated Copy** storage copy method (VMware hot-add). vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
