@@ -862,6 +862,25 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(stdoutBuf.String()), nil
 }
 
+// IsLDMSystemVolume reports whether the guest's system volume sits on a Windows
+// Dynamic Disk (LDM), and returns the root mountable it resolved.
+//
+// virt-v2v documents a Windows system disk on a dynamic disk as unsupported
+// (virt-v2v.pod, "Converting Windows guests ... dynamic disks"), but has no guard
+// for it: conversion either writes a disk that cannot boot or wedges partway
+// through. Data disks on dynamic disks are fine and are deliberately not flagged
+// here - only the root is checked.
+//
+// The mount plan is memoised per disk set, so when one has already been resolved
+// for these disks this costs no additional appliance boot.
+func IsLDMSystemVolume(disks []vm.VMDisk) (bool, string, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to resolve guest root to check for LDM: %w", err)
+	}
+	return isLDMDevice(plan.Root), plan.Root, nil
+}
+
 // GetBootableVolumeIndex returns the index of the disk holding the bootable
 // partition, in three appliance boots regardless of partition count: list, then
 // resolve every partition, then inspect them all. Per-partition cost 4N+1.

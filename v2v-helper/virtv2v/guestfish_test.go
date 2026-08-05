@@ -46,6 +46,17 @@ func TestParseInspectOSOutput(t *testing.T) {
 			out:  "btrfsvol:/dev/sda6/@/.snapshots/1/snapshot\n",
 			want: []string{"btrfsvol:/dev/sda6/@/.snapshots/1/snapshot"},
 		},
+		{
+			// A Windows LDM volume is reported once per member disk.
+			name: "duplicate root paths collapse",
+			out:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n",
+			want: []string{"/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+		},
+		{
+			name: "distinct roots are kept even if one repeats",
+			out:  "/dev/sda1\n/dev/sdb1\n/dev/sda1\n",
+			want: []string{"/dev/sda1", "/dev/sdb1"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -621,4 +632,40 @@ func TestPlanFromProbe(t *testing.T) {
 			{Device: "/dev/sda2", MountPoint: "/boot"},
 		}, plan.Mounts)
 	})
+
+	t.Run("LDM volume listed once per member disk collapses, case preserved", func(t *testing.T) {
+		// Ldm.list_ldm_volumes reports a spanned volume once per member disk, so
+		// inspect-os returns the same device path twice.
+		const ldm = "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1"
+
+		plan, err := planFromProbe([]string{ldm, ldm}, map[string]string{ldm: "1234abcd"}, nil)
+
+		assert.NoError(t, err)
+		assert.Equal(t, ldm, plan.Root)
+		assert.Equal(t, []mountSpec{{Device: ldm, MountPoint: "/"}}, plan.Mounts)
+		assert.True(t, isLDMDevice(plan.Root))
+	})
+}
+
+func TestIsLDMDevice(t *testing.T) {
+	tests := []struct {
+		name   string
+		device string
+		want   bool
+	}{
+		{"LDM volume", "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1", true},
+		{"LDM volume with trailing whitespace", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n", true},
+		{"plain partition", "/dev/sda2", false},
+		{"LVM logical volume", "/dev/mapper/rhel-root", false},
+		{"LVM by volume group", "/dev/VolGroup00/LogVol00", false},
+		{"btrfs subvolume", "btrfsvol:/dev/sda6/@/home", false},
+		{"empty", "", false},
+		{"prefix appears mid-path only", "/dev/sda1/dev/mapper/ldm_vol_x", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isLDMDevice(tt.device))
+		})
+	}
 }

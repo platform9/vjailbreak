@@ -1348,22 +1348,34 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
 
-	// EXPERIMENT BRANCH - DO NOT MERGE.
-	//
-	// Conversion is hard-disabled so a Windows LDM guest can be migrated as a
-	// straight copy and booted on an emulated SATA controller (hw_disk_bus=sata via
-	// a VolumeImageProfile). virt-v2v cannot convert a Windows system disk on a
-	// Dynamic Disk, and forcing it to try wedges the process with half-written
-	// disks. See docs/ldm-boot-on-emulated-bus.md.
-	//
-	// Skipping this leaves the disks byte-identical to the source: no virtio driver
-	// injection, no NTFS fix, no firstboot scripts, no VMware Tools removal.
-	const experimentSkipConversion = true
+	skipConversion := !migobj.Convert
 
-	if experimentSkipConversion || !migobj.Convert {
-		if experimentSkipConversion {
-			utils.PrintLog("EXPERIMENT: conversion phase hard-disabled on this build; virt-v2v will NOT run")
+	// A Windows system volume on a Dynamic Disk (LDM) cannot be converted by
+	// virt-v2v - upstream documents it as unsupported and has no guard for it, so
+	// conversion either produces an unbootable disk or wedges with the disks half
+	// written. Migrate as a straight copy instead: the disks stay byte-identical to
+	// the source, which means no virtio driver injection, no NTFS fix, no firstboot
+	// scripts and no VMware Tools removal. Such a VM can only boot on an emulated
+	// disk controller - set hw_disk_bus=sata on the image profile. See
+	// docs/ldm-boot-on-emulated-bus.md.
+	if !skipConversion && strings.EqualFold(vminfo.OSType, constants.OSFamilyWindows) {
+		isLDM, root, err := virtv2v.IsLDMSystemVolume(vminfo.VMDisks)
+		switch {
+		case err != nil:
+			// Not fatal: fall through to conversion as before rather than changing
+			// behaviour for every Windows guest on an inspection hiccup.
+			utils.PrintLog(fmt.Sprintf("Warning: could not determine whether the system volume is on a Dynamic Disk (LDM): %v", err))
+		case isLDM:
+			migobj.logMessage(fmt.Sprintf(
+				"System volume %s is on a Windows Dynamic Disk (LDM), which virt-v2v cannot convert. "+
+					"Skipping conversion and migrating as a straight copy - the VM must be booted on an "+
+					"emulated disk bus (hw_disk_bus=sata on the image profile) and will have no virtio drivers.",
+				root))
+			skipConversion = true
 		}
+	}
+
+	if skipConversion {
 		// Marking the volume bootable lives at the end of this function, so skipping
 		// the conversion also skipped it - Nova then rejects the server create with
 		// "Block Device <id> is not bootable". Do it here before returning.

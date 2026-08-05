@@ -61,6 +61,16 @@ type mountPlan struct {
 	Mounts []mountSpec
 }
 
+// ldmVolumePrefix is how libguestfs names a volume assembled from a Windows
+// Dynamic Disk group: "ldm_vol_<machine>-<group>_<volume>" under /dev/mapper
+// (daemon/ldm.c, via ldmtool). A root with this prefix means the system volume
+// itself lives on a dynamic disk.
+const ldmVolumePrefix = "/dev/mapper/ldm_vol_"
+
+func isLDMDevice(device string) bool {
+	return strings.HasPrefix(strings.TrimSpace(device), ldmVolumePrefix)
+}
+
 // Resolving a plan costs two appliance boots and the disks do not change
 // identity within a migration, so memoise per disk set.
 var (
@@ -68,13 +78,20 @@ var (
 	mountPlanCache   = map[string]mountPlan{}
 )
 
+// parseInspectOSOutput returns the roots inspect-os found, one per line, with
+// exact duplicates collapsed. Ldm.list_ldm_volumes reports a volume once per
+// member disk, so a Windows Dynamic Disk yields the same device path twice; the
+// same path can never be two operating systems, and deduping here means the
+// collapse does not depend on vfs-uuid, which is tolerated and may fail.
 func parseInspectOSOutput(out string) []string {
 	var roots []string
+	seen := make(map[string]bool)
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || seen[line] {
 			continue
 		}
+		seen[line] = true
 		roots = append(roots, line)
 	}
 	return roots
