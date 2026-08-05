@@ -1174,18 +1174,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 	return vminfo, nil
 }
 
-// getBootCommand returns the appropriate command to detect boot volume based on OS type
-func (migobj *Migrate) getBootCommand(osType string) string {
-	switch strings.ToLower(osType) {
-	case constants.OSFamilyWindows:
-		return "ls /Windows"
-	case constants.OSFamilyLinux:
-		return "ls /boot"
-	default:
-		return "inspect-os"
-	}
-}
-
 // attachAllVolumes attaches all volumes and updates their paths in vminfo
 func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) error {
 	for idx, vmdisk := range vminfo.VMDisks {
@@ -1196,31 +1184,6 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 		vminfo.VMDisks[idx].Path = path
 	}
 	return nil
-}
-
-// detectBootVolume identifies which volume contains the boot partition
-func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
-	bootVolumeIndex = -1
-
-	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
-
-	for idx := range vminfo.VMDisks {
-		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
-		if cmdErr != nil || ans == "" {
-			continue
-		}
-
-		utils.PrintLog(fmt.Sprintf("Boot volume detected: Disk %d (%s)", idx, vminfo.VMDisks[idx].Name))
-		osPath = strings.TrimSpace(ans)
-		bootVolumeIndex = idx
-		break
-	}
-
-	if bootVolumeIndex < 0 {
-		utils.PrintLog("WARNING: No boot volume detected")
-	}
-
-	return bootVolumeIndex, osPath, nil
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
@@ -1669,9 +1632,6 @@ func blockDriverFromMetadata(metadata map[string]string) string {
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
-	// Step 1: Determine boot command based on OS type
-	getBootCommand := migobj.getBootCommand(vminfo.OSType)
-
 	// Step 2: Attach all volumes
 	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
 		return -1, err
@@ -1688,11 +1648,11 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 		return -1, errors.Wrap(err, "failed to get vjailbreak settings")
 	}
 
-	// Step 4: Detect boot volume
-	bootVolumeIndex, osPath, err := migobj.detectBootVolume(vminfo, getBootCommand)
-	if err != nil {
-		return -1, err
-	}
+	// Step 4: both values are derived by the OS-specific handlers in step 5. A
+	// per-disk guestfish probe used to run here, but everything it returned was
+	// overwritten below, so it only cost appliance boots.
+	bootVolumeIndex, osPath := -1, ""
+	utils.PrintLog(fmt.Sprintf("Detecting boot volume (UEFI: %t)", vminfo.UEFI))
 
 	// Step 5: Handle OS-specific detection and validation
 	var osRelease string
