@@ -60,6 +60,11 @@ kubectl get migrationplans -n migration-system -o yaml
 ```bash
 kubectl delete migrationplan <UUID> -n migration-system
 ```
+### A migration failed and I want to run it again
+Use the **Retry** action on the failed migration in the vJailbreak UI. It reopens the migration form pre-filled with the original configuration, so you can correct the setting that caused the failure before starting again. To restart several failed migrations without changing anything, select them in the **Migrations** table and use **Retry Selected**.
+
+See [Retry a Failed Migration](../how-to/retry_failed_migration/) for the full workflow and its limitations.
+
 ### Get all vJailbreak custom resource definitions (CRDs)
 
 ```bash
