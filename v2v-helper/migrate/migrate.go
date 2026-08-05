@@ -1364,6 +1364,18 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if experimentSkipConversion {
 			utils.PrintLog("EXPERIMENT: conversion phase hard-disabled on this build; virt-v2v will NOT run")
 		}
+		// Marking the volume bootable lives at the end of this function, so skipping
+		// the conversion also skipped it - Nova then rejects the server create with
+		// "Block Device <id> is not bootable". Do it here before returning.
+		if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
+			return errors.Wrap(err, "failed to set volume as bootable")
+		}
+		if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootVolumeIndex {
+			migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+			if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[espDiskIndex].OpenstackVol); err != nil {
+				return errors.Wrap(err, "failed to set ESP volume as bootable")
+			}
+		}
 		return nil
 	}
 
