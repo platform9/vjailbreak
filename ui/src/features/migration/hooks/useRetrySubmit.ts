@@ -19,9 +19,9 @@ import {
 } from 'src/features/migration/api/migration-templates/migrationTemplates'
 import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
-import { CUTOVER_TYPES } from '../constants'
 import type { RetryMigrationConfig } from '../context/MigrationFormContext'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
+import { buildRetryPlanSpec } from '../utils/retryFormState'
 
 async function pollUntilGone(
   fetcher: () => Promise<unknown>,
@@ -97,92 +97,10 @@ export function useRetrySubmit({
     [queryClient, onSuccess, onClose, navigate]
   )
 
-  const buildPlanPatchSpec = useCallback(() => {
-    const timeWindow =
-      selectedMigrationOptions.cutoverOption && params.cutoverOption === CUTOVER_TYPES.TIME_WINDOW
-
-    const networkOverridesPerVM: Record<
-      string,
-      Array<{
-        interfaceIndex: number
-        preserveIP: boolean
-        preserveMAC: boolean
-        UserAssignedIP?: string
-      }>
-    > = {}
-    if (params.vms) {
-      params.vms.forEach((vm) => {
-        const preserveIp = vm.preserveIp || {}
-        const preserveMac = vm.preserveMac || {}
-        const nicAssignedIps: Record<number, string> = {}
-        ;(vm.networkInterfaces || []).forEach((nic, index) => {
-          const assigned = (Array.isArray(nic.ipAddress) ? nic.ipAddress : [])
-            .map((ip) => ip?.trim())
-            .filter((ip): ip is string => Boolean(ip))
-          if (assigned.length > 0) {
-            nicAssignedIps[index] = assigned.join(',')
-          }
-        })
-        const indices = new Set<string>([
-          ...Object.keys(preserveIp),
-          ...Object.keys(preserveMac),
-          ...Object.keys(nicAssignedIps)
-        ])
-        if (indices.size === 0) return
-        networkOverridesPerVM[vm.vmKey || vm.name] = Array.from(indices)
-          .map((indexStr) => {
-            const interfaceIndex = Number(indexStr)
-            const ipFlag = preserveIp[interfaceIndex]
-            const macFlag = preserveMac[interfaceIndex]
-            const preserveIP = ipFlag !== false
-            const preserveMAC = macFlag !== false
-            const userAssigned = !preserveIP ? nicAssignedIps[interfaceIndex] : undefined
-            return {
-              interfaceIndex,
-              preserveIP,
-              preserveMAC,
-              ...(userAssigned ? { UserAssignedIP: userAssigned } : {})
-            }
-          })
-          .sort((a, b) => a.interfaceIndex - b.interfaceIndex)
-      })
-    }
-
-    return {
-      migrationStrategy: {
-        type: params.dataCopyMethod || retryPlan?.spec?.migrationStrategy?.type || 'cold',
-        adminInitiatedCutOver: Boolean(
-          selectedMigrationOptions.cutoverOption &&
-            params.cutoverOption === CUTOVER_TYPES.ADMIN_INITIATED
-        ),
-        dataCopyStart:
-          (selectedMigrationOptions.dataCopyStartTime && params.dataCopyStartTime) || null,
-        vmCutoverStart: (timeWindow && params.cutoverStartTime) || null,
-        vmCutoverEnd: (timeWindow && params.cutoverEndTime) || null,
-        disconnectSourceNetwork: params.disconnectSourceNetwork || false
-      },
-      securityGroups: params.securityGroups?.length ? params.securityGroups : null,
-      serverGroup: params.serverGroup || null,
-      fallbackToDHCP: params.fallbackToDHCP || false,
-      firstBootScript:
-        (selectedMigrationOptions.postMigrationScript && params.postMigrationScript) || null,
-      postMigrationAction: selectedMigrationOptions.postMigrationAction
-        ? params.postMigrationAction
-        : null,
-      // Send overrides when present; null explicitly clears any existing overrides
-      // that the user removed (merge-patch omit would silently keep stale values).
-      networkOverridesPerVM:
-        Object.keys(networkOverridesPerVM).length > 0 ? networkOverridesPerVM : null,
-      advancedOptions: {
-        periodicSyncEnabled: Boolean(selectedMigrationOptions.periodicSyncEnabled),
-        periodicSyncInterval: params.periodicSyncInterval || null,
-        networkPersistence: Boolean(params.networkPersistence),
-        removeVMwareTools: Boolean(params.removeVMwareTools),
-        acknowledgeNetworkConflictRisk: Boolean(params.acknowledgeNetworkConflictRisk),
-        imageProfiles: params.imageProfiles?.length ? params.imageProfiles : null
-      }
-    }
-  }, [params, selectedMigrationOptions, retryPlan])
+  const buildPlanPatchSpec = useCallback(
+    () => buildRetryPlanSpec({ params, selectedMigrationOptions, retryPlan }),
+    [params, selectedMigrationOptions, retryPlan]
+  )
 
   const performEditAndRetry = useCallback(async () => {
     if (!retryConfig || !retryTemplate || !retryPlan) return
