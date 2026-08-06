@@ -11,18 +11,13 @@ import { getStorageMapping } from 'src/api/storage-mappings/storageMappings'
 import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { getVMwareMachine, mapToVmData } from 'src/api/vmware-machines/vmwareMachines'
-import { CUTOVER_TYPES } from '../constants'
 import type { RetryMigrationConfig } from '../context/MigrationFormContext'
 import type {
   FormValues,
   MigrationDrawerRHFValues,
   SelectedMigrationOptionsType
 } from '../types'
-
-const ZERO_TIME = '0001-01-01T00:00:00Z'
-const DEFAULT_FIRSTBOOT_SCRIPT = 'echo "Add your startup script here!"'
-
-const isSetTime = (value?: string) => Boolean(value && value !== ZERO_TIME)
+import { buildRetryFormState } from '../utils/retryFormState'
 
 interface RetryResources {
   plan: MigrationPlan
@@ -209,103 +204,24 @@ export function useRetryPrefill({
       networkMappings,
       storageMappings
     } = query.data
-    const strategy = plan.spec?.migrationStrategy
-    const advanced = plan.spec?.advancedOptions
-    const pcd = pcdData.find((p) => p.name === template.spec?.targetPCDClusterName)
-
-    const cutoverOption = strategy?.adminInitiatedCutOver
-      ? CUTOVER_TYPES.ADMIN_INITIATED
-      : isSetTime(strategy?.vmCutoverStart) || isSetTime(strategy?.vmCutoverEnd)
-        ? CUTOVER_TYPES.TIME_WINDOW
-        : CUTOVER_TYPES.IMMEDIATE
-
-    const firstBootScript =
-      plan.spec?.firstBootScript && plan.spec.firstBootScript !== DEFAULT_FIRSTBOOT_SCRIPT
-        ? plan.spec.firstBootScript
-        : undefined
-
     setMigrationTemplate(template)
 
-    updateParams({
-      vmwareCreds: { existingCredName: vmwareRef, datacenter } as FormValues['vmwareCreds'],
-      openstackCreds: { existingCredName: openstackRef } as FormValues['openstackCreds'],
-      vmwareCluster: `${vmwareRef}:${datacenter}:${clusterName}`,
-      pcdCluster: pcd?.id || template.spec?.targetPCDClusterName || '',
-      vms: [vmData],
+    const { params, selectedOptions, formDefaults } = buildRetryFormState({
+      plan,
+      template,
+      vmData,
+      clusterName,
+      datacenter,
+      vmwareRef,
+      openstackRef,
       networkMappings,
       storageMappings,
-      storageCopyMethod: (template.spec?.storageCopyMethod ||
-        'normal') as FormValues['storageCopyMethod'],
-      ...(template.spec?.proxyVMRef?.name && { proxyVMRef: template.spec.proxyVMRef.name }),
-      dataCopyMethod: strategy?.type || 'cold',
-      useGPU: template.spec?.useGPUFlavor || false,
-      disconnectSourceNetwork: strategy?.disconnectSourceNetwork || false,
-      fallbackToDHCP: plan.spec?.fallbackToDHCP || false,
-      securityGroups: plan.spec?.securityGroups ?? [],
-      serverGroup: plan.spec?.serverGroup ?? '',
-      ...(isSetTime(strategy?.dataCopyStart) && { dataCopyStartTime: strategy?.dataCopyStart }),
-      cutoverOption,
-      ...(isSetTime(strategy?.vmCutoverStart) && { cutoverStartTime: strategy?.vmCutoverStart }),
-      ...(isSetTime(strategy?.vmCutoverEnd) && { cutoverEndTime: strategy?.vmCutoverEnd }),
-      ...(firstBootScript && { postMigrationScript: firstBootScript }),
-      ...(plan.spec?.postMigrationAction && {
-        postMigrationAction: plan.spec.postMigrationAction
-      }),
-      ...(typeof advanced?.networkPersistence === 'boolean' && {
-        networkPersistence: advanced.networkPersistence
-      }),
-      ...(typeof advanced?.removeVMwareTools === 'boolean' && {
-        removeVMwareTools: advanced.removeVMwareTools
-      }),
-      ...(typeof advanced?.acknowledgeNetworkConflictRisk === 'boolean' && {
-        acknowledgeNetworkConflictRisk: advanced.acknowledgeNetworkConflictRisk
-      }),
-      ...(advanced?.imageProfiles?.length && { imageProfiles: advanced.imageProfiles }),
-      ...(advanced?.periodicSyncInterval && {
-        periodicSyncInterval: advanced.periodicSyncInterval
-      }),
-      preserveSourceTags: plan.spec?.preserveSourceTags || false,
-      ...(plan.spec?.customMetadata &&
-        Object.keys(plan.spec.customMetadata).length > 0 && {
-          customMetadata: Object.entries(plan.spec.customMetadata).map(([key, value]) => ({
-            key,
-            value
-          }))
-        })
+      pcdData
     })
 
-    updateSelectedOptions({
-      dataCopyMethod: true,
-      dataCopyStartTime: isSetTime(strategy?.dataCopyStart),
-      cutoverOption: cutoverOption !== CUTOVER_TYPES.IMMEDIATE,
-      cutoverStartTime: isSetTime(strategy?.vmCutoverStart),
-      cutoverEndTime: isSetTime(strategy?.vmCutoverEnd),
-      postMigrationScript: Boolean(firstBootScript),
-      useGPU: template.spec?.useGPUFlavor || false,
-      periodicSyncEnabled: advanced?.periodicSyncEnabled || false,
-      ...(plan.spec?.postMigrationAction && {
-        postMigrationAction: {
-          renameVm: Boolean(plan.spec.postMigrationAction.renameVm),
-          suffix: Boolean(plan.spec.postMigrationAction.suffix),
-          moveToFolder: Boolean(plan.spec.postMigrationAction.moveToFolder),
-          folderName: Boolean(plan.spec.postMigrationAction.folderName)
-        }
-      })
-    })
-
-    form.reset({
-      securityGroups: plan.spec?.securityGroups ?? [],
-      serverGroup: plan.spec?.serverGroup ?? '',
-      dataCopyStartTime: isSetTime(strategy?.dataCopyStart)
-        ? (strategy?.dataCopyStart as string)
-        : '',
-      cutoverStartTime: isSetTime(strategy?.vmCutoverStart)
-        ? (strategy?.vmCutoverStart as string)
-        : '',
-      cutoverEndTime: isSetTime(strategy?.vmCutoverEnd) ? (strategy?.vmCutoverEnd as string) : '',
-      postMigrationActionSuffix: plan.spec?.postMigrationAction?.suffix ?? '',
-      postMigrationActionFolderName: plan.spec?.postMigrationAction?.folderName ?? ''
-    })
+    updateParams(params)
+    updateSelectedOptions(selectedOptions)
+    form.reset(formDefaults)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query.data, pcdData])
 
