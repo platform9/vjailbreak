@@ -143,13 +143,3 @@ These are separate from the internal, per-session `MigrationTemplate` objects th
 | Saving reports *"A template named … already exists"* | Names are unique, ignoring case | Pick a different name |
 | **Save Changes** fails on an edit | The template changed elsewhere since the form opened | Reopen the template and reapply the change |
 | Templates tab shows "No templates match" | A search term or type filter is active | Clear the search box, or choose **Clear filter** in the filter menu |
-
-## Limitations
-
-See [Known Limitations → Migration Templates](../../../reference/known-limitations/#migration-templates).
-
-## References
-
-- [Migration Options](../../../concepts/migration-options/)
-- [Network & Storage Mapping](../../../concepts/network-storage-mapping/)
-- [vJailbreak CRDs](../../../reference/reference/)
