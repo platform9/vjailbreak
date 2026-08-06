@@ -196,6 +196,15 @@ func (migobj *Migrate) CreateVolumes(ctx context.Context, vminfo vm.VMInfo) (vm.
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to create volume")
 		}
+		// The Windows virtio properties are only correct for a converted guest. In copy-only mode
+		// no virtio drivers are injected, so advertising hw_disk_bus=virtio would leave the
+		// instance unable to boot; os_type is applied to the boot volume instead (see
+		// windowsBootVolumeMetadata).
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && !migobj.isCopyOnly() {
+			if err := openstackops.SetVolumeImageMetadata(ctx, volume, setRDMLabel); err != nil {
+				return vminfo, errors.Wrap(err, "failed to set volume image metadata")
+			}
+		}
 		vminfo.VMDisks[idx].OpenstackVol = volume
 		if vminfo.VMDisks[idx].Boot {
 			err = openstackops.SetVolumeBootable(ctx, volume)
@@ -227,7 +236,7 @@ func (migobj *Migrate) applyImageMetadataForXCOPYVolumes(ctx context.Context, vm
 			}
 		}
 
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
+		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows && !migobj.isCopyOnly() {
 			if err := openstackops.SetVolumeImageMetadata(ctx, volume, setRDMLabel); err != nil {
 				return errors.Wrapf(err, "failed to set Windows image metadata on XCOPY volume %s", volume.ID)
 			}
@@ -1666,7 +1675,135 @@ func blockDriverFromMetadata(metadata map[string]string) string {
 	return ""
 }
 
+// isCopyOnly reports whether this migration must leave the guest filesystem untouched. In
+// copy-only mode the disks are copied to Cinder volumes verbatim: virt-v2v, virtio driver
+// injection, firstboot scripts, VMware Tools removal and in-guest network reconfiguration are all
+// skipped. The OpenStack instance is still created (unless DataOnly is also set).
+//
+// It is driven by the CONVERT ConfigMap key, which the controller derives from
+// MigrationPlan.spec.migrationStrategy.copyOnly.
+func (migobj *Migrate) isCopyOnly() bool {
+	return !migobj.Convert
+}
+
+// windowsBootVolumeMetadata returns the subset of the normally-hardcoded Windows image properties
+// that remain valid for an unconverted guest. hw_disk_bus and hw_scsi_model are intentionally
+// excluded: without virtio drivers in the guest they would cause an INACCESSIBLE_BOOT_DEVICE
+// (0x7B) stop error. Operators who need a specific bus can set one via a VolumeImageProfile, which
+// is merged on top of this map and wins on conflict.
+func windowsBootVolumeMetadata(osType string) map[string]string {
+	if strings.ToLower(osType) != constants.OSFamilyWindows {
+		return nil
+	}
+	return map[string]string{"os_type": "windows"}
+}
+
+// inspectBootVolume and inspectESPDisk indirect the two guestfs-backed inspection calls so unit
+// tests can exercise the copy-only staging path without a libguestfs appliance. Production code
+// always uses the real implementations assigned here.
+var (
+	inspectBootVolume = func(migobj *Migrate, vminfo vm.VMInfo, bootCommand string) (int, string, error) {
+		return migobj.detectBootVolume(vminfo, bootCommand)
+	}
+	inspectESPDisk = virtv2v.DetectESPDiskIndex
+)
+
+// detectBootDiskReadOnly locates the boot disk and, for UEFI guests, the ESP disk without
+// modifying the guest. If inspection is inconclusive it falls back to the first disk rather than
+// failing the migration, since a copy-only migration has no way to repair an unbootable layout
+// anyway and the operator can still fix the instance afterwards.
+func (migobj *Migrate) detectBootDiskReadOnly(vminfo vm.VMInfo) (bootVolumeIndex, espDiskIndex int) {
+	espDiskIndex = -1
+
+	bootVolumeIndex, _, err := inspectBootVolume(migobj, vminfo, migobj.getBootCommand(vminfo.OSType))
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf("Copy-only: boot disk inspection failed (%v), falling back to Disk 0", err))
+		bootVolumeIndex = -1
+	}
+	if bootVolumeIndex < 0 {
+		migobj.logMessage("Copy-only: could not identify the boot disk by inspection, falling back to Disk 0")
+		bootVolumeIndex = 0
+	}
+
+	if vminfo.UEFI {
+		detectedESPIndex, espErr := inspectESPDisk(vminfo.VMDisks)
+		switch {
+		case espErr != nil:
+			migobj.logMessage(fmt.Sprintf("Copy-only: error detecting ESP disk: %v", espErr))
+		case detectedESPIndex >= 0 && detectedESPIndex < len(vminfo.VMDisks):
+			espDiskIndex = detectedESPIndex
+			migobj.logMessage(fmt.Sprintf("Copy-only: ESP detected on Disk %d: %s", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+		default:
+			migobj.logMessage("Copy-only: WARNING - no ESP detected for UEFI VM")
+		}
+	}
+
+	return bootVolumeIndex, espDiskIndex
+}
+
+// stageVolumesWithoutConversion is the copy-only counterpart of ConvertVolumes. It performs only
+// the OpenStack-side bookkeeping needed to boot the copied disks - marking the boot (and ESP)
+// volume bootable and applying boot-volume image metadata - and never writes to the guest.
+func (migobj *Migrate) stageVolumesWithoutConversion(ctx context.Context, vminfo vm.VMInfo) (int, error) {
+	migobj.logMessage("Copy-only mode: skipping guest conversion, staging copied disks as-is")
+
+	if len(vminfo.VMDisks) == 0 {
+		return -1, errors.New("no disks present for VM; cannot stage volumes")
+	}
+
+	// Volumes are attached so the boot disk can be identified by read-only inspection.
+	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
+		return -1, err
+	}
+
+	bootVolumeIndex, espDiskIndex := migobj.detectBootDiskReadOnly(vminfo)
+
+	utils.PrintLog(fmt.Sprintf("Copy-only: boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
+	vminfo.VMDisks[bootVolumeIndex].Boot = true
+
+	// Nova/libvirt only read volume_image_metadata from the root disk, so this is scoped to the
+	// boot volume. Profile-supplied keys are merged last and win on conflict.
+	bootMetadata := windowsBootVolumeMetadata(vminfo.OSType)
+	if bootMetadata == nil && len(migobj.ImageMetadata) > 0 {
+		bootMetadata = map[string]string{}
+	}
+	for k, v := range migobj.ImageMetadata {
+		bootMetadata[k] = v
+	}
+	if len(bootMetadata) > 0 {
+		bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol
+		if bootVol != nil {
+			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, bootMetadata); err != nil {
+				return -1, errors.Wrap(err, "failed to apply image metadata to boot volume")
+			}
+			migobj.logMessage(fmt.Sprintf("Copy-only: applied %d image metadata key(s) to boot volume %s: %v",
+				len(bootMetadata), bootVol.ID, bootMetadata))
+		}
+	}
+
+	if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
+		return -1, errors.Wrap(err, "failed to set boot volume as bootable")
+	}
+	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootVolumeIndex {
+		migobj.logMessage(fmt.Sprintf("Copy-only: marking ESP disk (Disk %d: %s) as bootable in OpenStack", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
+		if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[espDiskIndex].OpenstackVol); err != nil {
+			return -1, errors.Wrap(err, "failed to set ESP volume as bootable")
+		}
+	}
+
+	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
+		return -1, errors.Wrap(err, "Failed to detach all volumes from VM")
+	}
+
+	migobj.logMessage("Copy-only: volumes staged without conversion")
+	return espDiskIndex, nil
+}
+
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
+	if migobj.isCopyOnly() {
+		return migobj.stageVolumesWithoutConversion(ctx, vminfo)
+	}
+
 	migobj.logMessage("Converting disk")
 
 	// Step 1: Determine boot command based on OS type

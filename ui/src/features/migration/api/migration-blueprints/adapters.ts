@@ -67,6 +67,7 @@ export function blueprintToSavedTemplate(blueprint: MigrationBlueprint): SavedTe
     disconnectSourceNetwork: spec.migrationStrategy?.disconnectSourceNetwork || false,
     fallbackToDHCP: spec.fallbackToDHCP || false,
     dataOnly: spec.dataOnly || false,
+    copyOnly: spec.copyOnly || false,
     preserveSourceTags: spec.preserveSourceTags || false,
     customMetadata: customMetadataToRows(spec.customMetadata),
     securityGroups: spec.securityGroups || [],
@@ -137,6 +138,7 @@ export function savedTemplateInputToBlueprintSpec(
     ...(input.serverGroup && { serverGroup: input.serverGroup }),
     fallbackToDHCP: input.fallbackToDHCP || false,
     dataOnly: input.dataOnly || false,
+    copyOnly: input.copyOnly || false,
     preserveSourceTags: input.preserveSourceTags || false,
     ...(() => {
       const metadata = customMetadataToMap(input.customMetadata)

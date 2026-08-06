@@ -14,6 +14,7 @@ export const createMigrationPlanJson = (params) => {
     postMigrationAction,
     disconnectSourceNetwork = false,
     dataOnly = false,
+    copyOnly = false,
     securityGroups,
     serverGroup,
     fallbackToDHCP = false,
@@ -39,7 +40,8 @@ export const createMigrationPlanJson = (params) => {
       vmCutoverStart,
       vmCutoverEnd,
       disconnectSourceNetwork,
-      ...(dataOnly ? { dataOnly: true } : {})
+      ...(dataOnly ? { dataOnly: true } : {}),
+      ...(copyOnly ? { copyOnly: true } : {})
     },
     virtualMachines: [virtualMachines],
     fallbackToDHCP

@@ -78,6 +78,8 @@ export interface MigrationStrategy {
   healthCheckPort?: string
   disconnectSourceNetwork?: boolean
   dataOnly?: boolean
+  /** Skip guest conversion; disks are copied as-is and the VM is still created. */
+  copyOnly?: boolean
 }
 
 export interface Status {

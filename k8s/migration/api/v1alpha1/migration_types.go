@@ -130,6 +130,12 @@ type MigrationSpec struct {
 	// DataOnly indicates no OpenStack VM should be created after disk conversion.
 	// +optional
 	DataOnly bool `json:"dataOnly,omitempty"`
+
+	// CopyOnly indicates the guest must not be converted: disks are copied as-is and no
+	// in-guest modification (virt-v2v, virtio injection, firstboot scripts, network
+	// reconfiguration) is performed. The OpenStack VM is still created.
+	// +optional
+	CopyOnly bool `json:"copyOnly,omitempty"`
 }
 
 // MigrationStatus defines the observed state of Migration

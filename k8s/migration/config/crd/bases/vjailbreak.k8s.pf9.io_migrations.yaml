@@ -58,6 +58,12 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              copyOnly:
+                description: |-
+                  CopyOnly indicates the guest must not be converted: disks are copied as-is and no
+                  in-guest modification (virt-v2v, virtio injection, firstboot scripts, network
+                  reconfiguration) is performed. The OpenStack VM is still created.
+                type: boolean
               dataOnly:
                 description: DataOnly indicates no OpenStack VM should be created
                   after disk conversion.

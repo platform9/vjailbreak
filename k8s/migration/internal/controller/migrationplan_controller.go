@@ -1006,6 +1006,7 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 				MigrationType:           migrationplan.Spec.MigrationStrategy.Type,
 				PreserveSourceTags:      migrationplan.Spec.PreserveSourceTags,
 				DataOnly:                migrationplan.Spec.MigrationStrategy.DataOnly,
+				CopyOnly:                migrationplan.Spec.MigrationStrategy.CopyOnly,
 			},
 			Status: vjailbreakv1alpha1.MigrationStatus{
 				Phase:      vjailbreakv1alpha1.VMMigrationPhasePending,
@@ -1545,7 +1546,7 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
 		"SOURCE_VM_KEY":                     sourceVMKey,
-		"CONVERT":                           "true",
+		"CONVERT":                           strconv.FormatBool(!migrationplan.Spec.MigrationStrategy.CopyOnly),
 		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
 		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
 		"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
@@ -1819,6 +1820,9 @@ func (r *MigrationPlanReconciler) updateMigrationConfigMap(ctx context.Context, 
 	} else {
 		delete(configMap.Data, "NETWORK_OVERRIDES")
 	}
+	// CONVERT is refreshed on update because a stale value would silently convert (or silently
+	// skip converting) a guest against the plan's current CopyOnly setting, e.g. after a retry.
+	configMap.Data["CONVERT"] = strconv.FormatBool(!migrationplan.Spec.MigrationStrategy.CopyOnly)
 	if len(migrationobj.Spec.ImageMetadata) > 0 {
 		payload, err := json.Marshal(migrationobj.Spec.ImageMetadata)
 		if err != nil {

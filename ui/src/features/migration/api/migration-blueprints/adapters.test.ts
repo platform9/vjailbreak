@@ -344,6 +344,7 @@ describe('save → spec → load round-trip', () => {
     disconnectSourceNetwork: true,
     fallbackToDHCP: true,
     dataOnly: true,
+    copyOnly: true,
     preserveSourceTags: true,
     customMetadata: [
       { key: 'env', value: 'prod' },
@@ -418,6 +419,10 @@ describe('save → spec → load round-trip', () => {
     expect(roundTrip(fullInput).dataOnly).toBe(true)
   })
 
+  it('preserves the copy-only option', () => {
+    expect(roundTrip(fullInput).copyOnly).toBe(true)
+  })
+
   it('preserves the first-boot script verbatim', () => {
     expect(roundTrip(fullInput).firstBootScript).toBe('echo "post-migration setup"')
   })
@@ -475,6 +480,7 @@ describe('save → spec → load round-trip', () => {
     })
 
     expect(result.dataOnly).toBe(false)
+    expect(result.copyOnly).toBe(false)
     expect(result.preserveSourceTags).toBe(false)
     expect(result.customMetadata).toEqual([])
     expect(result.cutoverStartTime).toBe('')

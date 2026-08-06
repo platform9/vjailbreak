@@ -74,6 +74,7 @@ export function useApplyTemplatePrefill({
       disconnectSourceNetwork: templatePrefill.disconnectSourceNetwork,
       fallbackToDHCP: templatePrefill.fallbackToDHCP,
       dataOnly: templatePrefill.dataOnly,
+      copyOnly: templatePrefill.copyOnly,
       preserveSourceTags: templatePrefill.preserveSourceTags,
       customMetadata: templatePrefill.customMetadata,
       securityGroups: templatePrefill.securityGroups,

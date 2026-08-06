@@ -349,7 +349,8 @@ export function useRollingFormSubmit({
             params.cutoverEndTime && {
               vmCutoverEnd: params.cutoverEndTime
             }),
-          ...(params.dataOnly ? { dataOnly: true } : {})
+          ...(params.dataOnly ? { dataOnly: true } : {}),
+          ...(params.copyOnly ? { copyOnly: true } : {})
         },
         migrationTemplate: migrationTemplateResponse.metadata.name,
         namespace: VJAILBREAK_DEFAULT_NAMESPACE,

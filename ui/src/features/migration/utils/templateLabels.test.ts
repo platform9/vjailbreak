@@ -31,6 +31,7 @@ const makeTemplate = (overrides: Partial<SavedTemplate> = {}): SavedTemplate => 
   cutoverStartTime: '',
   cutoverEndTime: '',
   dataOnly: false,
+  copyOnly: false,
   preserveSourceTags: false,
   customMetadata: [],
   disconnectSourceNetwork: false,
@@ -231,6 +232,17 @@ describe('buildAdvancedOptionRows — options added after the #428 merge', () =>
       label: 'Data only (no VM creation)',
       value: 'Enabled'
     })
+  })
+
+  it('surfaces the copy-only option', () => {
+    expect(rowFor(makeTemplate({ copyOnly: true }), 'Copy only (no conversion)')).toEqual({
+      label: 'Copy only (no conversion)',
+      value: 'Enabled'
+    })
+  })
+
+  it('hides the copy-only option when it is off', () => {
+    expect(rowFor(makeTemplate({ copyOnly: false }), 'Copy only (no conversion)')).toBeUndefined()
   })
 
   it('surfaces preserve-source-tags', () => {

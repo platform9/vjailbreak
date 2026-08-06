@@ -140,6 +140,9 @@ export function buildAdvancedOptionRows(
   if (template.dataOnly) {
     rows.push({ label: 'Data only (no VM creation)', value: 'Enabled' })
   }
+  if (template.copyOnly) {
+    rows.push({ label: 'Copy only (no conversion)', value: 'Enabled' })
+  }
   if (template.preserveSourceTags) {
     rows.push({ label: 'Preserve source tags', value: 'Enabled' })
   }

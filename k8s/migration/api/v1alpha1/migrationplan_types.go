@@ -49,6 +49,15 @@ type MigrationPlanStrategy struct {
 	// Compatible with all strategy types (hot, cold, mock).
 	// +kubebuilder:default:=false
 	DataOnly bool `json:"dataOnly,omitempty"`
+	// CopyOnly skips guest conversion entirely: disks are copied to Cinder volumes as-is and the
+	// OpenStack VM is still created. virt-v2v, virtio driver injection, firstboot scripts,
+	// VMware Tools removal and in-guest network reconfiguration are all skipped, so the guest
+	// filesystem is never modified. Boot-volume image metadata (detected firmware type, plus any
+	// properties from the selected VolumeImageProfiles) is applied as usual, but the hardcoded
+	// hw_disk_bus/hw_scsi_model virtio defaults are omitted because an unconverted guest has no
+	// virtio drivers. Compatible with all strategy types (hot, cold, mock) and with DataOnly.
+	// +kubebuilder:default:=false
+	CopyOnly bool `json:"copyOnly,omitempty"`
 }
 
 // AdvancedOptions defines advanced configuration options for the migration process

@@ -173,8 +173,19 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 	return "", fmt.Errorf("no master VjailbreakNode with OpenstackUUID found (pod=%s, k8s-node=%s)", podName, nodeName)
 }
 
-// create a new volume
+// CreateVolume creates a new Cinder volume and applies the metadata that is safe for every
+// migration mode: the detected firmware type (SetVolumeUEFI) and the guest agent properties
+// (EnableQGA).
+//
+// It deliberately does NOT apply the Windows virtio properties (SetVolumeImageMetadata). That call
+// is the caller's responsibility because it is mode-dependent: a copy-only migration leaves the
+// guest unconverted, so it has no viostor driver and advertising hw_disk_bus=virtio would make the
+// instance fail to boot. See Migrate.CreateVolumes.
+//
+// setRDMLabel is retained for signature compatibility with the OpenstackOperations interface and
+// is now consumed by the caller when it invokes SetVolumeImageMetadata.
 func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string, size int64, ostype string, uefi bool, volumetype string, setRDMLabel bool) (*volumes.Volume, error) {
+	_ = setRDMLabel
 	blockStorageClient := osclient.BlockStorageClient
 
 	PrintLog(fmt.Sprintf("OPENSTACK API: Creating volume with name %s with size %d, for OS type %s, UEFI %v, volume type %s, authurl %s, tenant %s", name, size, ostype, uefi, volumetype, osclient.AuthURL, osclient.Tenant))
@@ -215,13 +226,6 @@ func (osclient *OpenStackClients) CreateVolume(ctx context.Context, name string,
 		err = osclient.SetVolumeUEFI(ctx, volume)
 		if err != nil {
 			return nil, fmt.Errorf("failed to set volume uefi: %s", err)
-		}
-	}
-
-	if strings.ToLower(ostype) == constants.OSFamilyWindows {
-		err = osclient.SetVolumeImageMetadata(ctx, volume, setRDMLabel)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set volume image metadata: %s", err)
 		}
 	}
 

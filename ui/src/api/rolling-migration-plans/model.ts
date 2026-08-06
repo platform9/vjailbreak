@@ -71,6 +71,7 @@ export interface MigrationStrategy {
   vmCutoverStart?: string
   vmCutoverEnd?: string
   dataOnly?: boolean
+  copyOnly?: boolean
 }
 
 export interface RollingMigrationPlanStatus {

@@ -23,6 +23,7 @@ const makeTemplate = (overrides: Partial<SavedTemplate>): SavedTemplate => ({
   cutoverStartTime: '',
   cutoverEndTime: '',
   dataOnly: false,
+  copyOnly: false,
   preserveSourceTags: false,
   customMetadata: [],
   disconnectSourceNetwork: false,

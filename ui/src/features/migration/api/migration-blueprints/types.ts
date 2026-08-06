@@ -45,6 +45,7 @@ export interface SavedTemplate {
   disconnectSourceNetwork: boolean
   fallbackToDHCP: boolean
   dataOnly: boolean
+  copyOnly: boolean
   preserveSourceTags: boolean
   customMetadata: KeyValuePair[]
   securityGroups: string[]
@@ -82,6 +83,7 @@ export interface SaveAsTemplateInput {
   disconnectSourceNetwork?: boolean
   fallbackToDHCP?: boolean
   dataOnly?: boolean
+  copyOnly?: boolean
   preserveSourceTags?: boolean
   customMetadata?: KeyValuePair[]
   securityGroups?: string[]

@@ -69,6 +69,8 @@ export interface FormValues extends Record<string, unknown> {
   }
   disconnectSourceNetwork?: boolean
   dataOnly?: boolean
+  /** Skip guest conversion entirely: copy disks as-is and still create the OpenStack VM. */
+  copyOnly?: boolean
   securityGroups?: string[]
   serverGroup?: string
   fallbackToDHCP?: boolean
@@ -166,6 +168,7 @@ export interface RollingFormParams extends Record<string, unknown> {
   useGPU?: boolean
   disconnectSourceNetwork?: boolean
   dataOnly?: boolean
+  copyOnly?: boolean
   fallbackToDHCP?: boolean
   networkPersistence?: boolean
   preserveSourceTags?: boolean

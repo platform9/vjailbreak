@@ -286,6 +286,30 @@ export default function MigrationOptionsAlt({
     }
   }, [disableNetworkPersistence, params?.networkPersistence, onChange])
 
+  // Copy-only migrations never modify the guest filesystem, so every option that works by
+  // writing into the guest (firstboot scripts, VMware Tools removal, network reconfiguration)
+  // is a no-op. Clear those values so the submitted plan matches what will actually happen.
+  const copyOnly = Boolean(params?.copyOnly)
+
+  useEffect(() => {
+    if (!copyOnly) return
+    if (params?.removeVMwareTools) onChange('removeVMwareTools')(false)
+    if (params?.networkPersistence) onChange('networkPersistence')(false)
+    if (params?.fallbackToDHCP) onChange('fallbackToDHCP')(false)
+    if (selectedMigrationOptions.postMigrationScript) {
+      updateSelectedMigrationOptions('postMigrationScript')(false)
+      onChange('postMigrationScript')('')
+    }
+  }, [
+    copyOnly,
+    params?.removeVMwareTools,
+    params?.networkPersistence,
+    params?.fallbackToDHCP,
+    selectedMigrationOptions.postMigrationScript,
+    onChange,
+    updateSelectedMigrationOptions,
+  ])
+
   const isPCD = openstackCredentials?.metadata?.labels?.['vjailbreak.k8s.pf9.io/is-pcd'] === 'true'
   const hasL2Network = hasSelectedLayer2Network(
     params.networkMappings,
@@ -687,7 +711,7 @@ export default function MigrationOptionsAlt({
           <SectionHeaderRow>
             <Typography variant="subtitle2">Migration mode</Typography>
             <Typography variant="caption" color="text.secondary">
-              Control whether an OpenStack VM is created after disk copy
+              Control whether disks are converted and whether an OpenStack VM is created
             </Typography>
           </SectionHeaderRow>
           <Divider />
@@ -724,6 +748,50 @@ export default function MigrationOptionsAlt({
               }}
             >
               Converted Cinder volumes will be staged in OpenStack. No VM will be created.
+            </Alert>
+          )}
+
+          <OptionRow>
+            <OptionLeft>
+              <FormControlLabel
+                label="Copy only (no conversion)"
+                control={
+                  <Checkbox
+                    data-testid="migration-option-copy-only"
+                    checked={copyOnly}
+                    onChange={() => {}}
+                    onClick={() => {
+                      onChange('copyOnly')(!params?.copyOnly)
+                    }}
+                  />
+                }
+              />
+              <OptionHelp variant="caption">
+                Copies disks to Cinder volumes as-is and creates the OpenStack VM without running
+                conversion. The guest filesystem is never modified.
+              </OptionHelp>
+            </OptionLeft>
+            <Box />
+          </OptionRow>
+
+          {copyOnly && (
+            <Alert
+              severity="warning"
+              data-testid="migration-option-copy-only-alert"
+              sx={{
+                mt: 0,
+                bgcolor: (theme) => alpha(theme.palette.warning.main, 0.08),
+                border: '1px solid',
+                borderColor: 'warning.light',
+              }}
+            >
+              No in-guest changes will be made: virt-v2v conversion, VirtIO driver injection,
+              firstboot scripts, VMware Tools removal and network reconfiguration are all skipped.
+              The VM is created from the copied disks and boot-volume image properties (detected
+              firmware type plus any selected image profiles) are still applied. The guest must
+              already be able to boot on KVM — for a Windows guest with no VirtIO drivers, select an
+              image profile that sets a compatible <code>hw_disk_bus</code> (for example
+              {' '}<code>sata</code>).
             </Alert>
           )}
         </SectionBlock>
@@ -772,7 +840,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.fallbackToDHCP || false}
-                    disabled={hasL2Network || (params?.dataOnly || false)}
+                    disabled={hasL2Network || (params?.dataOnly || false) || copyOnly}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('fallbackToDHCP')(!params?.fallbackToDHCP)
@@ -793,7 +861,7 @@ export default function MigrationOptionsAlt({
                   <Checkbox
                     data-testid="migration-option-network-persistence"
                     checked={params?.networkPersistence || false}
-                    disabled={disableNetworkPersistence || (params?.dataOnly || false)}
+                    disabled={disableNetworkPersistence || (params?.dataOnly || false) || copyOnly}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('networkPersistence')(!params?.networkPersistence)
@@ -869,6 +937,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={params?.removeVMwareTools || false}
+                    disabled={copyOnly}
                     onChange={() => {}}
                     onClick={() => {
                       onChange('removeVMwareTools')(!params?.removeVMwareTools)
@@ -890,6 +959,7 @@ export default function MigrationOptionsAlt({
                 control={
                   <Checkbox
                     checked={selectedMigrationOptions.postMigrationScript}
+                    disabled={copyOnly}
                     onChange={() => {}}
                     onClick={() => {
                       const isChecked = !selectedMigrationOptions.postMigrationScript

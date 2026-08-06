@@ -298,6 +298,7 @@ export function useMigrationFormSubmit({
       }),
       disconnectSourceNetwork: params.disconnectSourceNetwork || false,
       ...(params.dataOnly ? { dataOnly: true } : {}),
+      ...(params.copyOnly ? { copyOnly: true } : {}),
       fallbackToDHCP: params.fallbackToDHCP || false,
       ...(selectedMigrationOptions.postMigrationScript &&
         params.postMigrationScript && {

@@ -68,6 +68,7 @@ export interface Spec {
   disconnectSourceNetwork?: boolean
   assignedIP?: string
   dataOnly?: boolean
+  copyOnly?: boolean
 }
 
 export enum MigrationPlan {
