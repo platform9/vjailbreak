@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  labels:
+    app: promtail
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: vjailbreak-monitoring
+  name: promtail
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: promtail
+  template:
+    metadata:
+      labels:
+        app: promtail
+        app.kubernetes.io/name: promtail
+        app.kubernetes.io/part-of: vjailbreak-monitoring
+    spec:
+      containers:
+        - args:
+            - -config.file=/etc/promtail/config.yaml
+          image: docker.io/grafana/promtail:3.5.0
+          imagePullPolicy: IfNotPresent
+          name: promtail
+          ports:
+            - containerPort: 9080
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /etc/promtail
+              name: promtail-config
+              readOnly: true
+            - mountPath: /var/log/pods
+              name: pods-logs
+              readOnly: true
+            - mountPath: /run/promtail
+              name: positions
+      nodeSelector:
+        kubernetes.io/os: linux
+      securityContext:
+        runAsGroup: 0
+        runAsUser: 0
+      serviceAccountName: promtail
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/control-plane
+          operator: Exists
+      volumes:
+        - configMap:
+            name: promtail-config
+          name: promtail-config
+        - hostPath:
+            path: /var/log/pods
+          name: pods-logs
+        - emptyDir: {}
+          name: positions

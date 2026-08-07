@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  labels:
+    app: loki
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: vjailbreak-monitoring
+  name: loki
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loki
+  serviceName: loki
+  template:
+    metadata:
+      labels:
+        app: loki
+        app.kubernetes.io/name: loki
+        app.kubernetes.io/part-of: vjailbreak-monitoring
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - args:
+            - -config.file=/etc/loki/config.yaml
+            - -target=all
+          image: docker.io/grafana/loki:3.5.0
+          imagePullPolicy: IfNotPresent
+          name: loki
+          ports:
+            - containerPort: 3100
+              name: http
+            - containerPort: 9095
+              name: grpc
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 200m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - mountPath: /etc/loki
+              name: loki-config
+              readOnly: true
+            - mountPath: /loki
+              name: loki-storage
+            - mountPath: /tmp
+              name: tmp
+      nodeSelector:
+        kubernetes.io/os: linux
+      securityContext:
+        fsGroup: 10001
+        runAsGroup: 10001
+        runAsNonRoot: true
+        runAsUser: 10001
+      serviceAccountName: loki
+      volumes:
+        - configMap:
+            name: loki-config
+          name: loki-config
+        - persistentVolumeClaim:
+            claimName: loki-storage
+          name: loki-storage
+        - emptyDir: {}
+          name: tmp
