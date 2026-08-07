@@ -78,6 +78,9 @@ func TestShellQuoteRoundTripsThroughShell(t *testing.T) {
 		t.Skip("sh not available")
 	}
 
+	// Inside single quotes every byte is literal except the quote itself, so the
+	// full shell metacharacter set must survive untouched. NUL is the only
+	// exception and cannot occur in a path.
 	inputs := []string{
 		"/vmfs/volumes/ds-prod-01/web01/web01.vmdk",
 		"/vmfs/volumes/ds/mgmt1.grid.cyso.net_07-28 03_47/mgmt1.grid.cyso.net_07-28 03_47_2.vmdk",
@@ -85,9 +88,25 @@ func TestShellQuoteRoundTripsThroughShell(t *testing.T) {
 		"/vmfs/volumes/ds/VM (copy) & backup/disk.vmdk",
 		"/vmfs/volumes/ds/a;reboot/disk.vmdk",
 		"/vmfs/volumes/ds/$(echo pwned)/disk.vmdk",
+		"/vmfs/volumes/ds/`echo pwned`/disk.vmdk",
+		"/vmfs/volumes/ds/VM $# $@ $* $0 $1 $?/disk.vmdk",
+		"/vmfs/volumes/ds/$HOME/disk.vmdk",
+		"/vmfs/volumes/ds/${HOME}/disk.vmdk",
+		"/vmfs/volumes/ds/VM #1/disk.vmdk",
+		"/vmfs/volumes/ds/VM!/disk.vmdk",
+		"/vmfs/volumes/ds/VM*?[a-z]/disk.vmdk",
+		"~/disk.vmdk",
+		"/vmfs/volumes/ds/a&&b||c|d/disk.vmdk",
+		"/vmfs/volumes/ds/a>b<c/disk.vmdk",
+		"/vmfs/volumes/ds/two\nlines/disk.vmdk",
 		"/vmfs/volumes/ds/tab\tseparated/disk.vmdk",
 		`/vmfs/volumes/ds/back\slash/disk.vmdk`,
+		`/vmfs/volumes/ds/a\nb/disk.vmdk`,
 		`/vmfs/volumes/ds/"double quoted"/disk.vmdk`,
+		"/vmfs/volumes/ds/a''b/disk.vmdk",
+		"/vmfs/volumes/ds/VM-café-日本/disk.vmdk",
+		"/vmfs/volumes/ds/$#!*?&;|<>(){}[]\"'`\\/disk.vmdk",
+		"-rf",
 		"'",
 	}
 
