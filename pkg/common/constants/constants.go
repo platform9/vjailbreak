@@ -271,6 +271,30 @@ const (
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
 
+	// LDMBootStatusLabel is the pod label carrying the admin's answer at the
+	// WaitingForLDMBootSuccess gate. Deliberately separate from "startCutover" so
+	// the cutover flow is untouched.
+	LDMBootStatusLabel = "ldmBootStatus"
+
+	// LDMBootStatusSuccess means the admin confirmed the virtio storage driver
+	// installed in the booted guest; the VM is recreated on the virtio bus.
+	LDMBootStatusSuccess = "success"
+
+	// LDMBootStatusFinish means leave the VM on the emulated SATA bus and complete
+	// the migration successfully. This is also what a gate timeout resolves to: a
+	// working VM already exists by then and only an optimisation is outstanding.
+	LDMBootStatusFinish = "finish"
+
+	// LDMBootStatusFailed means the migration is unusable and should be failed and
+	// cleaned up. Destructive - it discards the migrated VM.
+	LDMBootStatusFailed = "failed"
+
+	// LDMBootGateTimeout bounds the WaitingForLDMBootSuccess gate. The helper pod
+	// has RestartPolicy: Never and nothing recreates it, so the wait cannot be
+	// unbounded; it must also be shorter than any node maintenance cycle that
+	// would evict the pod. Resolves to LDMBootStatusFinish on expiry.
+	LDMBootGateTimeout = 24 * time.Hour
+
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
 

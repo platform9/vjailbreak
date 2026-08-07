@@ -45,6 +45,9 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
     case Phase.AwaitingCutOverStartTime:
       return 3
     case Phase.ConvertingDisk:
+    // The VM exists and is running on SATA; only the optional promotion to virtio
+    // is outstanding, so this sits on the last working step rather than "Done".
+    case Phase.WaitingForLDMBootSuccess:
       return 4
     case Phase.Succeeded:
     case Phase.DataCopied:
@@ -323,8 +326,11 @@ export function derivePhaseStates(
     }
     if (i === currentIndex) {
       const isPaused =
-        (phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
-        !options?.cutoverTriggered
+        ((phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
+          !options?.cutoverTriggered) ||
+        // The LDM gate is a genuine pause too: the VM is up and nothing progresses
+        // until an admin answers or the gate times out.
+        phase === Phase.WaitingForLDMBootSuccess
       // While paused awaiting admin cutover, this counts up from when data copy actually
       // finished (i.e. how long cutover has been waiting to be triggered) - not cumulative
       // since the whole migration began. Once cutover is actually triggered, this naturally
@@ -384,6 +390,7 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     case Phase.HotAddCleanup:             return 'HotAdd Cleanup'
     case Phase.ConvertingDisk:            return 'Converting Disk'
     case Phase.AwaitingAdminCutOver:  return 'Awaiting Admin Cutover'
+    case Phase.WaitingForLDMBootSuccess: return 'Awaiting LDM Boot Confirmation'
     case Phase.AwaitingCutOverStartTime: return 'Awaiting Cutover Window'
     case Phase.Succeeded:             return 'Succeeded'
     case Phase.DataCopied:            return 'Data Copied'

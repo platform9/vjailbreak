@@ -881,6 +881,82 @@ func IsLDMSystemVolume(disks []vm.VMDisk) (bool, string, error) {
 	return isLDMDevice(plan.Root), plan.Root, nil
 }
 
+// virtioBlockDrivers are the virtio storage miniports, in the order we prefer to
+// find them. viostor backs hw_disk_bus=virtio (virtio-blk); vioscsi backs
+// hw_disk_bus=scsi with hw_scsi_model=virtio-scsi.
+var virtioBlockDrivers = []string{"viostor", "vioscsi"}
+
+// HasBootStartVirtioDriver reports whether a virtio storage driver has actually
+// been installed into the running system, and which one.
+//
+// It tests for <systemroot>\System32\drivers\<drv>.sys. That file is placed there
+// by the INF's CopyFiles when Windows installs the driver against a real device;
+// a package merely staged in the DriverStore does not have it, which is precisely
+// the state that produced INACCESSIBLE_BOOT_DEVICE in testing. Because
+// viostor.inx and vioscsi.inx both declare StartType = %SERVICE_BOOT_START%, a
+// real install always writes Start=0 at the same time - the two are inseparable,
+// so the file is a sound proxy for "boot-capable".
+//
+// Reading Start out of the SYSTEM hive directly would be more literal, but hivex
+// node handles do not survive between guestfish processes and cannot be chained
+// inside one script, so it would cost an appliance boot per node in the path.
+//
+// Both drivers are probed in a single batched boot on the LDM-safe mount plan.
+func HasBootStartVirtioDriver(disks []vm.VMDisk) (bool, string, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to resolve guest root to check for virtio drivers: %w", err)
+	}
+
+	systemRoot, err := windowsSystemRoot(disks, plan.Root)
+	if err != nil {
+		return false, "", err
+	}
+
+	cmds := make([]guestfishCmd, 0, len(virtioBlockDrivers))
+	for _, driver := range virtioBlockDrivers {
+		cmds = append(cmds, guestfishCmd{
+			Name:     "exists",
+			Args:     []string{fmt.Sprintf("%s/System32/drivers/%s.sys", systemRoot, driver)},
+			Tolerate: true,
+		})
+	}
+
+	results, err := runCommandsInGuestAllVolumes(disks, false, cmds...)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to probe for virtio storage drivers: %w", err)
+	}
+
+	for i, driver := range virtioBlockDrivers {
+		if i < len(results) && strings.EqualFold(strings.TrimSpace(results[i]), "true") {
+			log.Printf("Found installed virtio storage driver: %s", driver)
+			return true, driver, nil
+		}
+	}
+	return false, "", nil
+}
+
+// windowsSystemRoot returns the guest's systemroot ("/Windows"), which
+// inspect-get-windows-systemroot only answers after inspect-os has run in the
+// same process.
+func windowsSystemRoot(disks []vm.VMDisk, root string) (string, error) {
+	const systemRootIdx = 1
+
+	out, err := runGuestfishScript(disks, buildGuestfishBatchScript(mountPlan{}, false, []guestfishCmd{
+		{Name: "inspect-os"},
+		{Name: "inspect-get-windows-systemroot", Args: []string{root}, Tolerate: true},
+	}))
+	if err != nil {
+		return "", fmt.Errorf("failed to determine the Windows systemroot: %w", err)
+	}
+
+	systemRoot := strings.TrimSpace(splitGuestfishBatchOutput(out, 2)[systemRootIdx])
+	if systemRoot == "" {
+		return "", errors.New("could not determine the Windows systemroot of the guest")
+	}
+	return strings.TrimRight(systemRoot, "/"), nil
+}
+
 // GetBootableVolumeIndex returns the index of the disk holding the bootable
 // partition, in three appliance boots regardless of partition count: list, then
 // resolve every partition, then inspect them all. Per-partition cost 4N+1.

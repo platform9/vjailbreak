@@ -1137,6 +1137,25 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		})
 	}
 
+	// A guest whose system volume is on a Dynamic Disk (LDM) boots on an emulated
+	// bus, because virt-v2v cannot convert it and so never makes a virtio storage
+	// driver boot-critical. Attaching one scratch volume on the virtio bus gives
+	// Windows a real device to install viostor against on first boot, which is the
+	// prerequisite for ever moving the root disk to virtio. Nova fixes disk_bus in
+	// the BDM at create time, so this cannot be added to a running instance later.
+	if vminfo.LDMProbeVolumeID != "" {
+		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
+			DeleteOnTermination: true,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.LDMProbeVolumeID,
+			DiskBus:             "virtio",
+			BootIndex:           -1,
+		})
+		PrintLog(fmt.Sprintf("Attaching virtio probe volume %s to LDM guest %s so Windows installs the virtio storage driver on first boot",
+			vminfo.LDMProbeVolumeID, vminfo.Name))
+	}
+
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
 	if serverGroupID != "" {

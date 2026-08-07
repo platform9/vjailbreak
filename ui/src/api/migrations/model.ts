@@ -141,6 +141,7 @@ export enum Phase {
   ConvertingDisk = 'ConvertingDisk',
   AwaitingCutOverStartTime = 'AwaitingCutOverStartTime',
   AwaitingAdminCutOver = 'AwaitingAdminCutOver',
+  WaitingForLDMBootSuccess = 'WaitingForLDMBootSuccess',
   Succeeded = 'Succeeded',
   DataCopied = 'DataCopied',
   Failed = 'Failed',

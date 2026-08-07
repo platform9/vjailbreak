@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -240,6 +241,62 @@ func (r *Reporter) GetCutoverLabel() (string, error) {
 		return cutover, nil
 	}
 	return "", fmt.Errorf("failed to get cutover label")
+}
+
+// GetLDMBootStatusLabel reads the admin's answer at the WaitingForLDMBootSuccess
+// gate. Unlike GetCutoverLabel, an absent label is not an error: it is the normal
+// state for every guest that is not an LDM guest, and for an LDM guest that the
+// admin has not answered yet.
+func (r *Reporter) GetLDMBootStatusLabel() (string, error) {
+	if err := r.GetPod(); err != nil {
+		return "", fmt.Errorf("failed to get pod: %v", err)
+	}
+	return r.Pod.Labels[constants.LDMBootStatusLabel], nil
+}
+
+// WatchLDMBootStatusLabel is a parallel watcher to WatchPodLabels for the
+// ldmBootStatus label. It is a second watch on the same pod rather than an
+// extension of WatchPodLabels, because widening that channel to carry which
+// label changed would ripple into the existing cutover wait loop. The cost is
+// one extra watch; the benefit is that the cutover path is untouched.
+func (r *Reporter) WatchLDMBootStatusLabel(ctx context.Context, ch chan<- string) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Printf("Info: Context canceled while watching %s for pod %s\n", constants.LDMBootStatusLabel, r.PodName)
+				return
+			default:
+				timeoutSeconds := int64(172800)
+				watcher, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
+					FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
+					TimeoutSeconds: &timeoutSeconds,
+				})
+				if err != nil {
+					fmt.Printf("Error: Failed to watch %s for pod %s: %v\n", constants.LDMBootStatusLabel, r.PodName, err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				last := ""
+				for event := range watcher.ResultChan() {
+					pod, ok := event.Object.(*corev1.Pod)
+					if !ok {
+						continue
+					}
+					status := pod.Labels[constants.LDMBootStatusLabel]
+					if status == "" || status == last {
+						continue
+					}
+					fmt.Printf("Info: %s changed for pod %s: %q -> %q\n", constants.LDMBootStatusLabel, r.PodName, last, status)
+					ch <- status
+					last = status
+				}
+				watcher.Stop()
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}()
 }
 
 func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {

@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup;DataCopied
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;WaitingForLDMBootSuccess;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup;DataCopied
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -52,6 +52,11 @@ const (
 	VMMigrationPhaseAwaitingCutOverStartTime VMMigrationPhase = "AwaitingCutOverStartTime"
 	// VMMigrationPhaseAwaitingAdminCutOver indicates waiting for admin to initiate cutover
 	VMMigrationPhaseAwaitingAdminCutOver VMMigrationPhase = "AwaitingAdminCutOver"
+	// VMMigrationPhaseWaitingForLDMBootSuccess indicates the VM has been created on an
+	// emulated SATA bus because its system volume is on a Dynamic Disk (LDM), and the
+	// migration is waiting for an admin to confirm from the booted guest whether the
+	// virtio storage driver installed. This gate is independent of the cutover gate.
+	VMMigrationPhaseWaitingForLDMBootSuccess VMMigrationPhase = "WaitingForLDMBootSuccess"
 	// VMMigrationPhaseSucceeded indicates the migration completed successfully
 	VMMigrationPhaseSucceeded VMMigrationPhase = "Succeeded"
 	// VMMigrationPhaseFailed indicates the migration has failed
@@ -102,6 +107,24 @@ type MigrationSpec struct {
 
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
+
+	// LDMBootStatus is the admin's answer at the WaitingForLDMBootSuccess gate,
+	// which only applies to a guest whose system volume is on a Dynamic Disk (LDM).
+	// Such a guest is created on an emulated SATA bus because virt-v2v cannot
+	// convert it; a scratch virtio volume is attached so Windows installs the
+	// virtio storage driver on first boot.
+	//
+	//	success - driver confirmed loaded; recreate the VM on the virtio bus
+	//	finish  - leave the VM on SATA and complete the migration successfully
+	//	failed  - the migration is unusable; fail it and run the standard cleanup
+	//
+	// Empty means still waiting. A timeout at the gate is treated as "finish",
+	// because by then a working VM already exists and only an optimisation is
+	// outstanding. Deliberately separate from InitiateCutover so the cutover flow
+	// is untouched.
+	// +optional
+	// +kubebuilder:validation:Enum=success;finish;failed
+	LDMBootStatus string `json:"ldmBootStatus,omitempty"`
 
 	// DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
 	// after a successful migration to prevent network conflicts. Defaults to false.

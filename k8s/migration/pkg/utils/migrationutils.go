@@ -265,6 +265,26 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	return constants.StartCutOverYes
 }
 
+// SetLDMBootStatusLabel maps Migration.Spec.LDMBootStatus onto the pod label the
+// helper watches at the WaitingForLDMBootSuccess gate.
+//
+// Unlike SetCutoverLabel this is a straight pass-through of a value the admin
+// chose, and it is write-once: an answer is acted on immediately - the VM is
+// recreated, or the migration completes or fails - so a later change has nothing
+// left to affect and must not overwrite the record of what was decided. Unknown
+// values are ignored rather than published, so a typo cannot resolve the gate.
+func SetLDMBootStatusLabel(ldmBootStatus, currentLabel string) string {
+	if currentLabel != "" {
+		return currentLabel
+	}
+	switch ldmBootStatus {
+	case constants.LDMBootStatusSuccess, constants.LDMBootStatusFinish, constants.LDMBootStatusFailed:
+		return ldmBootStatus
+	default:
+		return currentLabel
+	}
+}
+
 // SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
 func SplitEventStringOnComma(input string) (reason, message string) {
 	// SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
