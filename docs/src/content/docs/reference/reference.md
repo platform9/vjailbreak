@@ -103,6 +103,49 @@ spec:
 
 ```
 - `osFamily` is optional. If not provided, the `osFamily` is retrieved from vCenter. If it can't be automatically determined, migration will not proceed.
+## MigrationBlueprint
+A `MigrationBlueprint` is a saved, reusable migration configuration — what the UI calls a **Migration Template**. See [Migration Templates](../../guides/how-to/migration_templates/) for the workflow.
+
+It is not the same object as the `MigrationTemplate` above. A `MigrationTemplate` is created per migration and drives an actual migration; a `MigrationBlueprint` is only read by the UI to pre-fill the migration form. The migration controller never reads it, and it holds no status.
+
+```yaml
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: MigrationBlueprint
+metadata:
+  name: production-rhel-east
+  namespace: migration-system
+spec:
+  displayName: Production RHEL · East
+  description: Cold copy into the east cluster <optional>
+  vmwareRef: name_of_VMwareCreds
+  vmwareClusterName: name_of_source_cluster
+  pcdRef: name_of_OpenstackCreds
+  targetPCDClusterName: name_of_target_PCD_cluster
+  networkMappings:
+    - source: VM Network
+      target: external-network
+  storageMappings:
+    - source: vmware-datastore
+      target: ceph
+  storageCopyMethod: normal
+  osFamily: windowsGuest/linuxGuest <optional>
+  migrationStrategy:
+    type: hot/cold
+    adminInitiatedCutOver: true/false
+  advancedOptions:
+    networkPersistence: true/false
+  securityGroups:
+    - default
+  serverGroup: name_of_server_group
+```
+
+- `displayName`: Required. The name shown in the Templates tab. The object's `metadata.name` is a sanitized form of it.
+- Every other field is optional, so a partially configured form can still be saved as a template.
+- `vmwareClusterName`, `targetPCDClusterName`: Cluster **names**, not IDs. The UI resolves them back to the form's cluster selections when the template is applied.
+- `networkMappings`, `storageMappings`, `arrayCredsMappings`: Inline copies of the mapping pairs, not references to `NetworkMapping` or `StorageMapping` objects. This keeps a template intact when those per-migration objects are deleted.
+- `storageCopyMethod`: One of `normal`, `vJailbreakAcceleratedCopy`, or `StorageAcceleratedCopy`. Defaults to `normal`. `proxyVMRef` applies to `vJailbreakAcceleratedCopy`; `arrayCredsMappings` applies to `StorageAcceleratedCopy`.
+- The VM selection is deliberately absent — VMs are chosen each time the template is used.
+
 ## MigrationPlan
 ```yaml
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
