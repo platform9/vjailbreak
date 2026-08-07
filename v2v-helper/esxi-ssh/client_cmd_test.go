@@ -3,6 +3,7 @@
 package esxissh
 
 import (
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -233,7 +234,12 @@ func TestQuotedPathsAreNotGlobbedOrExpanded(t *testing.T) {
 		"/vmfs/volumes/ds/$(echo pwned)/disk.vmdk",
 		"/vmfs/volumes/ds/`echo pwned`/disk.vmdk",
 		"/vmfs/volumes/ds/${HOME}/disk.vmdk",
+		"/vmfs/volumes/ds/$HOME/disk.vmdk",
 		"/vmfs/volumes/ds/*/disk.vmdk",
+		"/vmfs/volumes/ds/VM $# $@ $1/disk.vmdk",
+		"/vmfs/volumes/ds/x; touch /tmp/vjb-pwned/disk.vmdk",
+		"/vmfs/volumes/ds/x && touch /tmp/vjb-pwned/disk.vmdk",
+		"~/disk.vmdk",
 	}
 
 	for _, in := range hostile {
@@ -246,5 +252,38 @@ func TestQuotedPathsAreNotGlobbedOrExpanded(t *testing.T) {
 				t.Errorf("path was expanded by the shell\n got: %q\nwant: %q", got, in)
 			}
 		})
+	}
+}
+
+// TestHostileVMNameHasNoSideEffects asserts that a VM name crafted to inject a
+// command produces no side effects when the clone command is parsed by the
+// shell. A VM name is attacker-influenced input on shared vCenter estates.
+func TestHostileVMNameHasNoSideEffects(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not available")
+	}
+
+	dir := t.TempDir()
+	canary := dir + "/canary"
+
+	hostile := []string{
+		"/vmfs/volumes/ds/$(touch " + canary + ")/disk.vmdk",
+		"/vmfs/volumes/ds/`touch " + canary + "`/disk.vmdk",
+		"/vmfs/volumes/ds/x; touch " + canary + "/disk.vmdk",
+		"/vmfs/volumes/ds/x && touch " + canary + "/disk.vmdk",
+		"/vmfs/volumes/ds/x > " + canary + "/disk.vmdk",
+	}
+
+	for _, in := range hostile {
+		cmd := buildVmkfstoolsRDMCloneCmd(in, "/vmfs/devices/disks/naa.1", in)
+		args := strings.TrimPrefix(cmd, "vmkfstools ")
+		// Parse the arguments exactly as the shell would for vmkfstools.
+		if _, err := exec.Command("sh", "-c", "set -- "+args+"; echo $# >/dev/null").Output(); err != nil {
+			t.Fatalf("shell rejected command for %q: %v", in, err)
+		}
+	}
+
+	if _, err := os.Stat(canary); !os.IsNotExist(err) {
+		t.Fatalf("command injection succeeded: %s was created", canary)
 	}
 }
