@@ -16,6 +16,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -162,7 +163,7 @@ func (migobj *Migrate) DetachAllVolumes(ctx context.Context, vminfo vm.VMInfo) e
 func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo vm.VMInfo) error {
 	openstackops := migobj.Openstackclients
 
-	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	vjailbreakUUID, err := openstack.GetCurrentInstanceUUID()
 	if err != nil {
 		return errors.Wrap(err, "failed to get vJailbreak instance UUID")
 	}
@@ -213,7 +214,7 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 }
 
 func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
-	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
+	vjailbreakUUID, err := openstack.GetCurrentInstanceUUID()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vJailbreak instance UUID")
 	}
@@ -349,7 +350,7 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 		if err != nil {
 			return errors.Wrap(err, "failed to get OpenStack flavor")
 		}
-		if utils.IsHotplugFlavor(flavor) {
+		if openstack.IsHotplugFlavor(flavor) {
 			migobj.logMessage(fmt.Sprintf("Assigned flavor %s is a hotplug base flavor (0 vCPU, 0 RAM); VM will be created with hotplug metadata", flavor.Name))
 		}
 	} else {
