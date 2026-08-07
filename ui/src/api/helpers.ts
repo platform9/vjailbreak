@@ -117,26 +117,37 @@ export const createOpenstackCredsWithSecretFlow = async (
   // First create the secret
   await createOpenstackCredsSecret(secretName, credentials, namespace)
 
-  // Then create the OpenStack credentials with the label
-  const credBody: any = {
-    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
-    kind: 'OpenstackCreds',
-    metadata: {
-      name: credName,
-      namespace,
-      labels: {
-        'vjailbreak.k8s.pf9.io/is-pcd': isPcd ? 'true' : 'false'
-      }
-    },
-    spec: {
-      secretRef: {
-        name: secretName
+  try {
+    // Then create the OpenStack credentials with the label
+    const credBody: any = {
+      apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+      kind: 'OpenstackCreds',
+      metadata: {
+        name: credName,
+        namespace,
+        labels: {
+          'vjailbreak.k8s.pf9.io/is-pcd': isPcd ? 'true' : 'false'
+        }
       },
-      projectName: projectName
+      spec: {
+        secretRef: {
+          name: secretName
+        },
+        projectName: projectName
+      }
     }
-  }
 
-  return postOpenstackCredentials(credBody, namespace)
+    return await postOpenstackCredentials(credBody, namespace)
+  } catch (error) {
+    // If postOpenstackCredentials fails, clean up the orphaned secret so a
+    // retry with the same credName doesn't hit a stale "already exists" error
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (cleanupError) {
+      console.error(`Failed to clean up orphaned secret ${secretName}:`, cleanupError)
+    }
+    throw error
+  }
 }
 
 // Create VMware credentials with secret
@@ -149,12 +160,23 @@ export const createVMwareCredsWithSecretFlow = async (
 
   await createVMwareCredsSecret(secretName, credentials, namespace)
 
-  return createVMwareCredsWithSecret(
-    credName,
-    secretName,
-    namespace,
-    credentials.VCENTER_DATACENTER
-  )
+  try {
+    return await createVMwareCredsWithSecret(
+      credName,
+      secretName,
+      namespace,
+      credentials.VCENTER_DATACENTER
+    )
+  } catch (error) {
+    // If createVMwareCredsWithSecret fails, clean up the orphaned secret so a
+    // retry with the same credName doesn't hit a stale "already exists" error
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (cleanupError) {
+      console.error(`Failed to clean up orphaned secret ${secretName}:`, cleanupError)
+    }
+    throw error
+  }
 }
 
 export const deleteVMwareCredsWithSecretFlow = async (
