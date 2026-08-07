@@ -33,7 +33,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	utils "github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	constants "github.com/platform9/vjailbreak/pkg/common/constants"
-	v2vutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 )
 
 // RDMDiskReconciler reconciles a RDMDisk object
@@ -231,18 +230,12 @@ func (r *RDMDiskReconciler) handleManagingPhase(ctx context.Context, req ctrl.Re
 		if err != nil {
 			return ctrl.Result{}, handleError(ctx, r.Client, rdmDisk, "Error", "OpenStackClientCreationFailed", "Failed to create OpenStack client from options", err)
 		}
-		osclient := &v2vutils.OpenStackClients{
-			BlockStorageClient: openstackClient.BlockStorageClient,
-			ComputeClient:      openstackClient.ComputeClient,
-			NetworkingClient:   openstackClient.NetworkingClient,
-			K8sClient:          r.Client,
-		}
 
 		log.Info("Calling ImportLUNToCinder (this will block for ~10 seconds)",
 			"RDMDisk", rdmDisk.Name,
 			"resourceVersion", rdmDisk.ResourceVersion)
 
-		volumeID, err := utils.ImportLUNToCinder(ctx, osclient, *rdmDisk, blockStorageAPIVersion)
+		volumeID, err := utils.ImportLUNToCinder(ctx, openstackClient, *rdmDisk, blockStorageAPIVersion)
 		if err != nil {
 			log.Error(err, "Failed to import LUN to Cinder",
 				"RDMDisk", rdmDisk.Name,

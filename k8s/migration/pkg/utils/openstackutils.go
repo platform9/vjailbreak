@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
+	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
@@ -33,7 +32,7 @@ type Volume struct {
 }
 
 // ImportLUNToCinder imports a LUN into OpenStack Cinder and returns the volume ID.
-func ImportLUNToCinder(ctx context.Context, openstackClient *utils.OpenStackClients, rdmDisk v1alpha1.RDMDisk, volumeAPIVersion string) (string, error) {
+func ImportLUNToCinder(ctx context.Context, openstackClient *OpenStackClients, rdmDisk v1alpha1.RDMDisk, volumeAPIVersion string) (string, error) {
 	ctxlog := logf.FromContext(ctx)
 	ctxlog.Info("Importing LUN", "RDM CR", rdmDisk.Name, "DiskName", rdmDisk.Spec.DiskName)
 
@@ -105,7 +104,7 @@ func BuildVolumeManagePayload(rdmDisk v1alpha1.RDMDisk) (map[string]interface{},
 }
 
 // ExecuteVolumeManageRequest triggers the volume manage request and returns volume.
-func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk v1alpha1.RDMDisk, osclient *utils.OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
+func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk v1alpha1.RDMDisk, osclient *OpenStackClients, openstackAPIVersion string) (*volumes.Volume, error) {
 	body, err := BuildVolumeManagePayload(rdmDisk)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build volume manage payload: %w", err)
@@ -144,4 +143,30 @@ func ExecuteVolumeManageRequest(ctx context.Context, rdmDisk v1alpha1.RDMDisk, o
 	}
 
 	return &v, nil
+}
+
+// WaitForVolume polls until the Cinder volume reaches "available" status or times out.
+func (osclient *OpenStackClients) WaitForVolume(ctx context.Context, volumeID string) error {
+	const (
+		maxRetries    = 60
+		retryInterval = 10 * time.Second
+	)
+	ctxlog := logf.FromContext(ctx)
+	for i := 0; i < maxRetries; i++ {
+		vol, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
+		if err != nil {
+			ctxlog.V(1).Info("Transient error polling volume", "volumeID", volumeID, "attempt", i+1, "error", err)
+			time.Sleep(retryInterval)
+			continue
+		}
+		if vol.Status == "available" {
+			return nil
+		}
+		if vol.Status == "error" {
+			return fmt.Errorf("volume %s is in error state", volumeID)
+		}
+		ctxlog.V(1).Info("Waiting for volume to become available", "volumeID", volumeID, "status", vol.Status, "attempt", i+1)
+		time.Sleep(retryInterval)
+	}
+	return fmt.Errorf("volume %s did not become available within %s", volumeID, time.Duration(maxRetries)*retryInterval)
 }
