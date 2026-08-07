@@ -25,9 +25,9 @@ type ReporterOps interface {
 	GetPodName() error
 	GetPodNamespace() error
 	CreateKubernetesEvent(ctx context.Context, eventType, reason, message string) error
-	UpdatePodEvents(ch <-chan string)
+	UpdatePodEvents(ctx context.Context, ch <-chan string, ackChan chan<- struct{})
 	GetCutoverLabel() (string, error)
-	WatchPodLabels(ctx context.Context, ch chan<- string) error
+	WatchPodLabels(ctx context.Context, ch chan<- string)
 }
 
 type Reporter struct {
@@ -45,6 +45,10 @@ func IsRunningInPod() bool {
 		return false
 	}
 	return true
+}
+
+func (r *Reporter) IsRunningInPod() bool {
+	return IsRunningInPod()
 }
 
 func (r *Reporter) GetKubernetesClient() error {
