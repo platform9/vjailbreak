@@ -38,11 +38,13 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically cleanup OpenStack volumes after conversion failure | `false` | `true`, `false` |
 | `DEFAULT_MIGRATION_METHOD` | Default method for VM migration | `cold` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
 | `DEPLOYMENT_NAME` | Name of the vJailbreak deployment | `vJailbreak` | Any string |
+| `NTP_SERVERS` | NTP servers the appliance synchronizes against. | Empty (default public pools) | Space-separated hostnames or IPv4 addresses (e.g., `ntp1.corp.local ntp2.corp.local`) |
 | `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue OpenStack credentials validation | `60` | Any positive integer |
 | `PERIODIC_SYNC_INTERVAL` | Interval for periodic sync during admin cutover | `1h` | Duration format (e.g., `30m`, `1h`, `2h`) |
 | `PERIODIC_SYNC_MAX_RETRIES` | Maximum number of retries for periodic sync | `3` | Any positive integer |
 | `PERIODIC_SYNC_RETRY_CAP` | Maximum duration to retry periodic sync | `3h` | Duration format (e.g., `1h`, `3h`, `6h`) |
 | `POPULATE_VMWARE_MACHINE_FLAVORS` | Automatically populate flavor recommendations for VMware machines | `true` | `true`, `false` |
+| `TIMEZONE` | System time zone of the vJailbreak appliance. | Empty (UTC) | IANA time zone (e.g., `Asia/Calcutta`, `America/New_York`) |
 | `VALIDATE_RDM_OWNER_VMS` | Validates that all VMs linked to an RDM disk are migrated in a single migration plan | `true` | `true`, `false` |
 | `VCENTER_LOGIN_RETRY_LIMIT` | Number of retries for vCenter login attempts | `5` | Any positive integer |
 | `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
