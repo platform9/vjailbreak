@@ -54,7 +54,7 @@ type Migrate struct {
 	ServerGroup             string
 	RDMDisks                []string
 	TenantName              string
-	Reporter                reporter.ReporterOps
+	Reporter                *reporter.Reporter
 	FallbackToDHCP          bool
 	StorageCopyMethod       string
 	// Array credentials for StorageAcceleratedCopy storage migration
