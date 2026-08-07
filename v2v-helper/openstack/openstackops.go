@@ -12,7 +12,6 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 
 	gophercloud "github.com/gophercloud/gophercloud/v2"
@@ -121,7 +120,7 @@ func authOptionsFromEnv() (gophercloud.AuthOptions, error) {
 	return opts, nil
 }
 
-func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {
+func validateOpenStack(ctx context.Context, insecure bool) (*OpenStackClients, error) {
 	opts, err := authOptionsFromEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OpenStack auth options: %s", err)
@@ -171,7 +170,7 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 		return nil, fmt.Errorf("failed to create networking client: %s", err)
 	}
 
-	return &utils.OpenStackClients{
+	return &OpenStackClients{
 		BlockStorageClient: blockStorageClient,
 		ComputeClient:      computeClient,
 		NetworkingClient:   networkingClient,
@@ -181,7 +180,7 @@ func validateOpenStack(ctx context.Context, insecure bool) (*utils.OpenStackClie
 	}, nil
 }
 
-func NewOpenStackClients(ctx context.Context, insecure bool) (*utils.OpenStackClients, error) {
+func NewOpenStackClients(ctx context.Context, insecure bool) (*OpenStackClients, error) {
 	ostackclients, err := validateOpenStack(ctx, insecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to validate OpenStack connection: %s", err)
