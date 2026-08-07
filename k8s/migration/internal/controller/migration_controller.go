@@ -418,6 +418,18 @@ loop:
 		}
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
+		//
+		// Listed before the success case on purpose. An LDM guest emits
+		// "VM created successfully" when the VM comes up on SATA and only then opens
+		// this gate, so without this the migration reports Succeeded while it is
+		// still waiting for an answer. Mirrors the cutover case below: hold the phase
+		// only while the label is unset.
+		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForLDMBootSuccess) &&
+			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess]:
+			if pod.Labels[constants.LDMBootStatusLabel] == "" {
+				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
+				break loop
+			}
 		case strings.Contains(events.Items[i].Message, constants.EventMessageMigrationSucessful) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded

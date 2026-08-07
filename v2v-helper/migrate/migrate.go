@@ -387,7 +387,14 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 	return nil
 }
 
-func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+// resolveTargetServerID returns the ID of the server the boot volume is attached
+// to, whatever state that server is in.
+//
+// Kept separate from verifyVMCreatedDespiteTimeout, which additionally insists the
+// server is ACTIVE. That is right for its own purpose but wrong for the LDM
+// promotion, where the admin is told to shut the guest down cleanly first - so it
+// is SHUTOFF by design and an ACTIVE check rejects every promotion.
+func (migobj *Migrate) resolveTargetServerID(ctx context.Context, vminfo vm.VMInfo) (string, error) {
 	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vJailbreak instance UUID")
@@ -416,6 +423,14 @@ func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo
 	attachedServerID := volume.Attachments[0].ServerID
 	if attachedServerID == vjailbreakUUID {
 		return "", fmt.Errorf("boot volume is still attached to vJailbreak VM")
+	}
+	return attachedServerID, nil
+}
+
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+	attachedServerID, err := migobj.resolveTargetServerID(ctx, vminfo)
+	if err != nil {
+		return "", err
 	}
 
 	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
@@ -2408,6 +2423,11 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.VMInfo,
 	networkids, portids, ipaddresses []string, espDiskIndex int, vcenterSettings *k8sutils.VjailbreakSettings) error {
 
+	// Emitted first and matched by the controller to hold the phase at
+	// WaitingForLDMBootSuccess; without it the migration reports Succeeded from the
+	// earlier "VM created successfully" event while this gate is still waiting.
+	migobj.logMessage(constants.EventMessageWaitingForLDMBootSuccess)
+
 	migobj.logMessage(fmt.Sprintf(
 		"VM is running on an emulated SATA bus with a virtio probe disk attached. "+
 			"Log in and confirm the virtio storage driver installed, then answer this gate. "+
@@ -2492,9 +2512,10 @@ func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
 func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VMInfo,
 	networkids, portids, ipaddresses []string, espDiskIndex int) error {
 
-	// Resolved from the boot volume's attachment rather than by name, which is the
-	// same trick verifyVMCreatedDespiteTimeout uses and needs no new API surface.
-	serverID, err := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo)
+	// Resolved from the boot volume's attachment, with no state requirement: the
+	// admin was asked to shut the guest down before answering, so it is expected
+	// to be SHUTOFF here.
+	serverID, err := migobj.resolveTargetServerID(ctx, vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to locate the migrated VM before promotion")
 	}

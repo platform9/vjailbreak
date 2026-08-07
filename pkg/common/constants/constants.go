@@ -404,6 +404,7 @@ const (
 	EventMessageWaitingForDataCopyStart           = "Waiting for data copy start time"
 	EventMessageDataCopyStart                     = "Data copy start time reached"
 	EventMessageWaitingForAdminCutOver            = "Waiting for Admin Cutover conditions to be met"
+	EventMessageWaitingForLDMBootSuccess          = "Waiting for LDM boot confirmation"
 	EventMessagePeriodicSyncWarning               = "Periodic Sync: In WARNING state - manual intervention required"
 	EventMessageMigrationSucessful                = "VM created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
@@ -712,8 +713,13 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks: 14,
 		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:       15,
 		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:           16,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:            17,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:              18,
+		// The LDM gate opens after the VM has been created, so it ranks alongside
+		// Succeeded rather than before it: the guard in the controller is "current
+		// <= target", and an equal rank lets the phase move in both directions -
+		// into the gate once the VM exists, and on to Succeeded once it is answered.
+		vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess: 17,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                17,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  18,
 	}
 
 	// MigrationJobTTL is the TTL for migration job
