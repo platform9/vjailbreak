@@ -1257,7 +1257,7 @@ func (osclient *OpenStackClients) GetServerStatus(ctx context.Context, serverID 
 
 func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID string) error {
 	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: Deleting server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
-	return DoRetryWithExponentialBackoff(ctx, func() error {
+	return pkgutils.DoRetryWithExponentialBackoff(ctx, func() error {
 		return servers.Delete(ctx, osclient.ComputeClient, serverID).ExtractErr()
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
