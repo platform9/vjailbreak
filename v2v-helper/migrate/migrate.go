@@ -2736,14 +2736,10 @@ func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
 	if volumeID == "" {
 		return
 	}
+	// DeleteVolume treats a 404 as success, which is the usual outcome here: the
+	// probe carries delete_on_termination, so Nova removes it along with the
+	// server the promotion just deleted.
 	if err := migobj.Openstackclients.DeleteVolume(ctx, volumeID); err != nil {
-		// The probe carries delete_on_termination, so Nova usually removes it with
-		// the server the promotion just deleted. A 404 means that already happened
-		// and is the expected outcome, not a failure.
-		if strings.Contains(err.Error(), "404") || strings.Contains(strings.ToLower(err.Error()), "could not be found") {
-			migobj.logMessage(fmt.Sprintf("Virtio probe volume %s was already removed with the server", volumeID))
-			return
-		}
 		migobj.logMessage(fmt.Sprintf("Warning: failed to delete the virtio probe volume %s: %v", volumeID, err))
 		return
 	}

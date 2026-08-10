@@ -241,6 +241,15 @@ func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID str
 		if err == nil {
 			return nil
 		}
+		// A 404 is the goal state, not a transient failure - the volume is gone,
+		// so deletion has succeeded. This happens routinely with volumes carrying
+		// delete_on_termination, which Nova removes along with the server. Retrying
+		// can never turn it into a 204, so return immediately instead of burning
+		// the full retry budget on a fixed outcome.
+		if gophercloud.ResponseCodeIs(err, http.StatusNotFound) {
+			PrintLog(fmt.Sprintf("Volume %s no longer exists; treating delete as successful", volumeID))
+			return nil
+		}
 		PrintLog(fmt.Sprintf("Transient error deleting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
 		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
