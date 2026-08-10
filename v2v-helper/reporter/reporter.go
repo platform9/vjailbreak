@@ -289,8 +289,15 @@ func (r *Reporter) WatchLDMBootStatusLabel(ctx context.Context, ch chan<- string
 						continue
 					}
 					fmt.Printf("Info: %s changed for pod %s: %q -> %q\n", constants.LDMBootStatusLabel, r.PodName, last, status)
-					ch <- status
-					last = status
+					// Same shutdown race as the cutover watcher: this goroutine
+					// outlives main, so drop a late event rather than panicking.
+					select {
+					case <-ctx.Done():
+						watcher.Stop()
+						return
+					case ch <- status:
+						last = status
+					}
 				}
 				watcher.Stop()
 				time.Sleep(5 * time.Second)
@@ -331,9 +338,16 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					if cutover, ok := pod.Labels["startCutover"]; ok {
 						if cutover != originalStartCutover {
 							fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
-							ch <- cutover
-							fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
-							originalStartCutover = cutover
+							// Never send blindly. This goroutine outlives main, so a
+							// bare send races with shutdown; selecting on ctx.Done()
+							// means a late event is dropped instead of panicking.
+							select {
+							case <-ctx.Done():
+								return
+							case ch <- cutover:
+								fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+								originalStartCutover = cutover
+							}
 						}
 					}
 				}
