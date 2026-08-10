@@ -143,5 +143,13 @@ export default function CommonDataGrid<R extends GridValidRowModel>(props: Commo
     return [baseSx, sx]
   })()
 
-  return <DataGrid {...rest} slots={mergedSlots} slotProps={mergedSlotProps} sx={mergedSx} />
+  return (
+    <DataGrid
+      disableColumnFilter
+      {...rest}
+      slots={mergedSlots}
+      slotProps={mergedSlotProps}
+      sx={mergedSx}
+    />
+  )
 }
