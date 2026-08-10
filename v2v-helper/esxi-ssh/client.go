@@ -235,8 +235,8 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	// Use vmkfstools -i (clone/import) which automatically uses XCOPY on StorageAcceleratedCopy-capable storage
 	// -d thin creates thin provisioned disk (can also use eagerzeroedthick, zeroedthick)
 	// Capture output to log file for debugging
-	command := fmt.Sprintf("vmkfstools -i %s %s -d thin >%s 2>&1 & echo $!",
-		shellQuote(sourceVMDK), shellQuote(targetLUN), shellQuote(logFile))
+	command := wrapWithExitSentinel(
+		fmt.Sprintf("vmkfstools -i %s %s -d thin", sourceVMDK, targetLUN), logFile)
 
 	output, err := c.ExecuteCommand(command)
 	if err != nil {
@@ -247,10 +247,12 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	log.Printf("Started vmkfstools clone with PID: %s, log: %s", pid, logFile)
 
 	// Return task info with PID so we can check status later
+	// LogFile must be set for the tracker to verify completion (issue #2270)
 	task := &VmkfstoolsTask{
 		TaskId:   fmt.Sprintf("vmkfstools-clone-%s", pid),
 		Pid:      0, // Will be parsed from output
 		LastLine: fmt.Sprintf("Clone started with PID %s, log: %s", pid, logFile),
+		LogFile:  logFile,
 	}
 
 	// Try to parse PID
@@ -377,8 +379,9 @@ func (c *Client) StartVmkfstoolsRDMClone(sourceVMDK, targetDevicePath string) (*
 	log.Printf("%s", vmkfstoolsCmd)
 	log.Printf("===========================")
 
-	// Run vmkfstools in background
-	command := fmt.Sprintf("%s >%s 2>&1 & echo $!", vmkfstoolsCmd, shellQuote(logFile))
+	// Run vmkfstools in background, capturing its exit status in the log so the
+	// tracker can tell real completion from an early failure (issue #2270)
+	command := wrapWithExitSentinel(vmkfstoolsCmd, logFile)
 	log.Printf("Executing background command: %s", command)
 
 	output, err := c.ExecuteCommand(command)
