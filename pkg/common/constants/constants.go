@@ -271,6 +271,39 @@ const (
 	// StartCutOverNo is the value for start cut over no
 	StartCutOverNo = "no"
 
+	// LDMBootStatusLabel is the pod label carrying the admin's answer at the
+	// WaitingForLDMBootSuccess gate. Deliberately separate from "startCutover" so
+	// the cutover flow is untouched.
+	LDMBootStatusLabel = "ldmBootStatus"
+
+	// LDMBootStatusSuccess means the admin confirmed the virtio storage driver
+	// installed in the booted guest; the VM is recreated on the virtio bus.
+	LDMBootStatusSuccess = "success"
+
+	// LDMBootStatusFinish means leave the VM on the emulated SATA bus and complete
+	// the migration successfully. This is also what a gate timeout resolves to: a
+	// working VM already exists by then and only an optimisation is outstanding.
+	LDMBootStatusFinish = "finish"
+
+	// LDMBootStatusFailed means the migration is unusable and should be failed and
+	// cleaned up. Destructive - it discards the migrated VM.
+	LDMBootStatusFailed = "failed"
+
+	// LDMShutdownTimeout bounds the wait for the guest to reach SHUTOFF before the
+	// promotion deletes it. Generous, because a Windows shutdown can be slow, but
+	// not fatal on expiry - the delete proceeds regardless.
+	LDMShutdownTimeout = 10 * time.Minute
+
+	// LDMShutdownPollInterval is how often the instance status is checked while
+	// waiting for the ACPI shutdown to take effect.
+	LDMShutdownPollInterval = 10 * time.Second
+
+	// LDMBootGateTimeout bounds the WaitingForLDMBootSuccess gate. The helper pod
+	// has RestartPolicy: Never and nothing recreates it, so the wait cannot be
+	// unbounded; it must also be shorter than any node maintenance cycle that
+	// would evict the pod. Resolves to LDMBootStatusFinish on expiry.
+	LDMBootGateTimeout = 24 * time.Hour
+
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
 
@@ -380,6 +413,8 @@ const (
 	EventMessageWaitingForDataCopyStart           = "Waiting for data copy start time"
 	EventMessageDataCopyStart                     = "Data copy start time reached"
 	EventMessageWaitingForAdminCutOver            = "Waiting for Admin Cutover conditions to be met"
+	EventMessageWaitingForLDMBootSuccess          = "Waiting for LDM boot confirmation"
+	EventMessagePromotingLDMGuest                 = "Recreating the VM on the virtio bus"
 	EventMessagePeriodicSyncWarning               = "Periodic Sync: In WARNING state - manual intervention required"
 	EventMessageMigrationSucessful                = "VM created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
@@ -688,8 +723,13 @@ runcmd:
 		vjailbreakv1alpha1.VMMigrationPhaseCopyingChangedBlocks: 14,
 		vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk:       15,
 		vjailbreakv1alpha1.VMMigrationPhaseDataCopied:           16,
-		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:            17,
-		vjailbreakv1alpha1.VMMigrationPhaseUnknown:              18,
+		// The LDM gate opens after the VM has been created, so it ranks alongside
+		// Succeeded rather than before it: the guard in the controller is "current
+		// <= target", and an equal rank lets the phase move in both directions -
+		// into the gate once the VM exists, and on to Succeeded once it is answered.
+		vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess: 17,
+		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                17,
+		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  18,
 	}
 
 	// MigrationJobTTL is the TTL for migration job

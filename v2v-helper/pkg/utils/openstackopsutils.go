@@ -1137,6 +1137,25 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		})
 	}
 
+	// A guest whose system volume is on a Dynamic Disk (LDM) boots on an emulated
+	// bus, because virt-v2v cannot convert it and so never makes a virtio storage
+	// driver boot-critical. Attaching one scratch volume on the virtio bus gives
+	// Windows a real device to install viostor against on first boot, which is the
+	// prerequisite for ever moving the root disk to virtio. Nova fixes disk_bus in
+	// the BDM at create time, so this cannot be added to a running instance later.
+	if vminfo.LDMProbeVolumeID != "" {
+		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
+			DeleteOnTermination: true,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.LDMProbeVolumeID,
+			DiskBus:             "virtio",
+			BootIndex:           -1,
+		})
+		PrintLog(fmt.Sprintf("Attaching virtio probe volume %s to LDM guest %s so Windows installs the virtio storage driver on first boot",
+			vminfo.LDMProbeVolumeID, vminfo.Name))
+	}
+
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
 	if serverGroupID != "" {
@@ -1240,6 +1259,27 @@ func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID str
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
 	return DoRetryWithExponentialBackoff(ctx, func() error {
 		return servers.Delete(ctx, osclient.ComputeClient, serverID).ExtractErr()
+	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
+}
+
+// StopServer issues an ACPI shutdown to the guest and returns as soon as Nova has
+// accepted the request. Callers that need the instance to actually be down must
+// poll GetServerStatus for SHUTOFF.
+//
+// Treats an already-stopped instance as success: Nova returns 409 Conflict when
+// the server is not in a state it can stop from, and for our purposes "already
+// off" is the outcome we wanted.
+func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+
+	status, err := osclient.GetServerStatus(ctx, serverID)
+	if err == nil && strings.EqualFold(status, "SHUTOFF") {
+		PrintLog(fmt.Sprintf("Server %s is already SHUTOFF", serverID))
+		return nil
+	}
+
+	return DoRetryWithExponentialBackoff(ctx, func() error {
+		return servers.Stop(ctx, osclient.ComputeClient, serverID).ExtractErr()
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 

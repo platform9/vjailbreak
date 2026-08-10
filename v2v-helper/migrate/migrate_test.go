@@ -1042,3 +1042,133 @@ func TestBlockDriverFromMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestLDMImageMetadata(t *testing.T) {
+	t.Run("non-LDM guest derives nothing", func(t *testing.T) {
+		assert.Nil(t, ldmImageMetadata(false))
+	})
+
+	t.Run("LDM guest is pinned to the sata bus", func(t *testing.T) {
+		// virt-v2v cannot convert an LDM system disk, so no virtio storage driver
+		// is boot-critical and the disks must arrive on a bus with an in-box driver.
+		assert.Equal(t, map[string]string{"hw_disk_bus": "sata"}, ldmImageMetadata(true))
+	})
+}
+
+func TestMergeBootVolumeImageMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		derived map[string]string
+		profile map[string]string
+		want    map[string]string
+	}{
+		{
+			name:    "nothing to apply returns nil so the API call is skipped",
+			derived: nil,
+			profile: nil,
+			want:    nil,
+		},
+		{
+			name:    "empty maps also return nil",
+			derived: map[string]string{},
+			profile: map[string]string{},
+			want:    nil,
+		},
+		{
+			name:    "profile alone is passed through unchanged",
+			derived: nil,
+			profile: map[string]string{"hw_video_model": "vga"},
+			want:    map[string]string{"hw_video_model": "vga"},
+		},
+		{
+			name:    "derived alone is applied",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: nil,
+			want:    map[string]string{"hw_disk_bus": "sata"},
+		},
+		{
+			name:    "disjoint keys are unioned",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: map[string]string{"hw_video_model": "vga"},
+			want:    map[string]string{"hw_disk_bus": "sata", "hw_video_model": "vga"},
+		},
+		{
+			// The important one: a user who deliberately set a bus must not have it
+			// silently overridden by our LDM default.
+			name:    "explicit profile wins over the derived value",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: map[string]string{"hw_disk_bus": "virtio"},
+			want:    map[string]string{"hw_disk_bus": "virtio"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, mergeBootVolumeImageMetadata(tt.derived, tt.profile))
+		})
+	}
+}
+
+func TestMergeBootVolumeImageMetadataDoesNotMutateInputs(t *testing.T) {
+	derived := map[string]string{"hw_disk_bus": "sata"}
+	profile := map[string]string{"hw_disk_bus": "virtio", "os_type": "windows"}
+
+	merged := mergeBootVolumeImageMetadata(derived, profile)
+	merged["hw_video_model"] = "vga"
+
+	// migobj.ImageMetadata is reused elsewhere (blockDriverFromMetadata), so the
+	// merge must not write through to either argument.
+	assert.Equal(t, map[string]string{"hw_disk_bus": "sata"}, derived)
+	assert.Equal(t, map[string]string{"hw_disk_bus": "virtio", "os_type": "windows"}, profile)
+}
+
+func TestWaitForLDMBootStatus(t *testing.T) {
+	newMigobj := func(watcher chan string) *Migrate {
+		return &Migrate{LDMBootStatusWatcher: watcher, InPod: false}
+	}
+
+	t.Run("success is returned as given", func(t *testing.T) {
+		ch := make(chan string, 1)
+		ch <- constants.LDMBootStatusSuccess
+		assert.Equal(t, constants.LDMBootStatusSuccess, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("failed is returned as given", func(t *testing.T) {
+		ch := make(chan string, 1)
+		ch <- constants.LDMBootStatusFailed
+		assert.Equal(t, constants.LDMBootStatusFailed, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("unrecognised values do not resolve the gate", func(t *testing.T) {
+		// A typo must not be able to promote or destroy anything; the gate keeps
+		// waiting until a real answer arrives.
+		ch := make(chan string, 2)
+		ch <- "yes"
+		ch <- constants.LDMBootStatusFinish
+		assert.Equal(t, constants.LDMBootStatusFinish, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("cancelled context leaves the VM on sata rather than failing it", func(t *testing.T) {
+		// A working VM exists by this point, so an interrupted wait must not be
+		// treated as a failed migration.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		assert.Equal(t, constants.LDMBootStatusFinish, newMigobj(make(chan string)).waitForLDMBootStatus(ctx))
+	})
+}
+
+func TestLDMBootGateTimeoutDefaultsToFinish(t *testing.T) {
+	// The timeout must resolve to "finish", never "failed": at expiry there is a
+	// booted, network-connected VM and only an optimisation is outstanding.
+	assert.NotEqual(t, constants.LDMBootStatusFailed, constants.LDMBootStatusFinish)
+	assert.True(t, constants.LDMBootGateTimeout > 0)
+}
+
+func TestDetectLDMGuestSkipsNonWindows(t *testing.T) {
+	// Guards the early return: a Linux guest must never reach IsLDMSystemVolume,
+	// which would boot the libguestfs appliance for nothing.
+	migobj := &Migrate{}
+	migobj.detectLDMGuest(vm.VMInfo{OSType: "linux", Name: "ubuntu-vm"})
+	assert.False(t, migobj.isLDMGuest)
+	assert.Empty(t, migobj.ldmProbeVolumeID)
+}

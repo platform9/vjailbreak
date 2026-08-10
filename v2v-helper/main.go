@@ -34,14 +34,19 @@ func main() {
 
 	eventReporterChan := make(chan string)
 	podLabelWatcherChan := make(chan string)
+	ldmBootStatusChan := make(chan string)
 	ackChan := make(chan struct{})
 
 	defer close(eventReporterChan)
 	defer close(podLabelWatcherChan)
+	defer close(ldmBootStatusChan)
 
 	// Start reporter goroutines
 	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
 	eventReporter.WatchPodLabels(ctx, podLabelWatcherChan)
+	// Second watch on the same pod, for the LDM boot gate. Kept separate so the
+	// cutover watcher and its channel type stay untouched.
+	eventReporter.WatchLDMBootStatusLabel(ctx, ldmBootStatusChan)
 
 	// Helper function to report and handle errors
 	handleError := func(msg string) {
@@ -146,6 +151,7 @@ func main() {
 		Nbdops:                  []nbd.NBDOperations{},
 		EventReporter:           eventReporterChan,
 		PodLabelWatcher:         podLabelWatcherChan,
+		LDMBootStatusWatcher:    ldmBootStatusChan,
 		InPod:                   reporter.IsRunningInPod(),
 		MigrationTimes: migrate.MigrationTimes{
 			DataCopyStart:  starttime,

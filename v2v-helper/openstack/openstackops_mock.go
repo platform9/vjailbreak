@@ -144,6 +144,20 @@ func (mr *MockOpenstackOperationsMockRecorder) DeleteServer(ctx, serverID interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteServer", reflect.TypeOf((*MockOpenstackOperations)(nil).DeleteServer), ctx, serverID)
 }
 
+// StopServer mocks base method.
+func (m *MockOpenstackOperations) StopServer(ctx context.Context, serverID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopServer", ctx, serverID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopServer indicates an expected call of StopServer.
+func (mr *MockOpenstackOperationsMockRecorder) StopServer(ctx, serverID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopServer", reflect.TypeOf((*MockOpenstackOperations)(nil).StopServer), ctx, serverID)
+}
+
 // DeleteVolume mocks base method.
 func (m *MockOpenstackOperations) DeleteVolume(ctx context.Context, volumeID string) error {
 	m.ctrl.T.Helper()

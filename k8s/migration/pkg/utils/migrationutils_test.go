@@ -561,3 +561,67 @@ func TestCleanFailureMessage(t *testing.T) {
 		})
 	}
 }
+
+func TestLDMGateHoldsPhase(t *testing.T) {
+	at := func(message string, offset time.Duration) corev1.Event {
+		e := makeEvent(constants.MigrationReason, message)
+		e.CreationTimestamp = metav1.NewTime(time.Now().Add(offset))
+		return e
+	}
+
+	t.Run("no gate event means this is not an LDM migration", func(t *testing.T) {
+		events := []corev1.Event{at(constants.EventMessageMigrationSucessful, 0)}
+		if LDMGateHoldsPhase(events, "") {
+			t.Error("held the phase for a migration that never reached the gate")
+		}
+	})
+
+	t.Run("unanswered gate holds regardless of event order", func(t *testing.T) {
+		// The two events land in the same second and sort.Slice is not stable, so
+		// both orders must give the same answer. This is the bug that made the
+		// phase come out Succeeded on some reconciles and correct on others.
+		success := at(constants.EventMessageMigrationSucessful, 0)
+		gate := at(constants.EventMessageWaitingForLDMBootSuccess, 0)
+
+		for _, events := range [][]corev1.Event{{success, gate}, {gate, success}} {
+			if !LDMGateHoldsPhase(events, "") {
+				t.Error("did not hold the phase while the gate was unanswered")
+			}
+		}
+	})
+
+	t.Run("finish releases immediately", func(t *testing.T) {
+		events := []corev1.Event{
+			at(constants.EventMessageMigrationSucessful, 0),
+			at(constants.EventMessageWaitingForLDMBootSuccess, 0),
+		}
+		if LDMGateHoldsPhase(events, constants.LDMBootStatusFinish) {
+			t.Error("held the phase after the operator chose to stay on SATA")
+		}
+	})
+
+	t.Run("success holds while the rebuild is running", func(t *testing.T) {
+		// The only success event so far is the older one from the SATA build; it
+		// must not be mistaken for the rebuilt VM reporting in.
+		events := []corev1.Event{
+			at(constants.EventMessageMigrationSucessful, -10*time.Minute),
+			at(constants.EventMessageWaitingForLDMBootSuccess, -10*time.Minute),
+			at(constants.EventMessagePromotingLDMGuest, -1*time.Minute),
+		}
+		if !LDMGateHoldsPhase(events, constants.LDMBootStatusSuccess) {
+			t.Error("released the phase while the VM was still being rebuilt")
+		}
+	})
+
+	t.Run("success releases once the rebuilt VM reports success", func(t *testing.T) {
+		events := []corev1.Event{
+			at(constants.EventMessageMigrationSucessful, -10*time.Minute),
+			at(constants.EventMessageWaitingForLDMBootSuccess, -10*time.Minute),
+			at(constants.EventMessagePromotingLDMGuest, -5*time.Minute),
+			at(constants.EventMessageMigrationSucessful, 0),
+		}
+		if LDMGateHoldsPhase(events, constants.LDMBootStatusSuccess) {
+			t.Error("held the phase after the rebuild completed")
+		}
+	})
+}

@@ -265,6 +265,77 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	return constants.StartCutOverYes
 }
 
+// SetLDMBootStatusLabel maps Migration.Spec.LDMBootStatus onto the pod label the
+// helper watches at the WaitingForLDMBootSuccess gate.
+//
+// Unlike SetCutoverLabel this is a straight pass-through of a value the admin
+// chose, and it is write-once: an answer is acted on immediately - the VM is
+// recreated, or the migration completes or fails - so a later change has nothing
+// left to affect and must not overwrite the record of what was decided. Unknown
+// values are ignored rather than published, so a typo cannot resolve the gate.
+func SetLDMBootStatusLabel(ldmBootStatus, currentLabel string) string {
+	if currentLabel != "" {
+		return currentLabel
+	}
+	switch ldmBootStatus {
+	case constants.LDMBootStatusSuccess, constants.LDMBootStatusFinish, constants.LDMBootStatusFailed:
+		return ldmBootStatus
+	default:
+		return currentLabel
+	}
+}
+
+// LDMGateHoldsPhase reports whether a migration is sitting at the LDM boot gate, or
+// working through the promotion the operator asked for, and so must not be reported
+// as Succeeded yet.
+//
+// Deliberately independent of event ordering. The helper emits "VM created
+// successfully" and the gate event in the same instant; Event.CreationTimestamp has
+// one-second granularity and the caller sorts with sort.Slice, which is not stable,
+// so with equal timestamps either can come first. Ordering therefore cannot be
+// trusted to decide the waiting case - the label can, and it is authoritative.
+//
+// Only the "still promoting" case compares timestamps, and that is safe: the
+// promotion takes minutes, so its event and the recreate's success event are always
+// seconds apart at least.
+func LDMGateHoldsPhase(events []corev1.Event, ldmBootStatus string) bool {
+	newest := func(marker string) (metav1.Time, bool) {
+		var found metav1.Time
+		var ok bool
+		for i := range events {
+			if !strings.Contains(events[i].Message, marker) {
+				continue
+			}
+			if !ok || found.Before(&events[i].CreationTimestamp) {
+				found, ok = events[i].CreationTimestamp, true
+			}
+		}
+		return found, ok
+	}
+
+	if _, gateSeen := newest(constants.EventMessageWaitingForLDMBootSuccess); !gateSeen {
+		return false
+	}
+
+	// Unanswered: definitively still waiting, whatever order the events arrived in.
+	if ldmBootStatus == "" {
+		return true
+	}
+
+	// Answered. "finish" and "failed" complete immediately and never emit this, so
+	// its absence means there is nothing left to wait for.
+	promotedAt, promoting := newest(constants.EventMessagePromotingLDMGuest)
+	if !promoting {
+		return false
+	}
+
+	// The promotion is done once the rebuilt VM reports success, which is strictly
+	// newer than the promotion starting. The success event from the first, SATA
+	// build is older and must not be mistaken for it.
+	succeededAt, succeeded := newest(constants.EventMessageMigrationSucessful)
+	return !succeeded || !promotedAt.Before(&succeededAt)
+}
+
 // SplitEventStringOnComma splits a string by comma and returns a slice of substrings.
 func SplitEventStringOnComma(input string) (reason, message string) {
 	// SplitEventStringOnComma splits a string by comma and returns a slice of substrings.

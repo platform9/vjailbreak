@@ -12,7 +12,7 @@ import { Phase } from '../api/migrations'
 import MigrationProgress from '../components/MigrationProgress'
 import MigrationStatusChip from '../components/MigrationStatusChip'
 import { calculateTimeElapsed, formatDateTime } from 'src/utils'
-import { TriggerAdminCutoverButton } from '.'
+import { TriggerAdminCutoverButton, LDMBootGateButton } from '.'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover, deleteMigration } from '../api/migrations'
 import { ConfirmationDialog } from 'src/components/dialogs'
@@ -153,6 +153,9 @@ export default function MigrationsTable({
             Phase.ConvertingDisk,
             Phase.AwaitingCutOverStartTime,
             Phase.AwaitingAdminCutOver,
+            // Either waiting for the operator, or rebuilding the VM on virtio after
+            // they answered - active either way, and the row must keep refreshing.
+            Phase.WaitingForLDMBootSuccess,
             Phase.Unknown
           ])
           const isInProgress = activePhases.has(phase)
@@ -398,6 +401,9 @@ export default function MigrationsTable({
           }
 
           const showAdminCutover = initiateCutover && phase === Phase.AwaitingAdminCutOver
+          // No spec flag to gate on here: an LDM guest always reaches this phase,
+          // and it is the only way to answer without kubectl.
+          const showLDMBootGate = phase === Phase.WaitingForLDMBootSuccess
 
           return (
             <Box
@@ -435,6 +441,13 @@ export default function MigrationsTable({
               {showAdminCutover && (
                 <TriggerAdminCutoverButton
                   migrationName={migrationName}
+                  onSuccess={() => params.row.refetchMigrations?.()}
+                />
+              )}
+              {showLDMBootGate && (
+                <LDMBootGateButton
+                  migrationName={migrationName}
+                  namespace={namespace}
                   onSuccess={() => params.row.refetchMigrations?.()}
                 />
               )}

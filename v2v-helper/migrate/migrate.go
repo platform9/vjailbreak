@@ -105,7 +105,33 @@ type Migrate struct {
 	// When true, port reservation and VM creation are skipped and a DataCopied
 	// phase is reported instead of Succeeded.
 	DataOnly bool
+
+	// isLDMGuest is set once during ConvertVolumes when the Windows system volume
+	// is found on a Dynamic Disk (LDM). ConvertVolumes must know this before it
+	// applies image metadata, and performDiskConversion needs the same answer
+	// later, so it is resolved once and carried here rather than probed twice.
+	isLDMGuest bool
+	// ldmProbeVolumeID is the scratch volume created for an LDM guest and attached
+	// on the virtio bus at server create. See vm.VMInfo.LDMProbeVolumeID.
+	ldmProbeVolumeID string
+	// LDMBootStatusWatcher delivers the admin's answer at the
+	// WaitingForLDMBootSuccess gate. Separate from PodLabelWatcher so the cutover
+	// wait loop and its channel type are untouched.
+	LDMBootStatusWatcher chan string
 }
+
+const (
+	// ldmProbeVolumeSuffix names the scratch volume so it is recognisable as ours.
+	ldmProbeVolumeSuffix = "-virtio-probe"
+	// diskBusSATA is what an LDM guest must boot on initially: virt-v2v cannot
+	// convert it, so it has no virtio storage driver loaded and storahci is in-box.
+	diskBusSATA = "sata"
+	// diskBusVirtio is the bus an LDM guest is promoted to once the virtio storage
+	// driver has actually been installed against the probe device.
+	diskBusVirtio = "virtio"
+	// imagePropDiskBus is the Nova/Cinder image property naming the disk bus.
+	imagePropDiskBus = "hw_disk_bus"
+)
 
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
@@ -361,7 +387,14 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 	return nil
 }
 
-func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+// resolveTargetServerID returns the ID of the server the boot volume is attached
+// to, whatever state that server is in.
+//
+// Kept separate from verifyVMCreatedDespiteTimeout, which additionally insists the
+// server is ACTIVE. That is right for its own purpose but wrong for the LDM
+// promotion, where the admin is told to shut the guest down cleanly first - so it
+// is SHUTOFF by design and an ACTIVE check rejects every promotion.
+func (migobj *Migrate) resolveTargetServerID(ctx context.Context, vminfo vm.VMInfo) (string, error) {
 	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vJailbreak instance UUID")
@@ -390,6 +423,14 @@ func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo
 	attachedServerID := volume.Attachments[0].ServerID
 	if attachedServerID == vjailbreakUUID {
 		return "", fmt.Errorf("boot volume is still attached to vJailbreak VM")
+	}
+	return attachedServerID, nil
+}
+
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+	attachedServerID, err := migobj.resolveTargetServerID(ctx, vminfo)
+	if err != nil {
+		return "", err
 	}
 
 	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
@@ -1421,9 +1462,32 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	persisNetwork := utils.GetNetworkPersistance(ctx, migobj.K8sClient)
 	removeVMwareTools := utils.GetRemoveVMwareTools(ctx, migobj.K8sClient)
 
+	// The explicit CONVERT=false switch skips this whole phase - unchanged behaviour.
+	// Marking the volumes bootable lives at the end of the function, so returning
+	// early skips it too and Nova then rejects the server create with
+	// "Block Device <id> is not bootable".
 	if !migobj.Convert {
-		return nil
+		return migobj.markBootVolumesBootable(ctx, vminfo, bootVolumeIndex, espDiskIndex)
 	}
+
+	// A Windows system volume on a Dynamic Disk (LDM) cannot be converted by
+	// virt-v2v: upstream documents it as unsupported and has no guard for it, so
+	// conversion either produces an unbootable disk or wedges with the disks half
+	// written.
+	//
+	// Two things are skipped for an LDM guest, and nothing else: virt-v2v-in-place,
+	// and the offline VMware Tools cleanup. Everything else in this function is ours
+	// and still applies - ntfsfix, firstboot injection, marking the volume bootable.
+	//
+	// RunOfflineVMwareCleanup is skipped because it cannot work here, not as policy:
+	// it hands a single disk path to guestfish (virtv2vops.go:1370), and an LDM
+	// volume spanning several disks cannot be assembled from one member. It fails
+	// soft and returns nil, so today this is a silent no-op; skipping it explicitly
+	// at least says so in the log.
+	//
+	// The answer was resolved in ConvertVolumes, which needed it before applying
+	// image metadata; reuse it rather than booting the appliance a second time.
+	isLDMGuest := migobj.isLDMGuest
 
 	firstbootscripts := []string{}
 	firstbootwinscripts := []virtv2v.FirstBootWindows{}
@@ -1525,15 +1589,26 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 	}
 
 	// Run virt-v2v conversion
-	blockDriver := blockDriverFromMetadata(migobj.ImageMetadata)
-	utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s, blockDriver=%q)", vminfo.Name, osPath, vminfo.OSType, blockDriver))
-	if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, blockDriver); err != nil {
-		return errors.Wrap(err, "failed to run virt-v2v")
+	if !isLDMGuest {
+		blockDriver := blockDriverFromMetadata(migobj.ImageMetadata)
+		utils.PrintLog(fmt.Sprintf("Starting virt-v2v conversion for VM %s (osPath=%s, osType=%s, blockDriver=%q)", vminfo.Name, osPath, vminfo.OSType, blockDriver))
+		if err := virtv2v.ConvertDisk(ctx, constants.XMLFileName, osPath, vminfo.OSType, migobj.Virtiowin, firstbootscripts, vminfo.VMDisks[bootVolumeIndex].Path, osRelease, blockDriver); err != nil {
+			return errors.Wrap(err, "failed to run virt-v2v")
+		}
+		utils.PrintLog("virt-v2v conversion completed successfully")
+	} else {
+		// firstbootscripts are only consumed by ConvertDisk's --firstboot flags, and
+		// the launcher they rely on is installed by virt-v2v itself. Anything copied
+		// in by InjectFirstBootScriptsFromStore below will sit on disk unexecuted.
+		utils.PrintLog("virt-v2v-in-place skipped for this guest; all other conversion steps still run")
 	}
-	utils.PrintLog("virt-v2v conversion completed successfully")
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-		if removeVMwareTools {
+		switch {
+		case !removeVMwareTools:
+		case isLDMGuest:
+			migobj.logMessage("Skipping offline VMware Tools cleanup: it operates on a single disk and cannot reach a volume spanning an LDM disk group. Uninstall VMware Tools on the source instead.")
+		default:
 			if err := virtv2v.RunOfflineVMwareCleanup(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 				utils.PrintLog(fmt.Sprintf("WARNING: offline VMware Tools cleanup returned error: %v", err))
 			}
@@ -1544,13 +1619,17 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 	}
 
-	// Set volume as bootable
+	return migobj.markBootVolumesBootable(ctx, vminfo, bootVolumeIndex, espDiskIndex)
+}
+
+// markBootVolumesBootable flags the boot volume - and, for UEFI multi-disk layouts,
+// the ESP disk - as bootable in Cinder. Nova rejects a server create with
+// "Block Device <id> is not bootable" when the volume carrying BootIndex 0 is not.
+func (migobj *Migrate) markBootVolumesBootable(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex, espDiskIndex int) error {
 	if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[bootVolumeIndex].OpenstackVol); err != nil {
 		return errors.Wrap(err, "failed to set volume as bootable")
 	}
 
-	// For UEFI multi-disk layouts, also mark the ESP disk as bootable
-	// This is required because OpenStack won't allow attaching a non-bootable volume with BootIndex=0
 	if vminfo.UEFI && espDiskIndex >= 0 && espDiskIndex != bootVolumeIndex {
 		migobj.logMessage(fmt.Sprintf("Marking ESP disk (Disk %d: %s) as bootable in OpenStack", espDiskIndex, vminfo.VMDisks[espDiskIndex].Name))
 		if err := migobj.Openstackclients.SetVolumeBootable(ctx, vminfo.VMDisks[espDiskIndex].OpenstackVol); err != nil {
@@ -1702,6 +1781,83 @@ func blockDriverFromMetadata(metadata map[string]string) string {
 	return ""
 }
 
+// ldmImageMetadata is the boot volume image metadata vJailbreak derives for a
+// guest whose system volume sits on a Dynamic Disk. virt-v2v cannot convert such
+// a guest, so no virtio storage driver is made boot-critical and the disks have
+// to arrive on a bus Windows already has an in-box driver for.
+func ldmImageMetadata(isLDMGuest bool) map[string]string {
+	if !isLDMGuest {
+		return nil
+	}
+	return map[string]string{imagePropDiskBus: diskBusSATA}
+}
+
+// mergeBootVolumeImageMetadata layers a user-supplied VolumeImageProfile over
+// whatever vJailbreak derived, so an explicitly chosen value always wins. Returns
+// nil when there is nothing to apply, so callers can skip the API call.
+func mergeBootVolumeImageMetadata(derived, profile map[string]string) map[string]string {
+	if len(derived) == 0 && len(profile) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(derived)+len(profile))
+	for key, value := range derived {
+		merged[key] = value
+	}
+	for key, value := range profile {
+		merged[key] = value
+	}
+	return merged
+}
+
+// detectLDMGuest records whether the Windows system volume is on a Dynamic Disk
+// (LDM). Never fatal: on an inspection failure the guest is treated as non-LDM,
+// which is exactly how every Windows guest behaved before this existed.
+func (migobj *Migrate) detectLDMGuest(vminfo vm.VMInfo) {
+	if !strings.EqualFold(vminfo.OSType, constants.OSFamilyWindows) {
+		return
+	}
+
+	isLDM, root, err := virtv2v.IsLDMSystemVolume(vminfo.VMDisks)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: could not determine whether the system volume is on a Dynamic Disk (LDM): %v", err))
+		return
+	}
+	if !isLDM {
+		return
+	}
+
+	migobj.isLDMGuest = true
+	migobj.logMessage(fmt.Sprintf(
+		"System volume %s is on a Windows Dynamic Disk (LDM), which virt-v2v cannot convert. "+
+			"Conversion will be skipped and the VM will be created on an emulated SATA bus.", root))
+}
+
+// createLDMProbeVolume creates the smallest scratch volume Cinder will make, to be
+// attached on the virtio bus at server create. It deliberately carries no image
+// metadata of its own - Nova reads that from the root volume only - and is
+// created with an empty OS type so SetVolumeImageMetadata does not stamp
+// hw_disk_bus=virtio onto it.
+func (migobj *Migrate) createLDMProbeVolume(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int) error {
+	volumeType := ""
+	if bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol; bootVol != nil {
+		volumeType = bootVol.VolumeType
+	}
+
+	// Size 0: CreateVolume rounds up to whole GiB and adds one, so this asks for
+	// the smallest volume it is capable of creating.
+	name := vminfo.Name + ldmProbeVolumeSuffix
+	probe, err := migobj.Openstackclients.CreateVolume(ctx, name, 0, "", false, volumeType, false)
+	if err != nil {
+		return errors.Wrap(err, "failed to create virtio probe volume for LDM guest")
+	}
+
+	migobj.ldmProbeVolumeID = probe.ID
+	migobj.logMessage(fmt.Sprintf(
+		"Created virtio probe volume %s (%s) for LDM guest; it will be attached on the virtio bus "+
+			"so Windows installs the virtio storage driver on first boot.", name, probe.ID))
+	return nil
+}
+
 func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (int, error) {
 	migobj.logMessage("Converting disk")
 
@@ -1761,16 +1917,34 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 	utils.PrintLog(fmt.Sprintf("Boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 
-	// Step 8: Apply merged VolumeImageProfile metadata to the boot volume. Nova/libvirt
-	// only read volume_image_metadata from the root disk, so we scope this to the boot volume.
-	if len(migobj.ImageMetadata) > 0 {
+	// Step 7.5: Resolve whether this is an LDM guest before step 8, because that
+	// decides the disk bus. The mount plan is memoised, so probing here costs no
+	// extra appliance boot and performDiskConversion reuses the answer.
+	migobj.detectLDMGuest(vminfo)
+
+	// Step 8: Apply image metadata to the boot volume. Nova/libvirt only read
+	// volume_image_metadata from the root disk, so scope this to the boot volume.
+	// Anything vJailbreak derives goes underneath the user's VolumeImageProfile,
+	// so an explicitly chosen bus still wins.
+	imageMetadata := mergeBootVolumeImageMetadata(ldmImageMetadata(migobj.isLDMGuest), migobj.ImageMetadata)
+	if len(imageMetadata) > 0 {
 		bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol
 		if bootVol != nil {
-			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, migobj.ImageMetadata); err != nil {
-				return -1, errors.Wrap(err, "failed to apply VolumeImageProfile metadata to boot volume")
+			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, imageMetadata); err != nil {
+				return -1, errors.Wrap(err, "failed to apply image metadata to boot volume")
 			}
-			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume %s: %v",
-				len(migobj.ImageMetadata), bootVol.ID, migobj.ImageMetadata))
+			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) to boot volume %s: %v",
+				len(imageMetadata), bootVol.ID, imageMetadata))
+		}
+	}
+
+	// Step 8.5: An LDM guest boots on SATA and therefore never loads a virtio
+	// storage driver. Attaching one scratch volume on the virtio bus makes Windows
+	// perform a real PnP install of viostor on first boot, which is what allows a
+	// later move to virtio. Offline registry injection does not achieve this.
+	if migobj.isLDMGuest {
+		if err := migobj.createLDMProbeVolume(ctx, vminfo, bootVolumeIndex); err != nil {
+			return -1, err
 		}
 	}
 
@@ -1848,6 +2022,11 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 	openstackops := migobj.Openstackclients
 	var flavor *flavors.Flavor
 	var err error
+
+	// ConvertVolumes takes vminfo by value, so the probe volume it created is
+	// carried on migobj rather than on the caller's copy. Put it back on the
+	// vminfo that CreateVM will actually see.
+	vminfo.LDMProbeVolumeID = migobj.ldmProbeVolumeID
 
 	if migobj.TargetFlavorId != "" {
 		flavor, err = openstackops.GetFlavor(ctx, migobj.TargetFlavorId)
@@ -2297,11 +2476,271 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 	}
 
+	// An LDM guest was created on an emulated SATA bus with a virtio probe disk
+	// attached. Give the admin a chance to confirm from the booted guest that the
+	// virtio storage driver installed, then move the root disk onto virtio.
+	if migobj.isLDMGuest {
+		if err := migobj.waitForLDMBootAndPromote(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex, vcenterSettings); err != nil {
+			return err
+		}
+	}
+
 	if err := migobj.DisconnectSourceNetworkIfRequested(); err != nil {
 		utils.PrintLog(fmt.Sprintf("Warning: Failed to disconnect source VM network interfaces: %v", err))
 	}
 
 	return nil
+}
+
+// waitForLDMBootAndPromote blocks at the WaitingForLDMBootSuccess gate and acts on
+// the admin's answer. It never returns an error for "finish": by the time this runs
+// a booted, network-connected VM already exists, and only an optimisation is
+// outstanding.
+func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.VMInfo,
+	networkids, portids, ipaddresses []string, espDiskIndex int, vcenterSettings *k8sutils.VjailbreakSettings) error {
+
+	// Emitted first and matched by the controller to hold the phase at
+	// WaitingForLDMBootSuccess; without it the migration reports Succeeded from the
+	// earlier "VM created successfully" event while this gate is still waiting.
+	migobj.logMessage(constants.EventMessageWaitingForLDMBootSuccess)
+
+	migobj.logMessage(fmt.Sprintf(
+		"VM is running on an emulated SATA bus with a virtio probe disk attached. "+
+			"Log in and confirm the virtio storage driver installed, then answer this gate. "+
+			"In the guest: Get-PnpDevice -Class SCSIAdapter (expect a Red Hat VirtIO SCSI controller, status OK) "+
+			"and sc.exe query viostor (expect STATE: RUNNING). Leave the VM running - answering '%s' "+
+			"shuts it down cleanly before recreating it. Waiting up to %s; no answer is treated as '%s'.",
+		constants.LDMBootStatusSuccess, constants.LDMBootGateTimeout, constants.LDMBootStatusFinish))
+
+	answer := migobj.waitForLDMBootStatus(ctx)
+
+	switch answer {
+	case constants.LDMBootStatusFailed:
+		migobj.logMessage("LDM boot reported as failed by the admin; cleaning up the migrated VM")
+		if err := migobj.cleanup(ctx, vminfo, "LDM boot reported as failed", portids, vcenterSettings); err != nil {
+			return errors.Wrap(err, "failed to clean up after a failed LDM boot")
+		}
+		return errors.New("migration failed: admin reported the LDM guest did not boot usably")
+
+	case constants.LDMBootStatusSuccess:
+		if err := migobj.promoteLDMGuestToVirtio(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex); err != nil {
+			// Promotion is an optimisation on top of a working VM. Report the
+			// failure but do not fail a migration that already succeeded.
+			migobj.logMessage(fmt.Sprintf("Promotion to virtio did not complete (%v); the VM remains on the SATA bus", err))
+		}
+		return nil
+
+	default:
+		// The probe is still attached to the running instance, so it cannot be
+		// deleted here. It carries delete_on_termination, so it is removed with
+		// the instance; deleting it would need a stop/detach cycle that is not
+		// worth an outage for 1GB.
+		migobj.logMessage(fmt.Sprintf(
+			"Leaving the VM on the emulated SATA bus and completing the migration. The virtio probe "+
+				"volume %s stays attached and will be removed with the instance; to move to virtio later, "+
+				"delete and recreate the server with hw_disk_bus=virtio once the driver is installed.",
+			migobj.ldmProbeVolumeID))
+		return nil
+	}
+}
+
+// waitForLDMBootStatus blocks until the admin answers or the gate times out.
+// A timeout resolves to "finish" rather than "failed" on purpose: a working VM
+// exists by then, and timing out into a destructive cleanup would discard a
+// successful migration because nobody pressed a button.
+func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
+	deadline := time.After(constants.LDMBootGateTimeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			migobj.logMessage("Context cancelled while waiting for LDM boot confirmation; leaving the VM on SATA")
+			return constants.LDMBootStatusFinish
+
+		case status := <-migobj.LDMBootStatusWatcher:
+			switch status {
+			case constants.LDMBootStatusSuccess, constants.LDMBootStatusFinish, constants.LDMBootStatusFailed:
+				migobj.logMessage(fmt.Sprintf("LDM boot gate answered: %s", status))
+				return status
+			default:
+				// Ignore anything unrecognised rather than resolving the gate on it.
+				continue
+			}
+
+		case <-deadline:
+			migobj.logMessage(fmt.Sprintf(
+				"No answer at the LDM boot gate within %s; completing the migration with the VM on SATA",
+				constants.LDMBootGateTimeout))
+			return constants.LDMBootStatusFinish
+		}
+	}
+}
+
+// promoteLDMGuestToVirtio recreates the instance with its root disk on the virtio
+// bus. Nova fixes disk_bus in the block device mapping at server create, so this
+// cannot be done by editing volume_image_metadata on the running instance - the
+// server has to be deleted and built again.
+//
+// The volumes survive the delete (delete_on_termination is false on all but the
+// probe), the port is pre-created and passed by ID so MAC and IP are preserved,
+// and CreateTargetInstance is reused so ESP ordering, RDM LUNs and instance
+// metadata are all reproduced rather than reimplemented.
+func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VMInfo,
+	networkids, portids, ipaddresses []string, espDiskIndex int) error {
+
+	// Resolved from the boot volume's attachment, with no state requirement: the
+	// admin was asked to shut the guest down before answering, so it is expected
+	// to be SHUTOFF here.
+	serverID, err := migobj.resolveTargetServerID(ctx, vminfo)
+	if err != nil {
+		return errors.Wrap(err, "failed to locate the migrated VM before promotion")
+	}
+
+	// Matched by the controller to hold the phase for the duration of the rebuild.
+	// Must be emitted before any of the work below, and stays the newest matching
+	// event until CreateTargetInstance reports success again at the end.
+	migobj.logMessage(constants.EventMessagePromotingLDMGuest)
+
+	// Stop before deleting. Deleting a running instance is a hard destroy, which
+	// leaves NTFS dirty with no ntfsfix to follow - the conversion phase is long
+	// past by now. An ACPI stop lets Windows flush and shut down properly.
+	if err := migobj.stopServerAndWait(ctx, serverID); err != nil {
+		return err
+	}
+
+	migobj.logMessage(fmt.Sprintf("Deleting server %s so it can be recreated on the virtio bus", serverID))
+	if err := migobj.Openstackclients.DeleteServer(ctx, serverID); err != nil {
+		return errors.Wrap(err, "failed to delete the server before promotion")
+	}
+	if err := migobj.waitForVolumesAvailable(ctx, vminfo); err != nil {
+		return err
+	}
+
+	// No offline re-verification here on purpose.
+	//
+	// An earlier version reattached every volume to the appliance, ran guestfish to
+	// look for <systemroot>\System32\drivers\viostor.sys, then detached again. That
+	// was designed for an automatic promotion with no human in the loop. With this
+	// gate the admin has already run "Get-PnpDevice -Class SCSIAdapter" and
+	// "sc.exe query viostor" against the live guest, which is a stronger signal
+	// than a file's existence - it reports the driver actually running. Re-checking
+	// cost an appliance boot plus an attach/detach cycle per disk, and introduced a
+	// failure mode (a volume stuck attaching or detaching) purely to second-guess
+	// the operator with weaker evidence.
+	//
+	// If the guest does not come up on virtio, recreate it with hw_disk_bus=sata.
+
+	// Clear the field so CreateVM leaves the probe off the recreated server, but
+	// keep the ID: it is now detached and can finally be deleted.
+	probeID := migobj.ldmProbeVolumeID
+	migobj.ldmProbeVolumeID = ""
+
+	if err := migobj.recreateLDMGuest(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex, diskBusVirtio); err != nil {
+		return err
+	}
+	migobj.deleteProbeVolume(ctx, probeID)
+	return nil
+}
+
+// stopServerAndWait issues an ACPI shutdown and waits for the instance to reach
+// SHUTOFF, so the subsequent delete is not a hard destroy.
+//
+// A timeout is not fatal. The guest may be ignoring ACPI, or may have hung; the
+// delete still has to happen for the promotion to proceed, and the cost is a dirty
+// filesystem that Windows will chkdsk on the next boot rather than lost data.
+func (migobj *Migrate) stopServerAndWait(ctx context.Context, serverID string) error {
+	migobj.logMessage(fmt.Sprintf("Stopping server %s before recreating it on the virtio bus", serverID))
+	if err := migobj.Openstackclients.StopServer(ctx, serverID); err != nil {
+		return errors.Wrap(err, "failed to stop the server before promotion")
+	}
+
+	deadline := time.After(constants.LDMShutdownTimeout)
+	ticker := time.NewTicker(constants.LDMShutdownPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-deadline:
+			migobj.logMessage(fmt.Sprintf(
+				"Server %s did not reach SHUTOFF within %s; continuing with the delete. Windows may "+
+					"run chkdsk on the next boot.", serverID, constants.LDMShutdownTimeout))
+			return nil
+
+		case <-ticker.C:
+			status, err := migobj.Openstackclients.GetServerStatus(ctx, serverID)
+			if err != nil {
+				migobj.logMessage(fmt.Sprintf("Warning: could not read the status of server %s: %v", serverID, err))
+				continue
+			}
+			if strings.EqualFold(status, "SHUTOFF") {
+				migobj.logMessage(fmt.Sprintf("Server %s is SHUTOFF", serverID))
+				return nil
+			}
+		}
+	}
+}
+
+// recreateLDMGuest re-applies the boot volume's disk bus and rebuilds the instance.
+func (migobj *Migrate) recreateLDMGuest(ctx context.Context, vminfo vm.VMInfo,
+	networkids, portids, ipaddresses []string, espDiskIndex int, diskBus string) error {
+
+	bootIdx := -1
+	for i := range vminfo.VMDisks {
+		if vminfo.VMDisks[i].Boot {
+			bootIdx = i
+			break
+		}
+	}
+	if bootIdx < 0 || vminfo.VMDisks[bootIdx].OpenstackVol == nil {
+		return errors.New("could not identify the boot volume while recreating the VM")
+	}
+	bootVol := vminfo.VMDisks[bootIdx].OpenstackVol
+
+	metadata := mergeBootVolumeImageMetadata(map[string]string{imagePropDiskBus: diskBus}, migobj.ImageMetadata)
+	if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, metadata); err != nil {
+		return errors.Wrap(err, "failed to set the disk bus before recreating the VM")
+	}
+
+	if err := migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex); err != nil {
+		return errors.Wrapf(err, "failed to recreate the VM on the %s bus", diskBus)
+	}
+	migobj.logMessage(fmt.Sprintf("VM recreated with its root disk on the %s bus", diskBus))
+	return nil
+}
+
+// waitForVolumesAvailable blocks until every volume has been released by the
+// deleted server, so the next create is not rejected for a volume still in use.
+func (migobj *Migrate) waitForVolumesAvailable(ctx context.Context, vminfo vm.VMInfo) error {
+	for _, disk := range vminfo.VMDisks {
+		if disk.OpenstackVol == nil {
+			continue
+		}
+		if err := migobj.Openstackclients.WaitForVolume(ctx, disk.OpenstackVol.ID); err != nil {
+			return errors.Wrapf(err, "volume %s was not released after deleting the server", disk.OpenstackVol.ID)
+		}
+	}
+	return nil
+}
+
+// deleteProbeVolume removes the scratch volume once it is detached and has served
+// its purpose. Best effort: a leftover 1GB volume is not worth failing an
+// otherwise successful migration over.
+//
+// Only safe to call while the volume is detached. On the "finish" path the probe
+// is still attached to a running instance, so it is left in place instead - it
+// carries delete_on_termination, so it goes away with the instance.
+func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
+	if volumeID == "" {
+		return
+	}
+	if err := migobj.Openstackclients.DeleteVolume(ctx, volumeID); err != nil {
+		migobj.logMessage(fmt.Sprintf("Warning: failed to delete the virtio probe volume %s: %v", volumeID, err))
+		return
+	}
+	migobj.logMessage(fmt.Sprintf("Deleted the virtio probe volume %s", volumeID))
 }
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {

@@ -186,8 +186,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 
 	oldCutoverLabel := pod.Labels["startCutover"]
 	newCutoverLabel := utils.SetCutoverLabel(migration.Spec.InitiateCutover, oldCutoverLabel)
-	if newCutoverLabel != oldCutoverLabel {
+	oldLDMBootStatus := pod.Labels[constants.LDMBootStatusLabel]
+	newLDMBootStatus := utils.SetLDMBootStatusLabel(migration.Spec.LDMBootStatus, oldLDMBootStatus)
+	if newCutoverLabel != oldCutoverLabel || newLDMBootStatus != oldLDMBootStatus {
 		pod.Labels["startCutover"] = newCutoverLabel
+		if newLDMBootStatus != "" {
+			pod.Labels[constants.LDMBootStatusLabel] = newLDMBootStatus
+		}
 		if err = r.Update(ctx, pod); err != nil {
 			ctxlog.Error(err, fmt.Sprintf("Failed to update Pod '%s'", pod.Name))
 			return ctrl.Result{}, err
@@ -405,6 +410,20 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 		vjailbreakv1alpha1.VMMigrationPhaseValidating,
 		vjailbreakv1alpha1.VMMigrationPhasePending,
 		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
+
+	// Resolved before the loop, and deliberately not as a case inside it.
+	//
+	// The helper emits "VM created successfully" and then the LDM gate event in the
+	// same instant. Event CreationTimestamp has one-second granularity and
+	// GetEventsSorted uses sort.Slice, which is not stable - so with equal
+	// timestamps the two can come back in either order, and whichever the loop sees
+	// first wins. That is why the phase came out Succeeded on some reconciles and
+	// correct on others. Deciding this from the label rather than from event order
+	// removes the race entirely.
+	if utils.LDMGateHoldsPhase(events.Items, pod.Labels[constants.LDMBootStatusLabel]) {
+		scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
+		return nil
+	}
 
 loop:
 	for i := range events.Items {

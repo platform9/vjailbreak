@@ -67,6 +67,18 @@ type mountPlan struct {
 	Mounts []mountSpec
 }
 
+// ldmVolumePrefix is how libguestfs names a volume assembled from a Windows
+// Dynamic Disk group: "ldm_vol_<machine>-<group>_<volume>" under /dev/mapper
+// (daemon/ldm.c, via ldmtool). A root with this prefix means the system volume
+// itself lives on a dynamic disk.
+const ldmVolumePrefix = "/dev/mapper/ldm_vol_"
+
+// isLDMDevice reports whether a mountable is a Windows Dynamic Disk volume.
+// Only the guest's root is ever checked; data disks on dynamic disks are fine.
+func isLDMDevice(device string) bool {
+	return strings.HasPrefix(strings.TrimSpace(device), ldmVolumePrefix)
+}
+
 // Resolving a plan costs two appliance boots and the disks do not change
 // identity within a migration, so memoise per disk set.
 var (
@@ -162,14 +174,22 @@ func runScript(disks []vm.VMDisk, script string) (string, error) {
 }
 
 // parseRoots turns the output of `inspect-os` into a list of root filesystems,
-// one per line. Blank lines and stray whitespace are ignored.
+// one per line. Blank lines, stray whitespace and exact duplicates are dropped.
+//
+// The dedup matters for Windows Dynamic Disks: Ldm.list_ldm_volumes reports a
+// volume once per member disk, so the same device path comes back twice. The
+// same path can never be two operating systems, and collapsing it here means the
+// reduction does not depend on vfs-uuid, which is tolerated and may fail on a
+// dm device. Inert for every other guest - identical paths never repeat.
 func parseRoots(out string) []string {
 	var roots []string
+	seen := make(map[string]bool)
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || seen[line] {
 			continue
 		}
+		seen[line] = true
 		roots = append(roots, line)
 	}
 	return roots
