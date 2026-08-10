@@ -58,7 +58,8 @@ var exitSentinelRe = regexp.MustCompile(`(?m)^` + exitSentinelPrefix + `(-?\d+)[
 // logFile, and appends the exit status once it returns. The echoed PID is the
 // wrapping subshell, which lives exactly as long as cmd.
 func wrapWithExitSentinel(cmd, logFile string) string {
-	return fmt.Sprintf("( %s; echo \"%s$?\" ) >%s 2>&1 & echo $!", cmd, exitSentinelPrefix, logFile)
+	return fmt.Sprintf("( %s; echo \"%s$?\" ) >%s 2>&1 & echo $!",
+		cmd, exitSentinelPrefix, shellQuote(logFile))
 }
 
 // CloneStatus is a point-in-time observation of a clone operation.
@@ -124,7 +125,7 @@ func (ct *CloneTracker) GetStatus() *CloneStatus {
 
 // readLogFile reads the vmkfstools log file content
 func (ct *CloneTracker) readLogFile() string {
-	logCmd := fmt.Sprintf("cat %s 2>/dev/null", ct.task.LogFile)
+	logCmd := fmt.Sprintf("cat %s 2>/dev/null", shellQuote(ct.task.LogFile))
 	content, _ := ct.client.ExecuteCommand(logCmd)
 	return strings.TrimSpace(content)
 }

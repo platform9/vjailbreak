@@ -236,7 +236,7 @@ func (c *Client) StartVmkfstoolsClone(sourceVMDK, targetLUN string) (*Vmkfstools
 	// -d thin creates thin provisioned disk (can also use eagerzeroedthick, zeroedthick)
 	// Capture output to log file for debugging
 	command := wrapWithExitSentinel(
-		fmt.Sprintf("vmkfstools -i %s %s -d thin", sourceVMDK, targetLUN), logFile)
+		fmt.Sprintf("vmkfstools -i %s %s -d thin", shellQuote(sourceVMDK), shellQuote(targetLUN)), logFile)
 
 	output, err := c.ExecuteCommand(command)
 	if err != nil {

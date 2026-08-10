@@ -44,10 +44,45 @@ func newTestTracker(c cloneProcessChecker) *CloneTracker {
 }
 
 func TestWrapWithExitSentinel(t *testing.T) {
-	got := wrapWithExitSentinel("vmkfstools -i src -d rdm:dev desc", "/tmp/clone.log")
-	want := `( vmkfstools -i src -d rdm:dev desc; echo "VJB_EXIT:$?" ) >/tmp/clone.log 2>&1 & echo $!`
-	if got != want {
-		t.Errorf("wrapWithExitSentinel()\n got: %s\nwant: %s", got, want)
+	tests := []struct {
+		name    string
+		cmd     string
+		logFile string
+		want    string
+	}{
+		{
+			name:    "plain log path",
+			cmd:     "vmkfstools -i src -d rdm:dev desc",
+			logFile: "/tmp/clone.log",
+			want:    `( vmkfstools -i src -d rdm:dev desc; echo "VJB_EXIT:$?" ) >'/tmp/clone.log' 2>&1 & echo $!`,
+		},
+		{
+			name:    "log path is quoted so a space cannot split the redirect",
+			cmd:     "vmkfstools -i src",
+			logFile: "/tmp/log dir/clone.log",
+			want:    `( vmkfstools -i src; echo "VJB_EXIT:$?" ) >'/tmp/log dir/clone.log' 2>&1 & echo $!`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wrapWithExitSentinel(tt.cmd, tt.logFile); got != tt.want {
+				t.Errorf("wrapWithExitSentinel()\n got: %s\nwant: %s", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTrackerQuotesTheLogPath guards the read side of the log file, which is the
+// one shell command in this file that is not built by wrapWithExitSentinel.
+func TestTrackerQuotesTheLogPath(t *testing.T) {
+	checker := &fakeChecker{visible: true, logs: "Clone: 1% done."}
+	ct := NewCloneTracker(checker, &VmkfstoolsTask{Pid: 7, LogFile: "/tmp/log dir/clone.log"}, 0, nil)
+	ct.GetStatus()
+
+	want := `cat '/tmp/log dir/clone.log' 2>/dev/null`
+	if checker.lastCmd != want {
+		t.Errorf("log read command\n got: %s\nwant: %s", checker.lastCmd, want)
 	}
 }
 
@@ -406,18 +441,6 @@ func TestWaitForCompletionSucceedsOnCleanClone(t *testing.T) {
 
 	if err := ct.WaitForCompletion(ctx); err != nil {
 		t.Fatalf("clean clone should succeed, got: %v", err)
-	}
-}
-
-// TestTrackerReadsTheTaskLogFile pins that the tracker reads the log belonging to
-// its own task, which matters because clone logs are per-operation.
-func TestTrackerReadsTheTaskLogFile(t *testing.T) {
-	checker := &fakeChecker{visible: true, logs: "Clone: 1% done."}
-	ct := NewCloneTracker(checker, &VmkfstoolsTask{Pid: 7, LogFile: "/tmp/specific.log"}, 2, nil)
-	ct.GetStatus()
-
-	if !strings.Contains(checker.lastCmd, "/tmp/specific.log") {
-		t.Errorf("tracker read the wrong log file: %q", checker.lastCmd)
 	}
 }
 
