@@ -174,6 +174,11 @@ export default function OpenstackCredentialsDrawer({
       }
 
       setSubmitting(true)
+      // Clear the previous attempt's cred name first so the validation-status
+      // poller (keyed off createdCredentialName) doesn't keep hitting the old,
+      // being-deleted object and re-surfacing its stale Failed status while
+      // this submit (and any internal retry) is still in flight.
+      setCreatedCredentialName(null)
       setValidatingOpenstackCreds(true)
       setOperationError(null)
 
