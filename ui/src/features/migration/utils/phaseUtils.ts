@@ -390,7 +390,9 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     case Phase.HotAddCleanup:             return 'HotAdd Cleanup'
     case Phase.ConvertingDisk:            return 'Converting Disk'
     case Phase.AwaitingAdminCutOver:  return 'Awaiting Admin Cutover'
-    case Phase.WaitingForLDMBootSuccess: return 'Awaiting LDM Boot Confirmation'
+    // Covers both halves of this phase: waiting for the operator's answer, and
+    // rebuilding the VM on the virtio bus once they have given it.
+    case Phase.WaitingForLDMBootSuccess: return 'LDM Boot Verification'
     case Phase.AwaitingCutOverStartTime: return 'Awaiting Cutover Window'
     case Phase.Succeeded:             return 'Succeeded'
     case Phase.DataCopied:            return 'Data Copied'

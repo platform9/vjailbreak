@@ -14,7 +14,7 @@ import {
   Typography,
   CircularProgress
 } from '@mui/material'
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
+import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { setLDMBootStatus, type LDMBootStatus } from '../../api/migrations'
 
 interface LDMBootGateButtonProps {
@@ -86,9 +86,11 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
           }}
           size="small"
           disabled={busy}
-          sx={{ cursor: 'pointer', color: 'warning.main' }}
+          // Same icon and colour as TriggerAdminCutoverButton: both mean "this
+          // migration is paused and needs you".
+          sx={{ cursor: 'pointer', color: 'primary.main' }}
         >
-          {busy ? <CircularProgress size={16} /> : <HelpOutlineIcon />}
+          {busy ? <CircularProgress size={16} /> : <PlayArrowIcon />}
         </IconButton>
       </Tooltip>
 
@@ -109,7 +111,7 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
             </Typography>
 
             <Typography variant="body2" sx={{ mt: 2 }} gutterBottom>
-              Log into the guest and check:
+              Log into the guest and confirm the driver is running:
             </Typography>
             <Box
               component="pre"
@@ -122,8 +124,7 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
                 overflowX: 'auto'
               }}
             >
-              {`Get-PnpDevice -Class SCSIAdapter    # Red Hat VirtIO SCSI controller = OK
-sc.exe query viostor               # STATE: RUNNING`}
+              {`sc.exe query viostor    # STATE: RUNNING`}
             </Box>
             <Typography variant="caption" color="text.secondary">
               Leave the VM running. “Move to virtio” shuts it down cleanly first, then deletes and

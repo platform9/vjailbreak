@@ -414,6 +414,7 @@ const (
 	EventMessageDataCopyStart                     = "Data copy start time reached"
 	EventMessageWaitingForAdminCutOver            = "Waiting for Admin Cutover conditions to be met"
 	EventMessageWaitingForLDMBootSuccess          = "Waiting for LDM boot confirmation"
+	EventMessagePromotingLDMGuest                 = "Recreating the VM on the virtio bus"
 	EventMessagePeriodicSyncWarning               = "Periodic Sync: In WARNING state - manual intervention required"
 	EventMessageMigrationSucessful                = "VM created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"

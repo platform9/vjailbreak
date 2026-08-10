@@ -2520,6 +2520,11 @@ func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VM
 		return errors.Wrap(err, "failed to locate the migrated VM before promotion")
 	}
 
+	// Matched by the controller to hold the phase for the duration of the rebuild.
+	// Must be emitted before any of the work below, and stays the newest matching
+	// event until CreateTargetInstance reports success again at the end.
+	migobj.logMessage(constants.EventMessagePromotingLDMGuest)
+
 	// Stop before deleting. Deleting a running instance is a hard destroy, which
 	// leaves NTFS dirty with no ntfsfix to follow - the conversion phase is long
 	// past by now. An ACPI stop lets Windows flush and shut down properly.
