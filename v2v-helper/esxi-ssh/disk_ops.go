@@ -204,7 +204,8 @@ func (c *Client) GetVMDisks(vmxPath string) ([]DiskInfo, error) {
 
 	// List files in VM directory to find VMDK files
 	vmPath := fmt.Sprintf("/vmfs/volumes/%s/%s", datastore, vmDir)
-	output, err := c.ExecuteCommand(fmt.Sprintf("ls -lh %s/*.vmdk 2>/dev/null || true", vmPath))
+	// Quote the directory but leave the glob unquoted so the remote shell still expands it
+	output, err := c.ExecuteCommand(fmt.Sprintf("ls -lh %s 2>/dev/null || true", shellQuoteGlob(vmPath, "/*.vmdk")))
 	if err != nil {
 		return nil, fmt.Errorf("failed to list VM disks: %w", err)
 	}
@@ -222,13 +223,13 @@ func (c *Client) GetVMDisks(vmxPath string) ([]DiskInfo, error) {
 			continue
 		}
 
-		fields := strings.Fields(line)
-		if len(fields) < 9 {
+		// Extract the path from the ls output. Taking the last whitespace-separated
+		// field would truncate any path containing spaces, so join everything from
+		// the filename column onwards.
+		diskPath := parseLsFilename(line)
+		if diskPath == "" {
 			continue
 		}
-
-		// Extract filename (last field) - this is the full path from ls output
-		diskPath := fields[len(fields)-1]
 		filename := filepath.Base(diskPath)
 
 		// Get detailed disk info
@@ -260,7 +261,7 @@ func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
 	}
 
 	// Read VMDK descriptor to find the actual disk file and type
-	descriptor, err := c.ExecuteCommand(fmt.Sprintf("cat %s 2>/dev/null || true", diskPath))
+	descriptor, err := c.ExecuteCommand(fmt.Sprintf("cat %s 2>/dev/null || true", shellQuote(diskPath)))
 	if err == nil && descriptor != "" {
 		// Parse descriptor for createType
 		lowerDesc := strings.ToLower(descriptor)
@@ -294,7 +295,7 @@ func (c *Client) GetDiskInfo(diskPath string) (*DiskInfo, error) {
 	if diskInfo.SizeBytes == 0 {
 		// Try to find the corresponding -flat.vmdk file
 		flatPath := strings.Replace(diskPath, ".vmdk", "-flat.vmdk", 1)
-		output, err := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>/dev/null || true", flatPath))
+		output, err := c.ExecuteCommand(fmt.Sprintf("ls -l %s 2>/dev/null || true", shellQuote(flatPath)))
 		if err == nil && output != "" {
 			// Parse ls output: -rw-------    1 root     root     107374182400 Dec  6 10:30 disk-flat.vmdk
 			fields := strings.Fields(output)
@@ -397,7 +398,7 @@ func (c *Client) GetDatastoreBackingDevice(datastoreName string) (string, error)
 	}
 
 	// Use esxcli to get datastore extent information
-	output, err := c.ExecuteCommand(fmt.Sprintf("esxcli storage vmfs extent list | grep -A2 %s", datastoreName))
+	output, err := c.ExecuteCommand(fmt.Sprintf("esxcli storage vmfs extent list | grep -A2 %s", shellQuote(datastoreName)))
 	if err != nil {
 		return "", fmt.Errorf("failed to get datastore extent: %w", err)
 	}
@@ -624,7 +625,7 @@ func (c *Client) CreateDatastore(datastoreName, naaID string) error {
 
 	// Create partition table and VMFS filesystem
 	// Using vmkfstools with -C to create VMFS datastore
-	cmd := fmt.Sprintf("vmkfstools -C vmfs6 -S %s %s", datastoreName, devicePath)
+	cmd := fmt.Sprintf("vmkfstools -C vmfs6 -S %s %s", shellQuote(datastoreName), shellQuote(devicePath))
 	_, err := c.ExecuteCommand(cmd)
 	if err != nil {
 		return fmt.Errorf("failed to create datastore: %w", err)
