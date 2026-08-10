@@ -47,6 +47,7 @@ const POLICY_DEFAULT_LABELS: Record<string, string> = {
   cutoverPolicy: 'Immediate',
   renameSuffix: 'None',
   folderName: 'Off',
+  dataOnly: 'Off',
   disconnectSourceNetwork: 'Off',
   fallbackToDhcp: 'Off',
   networkPersistence: 'Off',
@@ -414,7 +415,11 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const periodicSyncInterval = (planAdvanced?.periodicSyncInterval as string) || ''
   const initiateCutoverEnabled = migrationSpec?.initiateCutover === true
 
+  const isDataOnly = (migrationSpec?.dataOnly ?? planStrategy?.dataOnly) === true
+
   const cutoverPolicy = useMemo(() => {
+
+    if (isDataOnly) return 'N/A (data only)'
     if (planStrategy?.adminInitiatedCutOver === true) {
       const periodicSyncValue = periodicSyncEnabled
         ? periodicSyncInterval
@@ -432,6 +437,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
     return 'Immediately after data copy'
   }, [
     initiateCutoverEnabled,
+    isDataOnly,
     periodicSyncEnabled,
     periodicSyncInterval,
     planStrategy?.adminInitiatedCutOver,
@@ -467,6 +473,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const renameSuffix = renameVmEnabled ? (planPostAction?.suffix as string) || 'N/A' : 'N/A'
   const moveToFolderEnabled = planPostAction?.moveToFolder === true
   const folderName = moveToFolderEnabled ? (planPostAction?.folderName as string) || 'N/A' : 'N/A'
+  const dataOnly = enabledOrNA(isDataOnly)
   const disconnectSourceNetwork = enabledOrNA(planStrategy?.disconnectSourceNetwork)
   const fallbackToDhcp = enabledOrNA(planSpec?.fallbackToDHCP)
   const networkPersistence = enabledOrNA(planAdvanced?.networkPersistence)
@@ -519,13 +526,14 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       cutoverPolicy,
       renameSuffix,
       folderName,
+      dataOnly,
       disconnectSourceNetwork,
       fallbackToDhcp,
       networkPersistence,
       removeVMwareTools,
       useGPUFlavor: enabledOrNA(useGPUFlavor),
     }),
-    [cutoverPolicy, disconnectSourceNetwork, fallbackToDhcp, folderName, networkPersistence, removeVMwareTools, renameSuffix, scheduleDataCopy, securityGroups, serverGroup, useGPUFlavor]
+    [cutoverPolicy, dataOnly, disconnectSourceNetwork, fallbackToDhcp, folderName, networkPersistence, removeVMwareTools, renameSuffix, scheduleDataCopy, securityGroups, serverGroup, useGPUFlavor]
   )
   const migrationPolicyItems = useMemo(
     () =>
