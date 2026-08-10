@@ -411,6 +411,20 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 		vjailbreakv1alpha1.VMMigrationPhasePending,
 		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
 
+	// Resolved before the loop, and deliberately not as a case inside it.
+	//
+	// The helper emits "VM created successfully" and then the LDM gate event in the
+	// same instant. Event CreationTimestamp has one-second granularity and
+	// GetEventsSorted uses sort.Slice, which is not stable - so with equal
+	// timestamps the two can come back in either order, and whichever the loop sees
+	// first wins. That is why the phase came out Succeeded on some reconciles and
+	// correct on others. Deciding this from the label rather than from event order
+	// removes the race entirely.
+	if utils.LDMGateHoldsPhase(events.Items, pod.Labels[constants.LDMBootStatusLabel]) {
+		scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
+		return nil
+	}
+
 loop:
 	for i := range events.Items {
 		if !isMigrationAppEvent(events.Items[i]) {
@@ -418,30 +432,6 @@ loop:
 		}
 		switch {
 		// In reverse order, because the events are sorted by timestamp latest to oldest
-		//
-		// Listed before the success case on purpose. An LDM guest emits
-		// "VM created successfully" when the VM comes up on SATA and only then opens
-		// this gate, so without this the migration reports Succeeded while it is
-		// still waiting for an answer. Mirrors the cutover case below: hold the phase
-		// only while the label is unset.
-		// Answering the gate is not the end of the work: the promotion then stops,
-		// deletes and rebuilds the instance, which takes minutes. Without this the
-		// phase falls straight through to the older "VM created successfully" event
-		// and reports Succeeded while the VM is still being recreated - so the UI
-		// stops polling and the operator sees a finished migration that isn't.
-		//
-		// No label check here, unlike the gate below: this holds until the recreate
-		// emits its own, newer "VM created successfully".
-		case strings.Contains(events.Items[i].Message, constants.EventMessagePromotingLDMGuest) &&
-			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess]:
-			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
-			break loop
-		case strings.Contains(events.Items[i].Message, constants.EventMessageWaitingForLDMBootSuccess) &&
-			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess]:
-			if pod.Labels[constants.LDMBootStatusLabel] == "" {
-				scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
-				break loop
-			}
 		case strings.Contains(events.Items[i].Message, constants.EventMessageMigrationSucessful) &&
 			constants.VMMigrationStatesEnum[scope.Migration.Status.Phase] <= constants.VMMigrationStatesEnum[vjailbreakv1alpha1.VMMigrationPhaseSucceeded]:
 			scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseSucceeded
