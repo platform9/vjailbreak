@@ -10,10 +10,10 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// parseInspectOSOutput
+// parseRoots
 // ---------------------------------------------------------------------------
 
-func TestParseInspectOSOutput(t *testing.T) {
+func TestParseRoots(t *testing.T) {
 	tests := []struct {
 		name string
 		out  string
@@ -51,16 +51,16 @@ func TestParseInspectOSOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseInspectOSOutput(tt.out))
+			assert.Equal(t, tt.want, parseRoots(tt.out))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// parseMountpointsOutput
+// parseMountpoints
 // ---------------------------------------------------------------------------
 
-func TestParseMountpointsOutput(t *testing.T) {
+func TestParseMountpoints(t *testing.T) {
 	tests := []struct {
 		name string
 		out  string
@@ -99,34 +99,34 @@ func TestParseMountpointsOutput(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, parseMountpointsOutput(tt.out))
+			assert.Equal(t, tt.want, parseMountpoints(tt.out))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// parsePlanProbeOutput
+// parseRootDetails
 // ---------------------------------------------------------------------------
 
-func TestParsePlanProbeOutput(t *testing.T) {
-	// Exactly the shape buildPlanProbeScript produces for the failing
+func TestParseRootDetails(t *testing.T) {
+	// Exactly the shape rootDetailsScript produces for the failing
 	// openSUSE 15.5 guest: two roots that are two members of one btrfs
 	// filesystem, so both report the same UUID (the btrfs fsid).
 	out := strings.Join([]string{
-		planProbeUUIDMarker + " /dev/sdb",
+		uuidMarker + " /dev/sdb",
 		"b1f0a2c4-1111-4222-8333-444455556666",
-		planProbeMPMarker + " /dev/sdb",
+		mountsMarker + " /dev/sdb",
 		"/: /dev/sdb",
 		"/boot: /dev/sda2",
-		planProbeUUIDMarker + " /dev/sda6",
+		uuidMarker + " /dev/sda6",
 		"b1f0a2c4-1111-4222-8333-444455556666",
-		planProbeMPMarker + " /dev/sda6",
+		mountsMarker + " /dev/sda6",
 		"/: /dev/sda6",
 		"/boot: /dev/sda2",
 		"",
 	}, "\n")
 
-	uuids, mounts := parsePlanProbeOutput(out)
+	uuids, mounts := parseRootDetails(out)
 
 	assert.Equal(t, map[string]string{
 		"/dev/sdb":  "b1f0a2c4-1111-4222-8333-444455556666",
@@ -139,28 +139,28 @@ func TestParsePlanProbeOutput(t *testing.T) {
 	}, mounts["/dev/sda6"])
 }
 
-func TestParsePlanProbeOutputToleratesMissingUUID(t *testing.T) {
+func TestParseRootDetailsToleratesMissingUUID(t *testing.T) {
 	// "- vfs-uuid" is error tolerant, so a root can come back with no UUID at
 	// all. That must not be silently treated as "same filesystem as everything
 	// else with no UUID".
 	out := strings.Join([]string{
-		planProbeUUIDMarker + " /dev/sda2",
-		planProbeMPMarker + " /dev/sda2",
+		uuidMarker + " /dev/sda2",
+		mountsMarker + " /dev/sda2",
 		"/: /dev/sda2",
 		"",
 	}, "\n")
 
-	uuids, mounts := parsePlanProbeOutput(out)
+	uuids, mounts := parseRootDetails(out)
 
 	assert.Equal(t, "", uuids["/dev/sda2"])
 	assert.Equal(t, []mountSpec{{Device: "/dev/sda2", MountPoint: "/"}}, mounts["/dev/sda2"])
 }
 
 // ---------------------------------------------------------------------------
-// groupRootsByUUID
+// groupByFilesystem
 // ---------------------------------------------------------------------------
 
-func TestGroupRootsByUUID(t *testing.T) {
+func TestGroupByFilesystem(t *testing.T) {
 	tests := []struct {
 		name  string
 		roots []string
@@ -214,16 +214,16 @@ func TestGroupRootsByUUID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, groupRootsByUUID(tt.roots, tt.uuids))
+			assert.Equal(t, tt.want, groupByFilesystem(tt.roots, tt.uuids))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// chooseRootFromGroup
+// pickRoot
 // ---------------------------------------------------------------------------
 
-func TestChooseRootFromGroup(t *testing.T) {
+func TestPickRoot(t *testing.T) {
 	tests := []struct {
 		name  string
 		group []string
@@ -265,16 +265,16 @@ func TestChooseRootFromGroup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, chooseRootFromGroup(tt.group))
+			assert.Equal(t, tt.want, pickRoot(tt.group))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// sortMountsShortestFirst
+// sortMounts
 // ---------------------------------------------------------------------------
 
-func TestSortMountsShortestFirst(t *testing.T) {
+func TestSortMounts(t *testing.T) {
 	// Mirrors compare_keys_len in libguestfs common/options/inspect.c: shortest
 	// mount point first so "/" is mounted before anything nested under it.
 	mounts := []mountSpec{
@@ -284,7 +284,7 @@ func TestSortMountsShortestFirst(t *testing.T) {
 		{Device: "/dev/sda8", MountPoint: "/var"},
 	}
 
-	sortMountsShortestFirst(mounts)
+	sortMounts(mounts)
 
 	got := make([]string, 0, len(mounts))
 	for _, m := range mounts {
@@ -294,10 +294,10 @@ func TestSortMountsShortestFirst(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// quoteGuestfishArg
+// quoteArg
 // ---------------------------------------------------------------------------
 
-func TestQuoteGuestfishArg(t *testing.T) {
+func TestQuoteArg(t *testing.T) {
 	tests := []struct {
 		name string
 		in   string
@@ -315,16 +315,16 @@ func TestQuoteGuestfishArg(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, quoteGuestfishArg(tt.in))
+			assert.Equal(t, tt.want, quoteArg(tt.in))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// mountCommandLine / buildGuestfishMountScript
+// mountLine / mountScript
 // ---------------------------------------------------------------------------
 
-func TestMountCommandLine(t *testing.T) {
+func TestMountLine(t *testing.T) {
 	tests := []struct {
 		name  string
 		spec  mountSpec
@@ -359,12 +359,12 @@ func TestMountCommandLine(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, mountCommandLine(tt.spec, tt.write))
+			assert.Equal(t, tt.want, mountLine(tt.spec, tt.write))
 		})
 	}
 }
 
-func TestBuildGuestfishMountScript(t *testing.T) {
+func TestMountScript(t *testing.T) {
 	plan := mountPlan{
 		Root: "/dev/sda6",
 		Mounts: []mountSpec{
@@ -373,7 +373,7 @@ func TestBuildGuestfishMountScript(t *testing.T) {
 		},
 	}
 
-	got := buildGuestfishMountScript(plan, true)
+	got := mountScript(plan, true)
 
 	// "/" must be fatal on failure, everything else best effort - this mirrors
 	// inspect_mount_root in libguestfs common/options/inspect.c.
@@ -383,7 +383,7 @@ func TestBuildGuestfishMountScript(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
-func TestBuildGuestfishMountScriptNeverEmitsInspector(t *testing.T) {
+func TestMountScriptNeverEmitsInspector(t *testing.T) {
 	// Regression guard. Reintroducing -i anywhere in this path resurrects the
 	// "multi-boot operating systems are not supported" failure on any guest
 	// whose root filesystem spans more than one device.
@@ -393,7 +393,7 @@ func TestBuildGuestfishMountScriptNeverEmitsInspector(t *testing.T) {
 	}
 
 	for _, write := range []bool{false, true} {
-		script := buildGuestfishMountScript(plan, write)
+		script := mountScript(plan, write)
 		assert.NotContains(t, script, "-i")
 		assert.NotContains(t, script, "inspect-os")
 		assert.True(t, strings.HasPrefix(script, "run\n"), "script must launch the appliance first")
@@ -401,10 +401,10 @@ func TestBuildGuestfishMountScriptNeverEmitsInspector(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// formatGuestfishCommand
+// guestfishLine
 // ---------------------------------------------------------------------------
 
-func TestFormatGuestfishCommand(t *testing.T) {
+func TestGuestfishLine(t *testing.T) {
 	tests := []struct {
 		name    string
 		command string
@@ -434,53 +434,53 @@ func TestFormatGuestfishCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, formatGuestfishCommand(tt.command, tt.args...))
+			assert.Equal(t, tt.want, guestfishLine(tt.command, tt.args...))
 		})
 	}
 }
 
 // ---------------------------------------------------------------------------
-// buildPlanProbeScript
+// rootDetailsScript
 // ---------------------------------------------------------------------------
 
-func TestBuildPlanProbeScript(t *testing.T) {
-	got := buildPlanProbeScript([]string{"/dev/sdb", "/dev/sda6"})
+func TestRootDetailsScript(t *testing.T) {
+	got := rootDetailsScript([]string{"/dev/sdb", "/dev/sda6"})
 
 	// inspect-os must be re-run in this appliance or inspect-get-mountpoints
 	// fails with "no inspection data" - inspection state is per-process.
 	want := "run\n" +
 		"inspect-os\n" +
-		"echo " + planProbeUUIDMarker + ` "/dev/sdb"` + "\n" +
+		"echo " + uuidMarker + ` "/dev/sdb"` + "\n" +
 		`- vfs-uuid "/dev/sdb"` + "\n" +
-		"echo " + planProbeMPMarker + ` "/dev/sdb"` + "\n" +
+		"echo " + mountsMarker + ` "/dev/sdb"` + "\n" +
 		`- inspect-get-mountpoints "/dev/sdb"` + "\n" +
-		"echo " + planProbeUUIDMarker + ` "/dev/sda6"` + "\n" +
+		"echo " + uuidMarker + ` "/dev/sda6"` + "\n" +
 		`- vfs-uuid "/dev/sda6"` + "\n" +
-		"echo " + planProbeMPMarker + ` "/dev/sda6"` + "\n" +
+		"echo " + mountsMarker + ` "/dev/sda6"` + "\n" +
 		`- inspect-get-mountpoints "/dev/sda6"` + "\n"
 
 	assert.Equal(t, want, got)
 }
 
-func TestBuildPlanProbeScriptRunsInspectOSBeforeMarkers(t *testing.T) {
+func TestRootDetailsScriptRunsInspectOSFirst(t *testing.T) {
 	// Regression guard: both the openSUSE and Ubuntu runs of 2026-07-30 logged
 	// "inspect_get_mountpoints: no inspection data: call guestfs_inspect_os
 	// first" because this script omitted inspect-os, which silently reduced every
 	// mount plan to the root alone and broke UEFI ESP detection.
-	script := buildPlanProbeScript([]string{"/dev/sda1"})
+	script := rootDetailsScript([]string{"/dev/sda1"})
 
 	inspectIdx := strings.Index(script, "inspect-os\n")
-	markerIdx := strings.Index(script, planProbeUUIDMarker)
+	markerIdx := strings.Index(script, uuidMarker)
 
-	assert.NotEqual(t, -1, inspectIdx, "probe script must run inspect-os")
+	assert.NotEqual(t, -1, inspectIdx, "details script must run inspect-os")
 	assert.Less(t, inspectIdx, markerIdx, "inspect-os must precede the first marker")
 }
 
 // ---------------------------------------------------------------------------
-// planFromProbe - the whole reduction, end to end, without touching guestfish
+// buildPlan - the whole reduction, end to end, without touching guestfish
 // ---------------------------------------------------------------------------
 
-func TestPlanFromProbe(t *testing.T) {
+func TestBuildPlan(t *testing.T) {
 	t.Run("multi-device btrfs resolves to a single root", func(t *testing.T) {
 		roots := []string{"/dev/sdb", "/dev/sda6"}
 		uuids := map[string]string{
@@ -494,7 +494,7 @@ func TestPlanFromProbe(t *testing.T) {
 			},
 		}
 
-		plan, err := planFromProbe(roots, uuids, mounts)
+		plan, err := buildPlan(roots, uuids, mounts)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "/dev/sda6", plan.Root)
@@ -508,7 +508,7 @@ func TestPlanFromProbe(t *testing.T) {
 		roots := []string{"/dev/sda1", "/dev/sdb1"}
 		uuids := map[string]string{"/dev/sda1": "aaaa", "/dev/sdb1": "bbbb"}
 
-		_, err := planFromProbe(roots, uuids, nil)
+		_, err := buildPlan(roots, uuids, nil)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "multi-boot")
@@ -517,14 +517,14 @@ func TestPlanFromProbe(t *testing.T) {
 	})
 
 	t.Run("no roots is an error", func(t *testing.T) {
-		_, err := planFromProbe(nil, nil, nil)
+		_, err := buildPlan(nil, nil, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("guest without fstab falls back to mounting only the root", func(t *testing.T) {
 		// Windows guests: inspect_get_mountpoints returns just the root
 		// (daemon/inspect.ml).
-		plan, err := planFromProbe(
+		plan, err := buildPlan(
 			[]string{"/dev/sda2"},
 			map[string]string{"/dev/sda2": "aaaa"},
 			nil,
@@ -536,7 +536,7 @@ func TestPlanFromProbe(t *testing.T) {
 	})
 
 	t.Run("root mount is synthesised when fstab omits it", func(t *testing.T) {
-		plan, err := planFromProbe(
+		plan, err := buildPlan(
 			[]string{"/dev/sda6"},
 			map[string]string{"/dev/sda6": "aaaa"},
 			map[string][]mountSpec{

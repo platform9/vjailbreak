@@ -4,42 +4,15 @@ package virtv2v
 
 // Mount-plan resolution for guestfish.
 //
-// Why this file exists
-// -------------------
-// Every guest operation used to run `guestfish -a ... -i`, where -i is
-// libguestfs' "inspector" option. -i calls guestfs_inspect_os() and then aborts
-// outright if more than one root is returned:
+// guestfish's -i aborts with "multi-boot operating systems are not supported"
+// whenever inspect_os() returns more than one root (common/options/inspect.c).
+// It counts roots, it does not compare them, so a btrfs filesystem spanning
+// several devices trips it: every member carries a full superblock and libblkid
+// has no "btrfs_member" type for libguestfs' "_member" filter (daemon/listfs.ml).
 //
-//	if (roots[1] != NULL) {
-//	    fprintf (stderr, _("%s: multi-boot operating systems are not supported\n" ...
-//	    exit (EXIT_FAILURE);
-//	}
-//	                                   -- libguestfs common/options/inspect.c
-//
-// That check counts roots; it does not compare operating systems. A btrfs
-// filesystem spanning several devices therefore trips it, because btrfs writes a
-// complete superblock (same fsid, different device UUID) to every member device
-// and libblkid has no "btrfs_member" type to distinguish a member from a
-// standalone filesystem. libguestfs' own guard against container devices is a
-// string test on the blkid type:
-//
-//	else if String.ends_with "_member" vfs_type then ()
-//	                                   -- libguestfs daemon/listfs.ml
-//
-// which catches LVM2_member, linux_raid_member and zfs_member but structurally
-// cannot catch btrfs. So `btrfs device add /dev/sdb /` on an otherwise ordinary
-// guest makes inspect_os() report the same root twice - once per member - and
-// every guestfish call in the migration fails.
-//
-// What we do instead
-// ------------------
-// Resolve the mount plan ourselves: enumerate roots without -i (so nothing can
-// abort), collapse roots that are members of one filesystem by comparing the
-// filesystem UUID, then mount explicitly. The mount sequence deliberately
-// mirrors inspect_mount_root() in common/options/inspect.c - shortest mount
-// point first, a failed "/" is fatal, every other mount point is best effort -
-// so that for the common single-root guest the result is byte-for-byte what -i
-// was already doing.
+// Instead we enumerate roots without -i, collapse members of one filesystem by
+// UUID, and mount explicitly, mirroring inspect_mount_root: shortest mount point
+// first, a failed "/" fatal, everything else best effort.
 
 import (
 	"bytes"
@@ -55,47 +28,34 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
-// Markers used to delimit per-root sections in the probe script's output. They
-// are emitted with guestfish's `echo` builtin, which simply prints its
-// arguments (fish/echo.c), so they arrive on stdout interleaved with the
-// command output in a predictable order.
+// Section markers, emitted with guestfish's `echo` builtin.
 const (
-	planProbeUUIDMarker = "---VJB-UUID---"
-	planProbeMPMarker   = "---VJB-MP---"
+	uuidMarker   = "---VJB-UUID---"
+	mountsMarker = "---VJB-MP---"
 )
 
-// mountSpec is a single filesystem to mount inside the guestfish appliance.
 type mountSpec struct {
-	// Device is a libguestfs mountable: usually a device such as "/dev/sda6",
-	// but possibly a subvolume mountable such as "btrfsvol:/dev/sda6/@/home".
-	Device string
-	// MountPoint is the guest path, e.g. "/" or "/boot".
+	// Device is a libguestfs mountable: "/dev/sda6", or "btrfsvol:/dev/sda6/@/home".
+	Device     string
 	MountPoint string
-	// Options are mount options, empty in almost all cases.
-	Options string
+	Options    string
 }
 
-// mountPlan is what `guestfish -i` would have mounted, computed explicitly.
 type mountPlan struct {
-	// Root is the mountable chosen to represent the guest's root filesystem.
-	Root string
-	// Mounts is ordered shortest mount point first.
+	Root   string
 	Mounts []mountSpec
 }
 
-// mountPlanCache memoises the plan per set of disks. Resolving it costs two
-// appliance boots, and the disks do not change identity within a migration.
+// Resolving a plan costs two appliance boots and the disks do not change
+// identity within a migration, so memoise per disk set.
 var (
 	mountPlanCacheMu sync.Mutex
 	mountPlanCache   = map[string]mountPlan{}
 )
 
-// ---------------------------------------------------------------------------
-// Pure helpers
-// ---------------------------------------------------------------------------
-
-// parseInspectOSOutput turns `inspect-os` output into a list of roots.
-func parseInspectOSOutput(out string) []string {
+// parseRoots turns the output of `inspect-os` into a list of root filesystems,
+// one per line. Blank lines and stray whitespace are ignored.
+func parseRoots(out string) []string {
 	var roots []string
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
@@ -107,11 +67,9 @@ func parseInspectOSOutput(out string) []string {
 	return roots
 }
 
-// parseMountpointsOutput parses `inspect-get-mountpoints` output. guestfish
-// renders a hashtable as "key: value" per line (print_table in fish/fish.c) and
-// this hashtable is keyed by mount point, so a line reads "/boot: /dev/sda2".
-// The value may itself contain a colon, hence the split on the first ": ".
-func parseMountpointsOutput(out string) []mountSpec {
+// parseMountpoints turns `inspect-get-mountpoints` output into mount specs.
+// guestfish prints "mountpoint: device" per line; the device may contain a colon.
+func parseMountpoints(out string) []mountSpec {
 	var specs []mountSpec
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
@@ -132,11 +90,9 @@ func parseMountpointsOutput(out string) []mountSpec {
 	return specs
 }
 
-// quoteGuestfishArg double-quotes an argument for guestfish's stdin parser.
-// Inside double quotes guestfish interprets backslash escapes (\n, \t, \", \\ -
-// see the QUOTING section of guestfish(1)), so the backslash itself has to be
-// escaped first or a Windows-style path would be mangled.
-func quoteGuestfishArg(s string) string {
+// quoteArg wraps an argument in double quotes for guestfish's stdin parser.
+// Backslashes are escaped first, or a Windows-style path would be mangled.
+func quoteArg(s string) string {
 	var b strings.Builder
 	b.Grow(len(s) + 2)
 	b.WriteByte('"')
@@ -152,39 +108,38 @@ func quoteGuestfishArg(s string) string {
 	return b.String()
 }
 
-// formatGuestfishCommand renders one guestfish command line, quoting every
-// argument so that an argument containing spaces stays a single token.
-func formatGuestfishCommand(command string, args ...string) string {
+// guestfishLine renders one guestfish command with its arguments quoted,
+// so that an argument containing spaces stays a single token.
+func guestfishLine(command string, args ...string) string {
 	var b strings.Builder
 	b.WriteString(command)
 	for _, arg := range args {
 		b.WriteByte(' ')
-		b.WriteString(quoteGuestfishArg(arg))
+		b.WriteString(quoteArg(arg))
 	}
 	return b.String()
 }
 
-// mountCommandLine renders the guestfish command that mounts one filesystem.
-// Read-only callers must use mount-ro because the drives were added with --ro.
-func mountCommandLine(spec mountSpec, write bool) string {
+// mountLine renders the guestfish command that mounts one filesystem.
+// Read-only callers get mount-ro, because the drives were added with --ro.
+func mountLine(spec mountSpec, write bool) string {
 	if spec.Options != "" {
 		options := spec.Options
 		if !write {
 			options = "ro," + options
 		}
-		return formatGuestfishCommand("mount-options", options, spec.Device, spec.MountPoint)
+		return guestfishLine("mount-options", options, spec.Device, spec.MountPoint)
 	}
 	command := "mount-ro"
 	if write {
 		command = "mount"
 	}
-	return formatGuestfishCommand(command, spec.Device, spec.MountPoint)
+	return guestfishLine(command, spec.Device, spec.MountPoint)
 }
 
-// buildGuestfishMountScript renders the preamble every guestfish invocation
-// needs: launch the appliance, then mount the plan. Callers append their own
-// command lines to the result.
-func buildGuestfishMountScript(plan mountPlan, write bool) string {
+// mountScript renders the preamble every guestfish call starts with: launch the
+// appliance, then mount the plan. Callers append their own commands after it.
+func mountScript(plan mountPlan, write bool) string {
 	var b strings.Builder
 	b.WriteString("run\n")
 	for _, spec := range plan.Mounts {
@@ -196,38 +151,35 @@ func buildGuestfishMountScript(plan mountPlan, write bool) string {
 		if spec.MountPoint != "/" {
 			b.WriteString("- ")
 		}
-		b.WriteString(mountCommandLine(spec, write))
+		b.WriteString(mountLine(spec, write))
 		b.WriteByte('\n')
 	}
 	return b.String()
 }
 
-// buildPlanProbeScript asks, for every candidate root, its filesystem UUID and
-// its mount points. Both queries are error tolerant so that one unusable root
-// cannot abort the whole probe, and both are wrapped in echo markers so the
-// interleaved output can be attributed back to the right root.
-func buildPlanProbeScript(roots []string) string {
+// rootDetailsScript builds a script asking each root for its filesystem UUID and
+// its mount points, wrapped in markers so replies can be told apart.
+func rootDetailsScript(roots []string) string {
 	var b strings.Builder
 	b.WriteString("run\n")
 	// inspect-get-mountpoints reads the inspection data that only inspect-os
 	// populates (daemon/inspect.ml search_for_root), and that state does not
 	// survive across guestfish processes - so it has to be re-run here or every
 	// mountpoints query fails with "no inspection data". Its output lands before
-	// the first marker and is discarded by parsePlanProbeOutput.
+	// the first marker and is discarded by parseRootDetails.
 	b.WriteString("inspect-os\n")
 	for _, root := range roots {
-		fmt.Fprintf(&b, "echo %s %s\n", planProbeUUIDMarker, quoteGuestfishArg(root))
-		fmt.Fprintf(&b, "- vfs-uuid %s\n", quoteGuestfishArg(root))
-		fmt.Fprintf(&b, "echo %s %s\n", planProbeMPMarker, quoteGuestfishArg(root))
-		fmt.Fprintf(&b, "- inspect-get-mountpoints %s\n", quoteGuestfishArg(root))
+		fmt.Fprintf(&b, "echo %s %s\n", uuidMarker, quoteArg(root))
+		fmt.Fprintf(&b, "- vfs-uuid %s\n", quoteArg(root))
+		fmt.Fprintf(&b, "echo %s %s\n", mountsMarker, quoteArg(root))
+		fmt.Fprintf(&b, "- inspect-get-mountpoints %s\n", quoteArg(root))
 	}
 	return b.String()
 }
 
-// parsePlanProbeOutput splits probe output back into per-root UUIDs and mount
-// points. A root whose UUID query failed maps to "", which groupRootsByUUID
-// treats as "identity unknown" rather than "same as other unknowns".
-func parsePlanProbeOutput(out string) (map[string]string, map[string][]mountSpec) {
+// parseRootDetails splits that script's output back into per-root UUIDs and mount
+// points. A root whose UUID query failed maps to "", meaning identity unknown.
+func parseRootDetails(out string) (map[string]string, map[string][]mountSpec) {
 	uuids := make(map[string]string)
 	mounts := make(map[string][]mountSpec)
 
@@ -251,7 +203,7 @@ func parsePlanProbeOutput(out string) (map[string]string, map[string][]mountSpec
 		case sectionUUID:
 			uuids[current] = strings.ToLower(strings.TrimSpace(text))
 		case sectionMountpoints:
-			mounts[current] = parseMountpointsOutput(text)
+			mounts[current] = parseMountpoints(text)
 		}
 		buf = nil
 	}
@@ -259,14 +211,14 @@ func parsePlanProbeOutput(out string) (map[string]string, map[string][]mountSpec
 	for _, line := range strings.Split(out, "\n") {
 		trimmed := strings.TrimSpace(line)
 		switch {
-		case strings.HasPrefix(trimmed, planProbeUUIDMarker):
+		case strings.HasPrefix(trimmed, uuidMarker):
 			flush()
 			section = sectionUUID
-			current = strings.TrimSpace(strings.TrimPrefix(trimmed, planProbeUUIDMarker))
-		case strings.HasPrefix(trimmed, planProbeMPMarker):
+			current = strings.TrimSpace(strings.TrimPrefix(trimmed, uuidMarker))
+		case strings.HasPrefix(trimmed, mountsMarker):
 			flush()
 			section = sectionMountpoints
-			current = strings.TrimSpace(strings.TrimPrefix(trimmed, planProbeMPMarker))
+			current = strings.TrimSpace(strings.TrimPrefix(trimmed, mountsMarker))
 		case trimmed == "":
 			// Ignore blank lines inside a section.
 		default:
@@ -280,11 +232,9 @@ func parsePlanProbeOutput(out string) (map[string]string, map[string][]mountSpec
 	return uuids, mounts
 }
 
-// groupRootsByUUID groups roots that are the same physical filesystem. For
-// btrfs the filesystem UUID is the fsid, identical on every member device, so
-// two members of one filesystem land in one group while a genuine dual-boot
-// guest keeps its roots apart. First-appearance order is preserved.
-func groupRootsByUUID(roots []string, uuids map[string]string) [][]string {
+// groupByFilesystem puts roots that are the same filesystem into one group, using
+// the UUID - identical on every btrfs member disk, which is what fixes the bug.
+func groupByFilesystem(roots []string, uuids map[string]string) [][]string {
 	var groups [][]string
 	indexByUUID := make(map[string]int)
 
@@ -307,11 +257,9 @@ func groupRootsByUUID(roots []string, uuids map[string]string) [][]string {
 	return groups
 }
 
-// rootPreferenceRank ranks candidate representatives of one filesystem, lower
-// being better. Any member mounts the same filesystem so guestfish is
-// indifferent, but downstream part-to-dev, device-index and fstab handling all
-// assume a partition, so a partition beats a bare member disk.
-func rootPreferenceRank(root string) int {
+// rootRank scores candidates for representing a filesystem, lower being better.
+// A real partition beats a bare disk, because later code assumes a partition.
+func rootRank(root string) int {
 	switch {
 	case strings.Contains(root, ":"):
 		// A mountable such as "btrfsvol:/dev/sda6/@/home": usable, but a plain
@@ -324,12 +272,13 @@ func rootPreferenceRank(root string) int {
 	}
 }
 
-// chooseRootFromGroup picks a stable representative for one filesystem.
-func chooseRootFromGroup(group []string) string {
+// pickRoot chooses one member of a group to stand for the whole filesystem.
+// Best rank wins, then lowest name, so the choice is always the same.
+func pickRoot(group []string) string {
 	best := ""
 	bestRank := 0
 	for i, candidate := range group {
-		rank := rootPreferenceRank(candidate)
+		rank := rootRank(candidate)
 		if i == 0 || rank < bestRank || (rank == bestRank && candidate < best) {
 			best = candidate
 			bestRank = rank
@@ -338,9 +287,9 @@ func chooseRootFromGroup(group []string) string {
 	return best
 }
 
-// sortMountsShortestFirst orders mounts so parents are mounted before children.
-// Mirrors compare_keys_len in libguestfs common/options/inspect.c.
-func sortMountsShortestFirst(mounts []mountSpec) {
+// sortMounts orders mounts shortest mount point first, so a parent is always
+// mounted before anything nested inside it.
+func sortMounts(mounts []mountSpec) {
 	sort.SliceStable(mounts, func(i, j int) bool {
 		if len(mounts[i].MountPoint) != len(mounts[j].MountPoint) {
 			return len(mounts[i].MountPoint) < len(mounts[j].MountPoint)
@@ -349,8 +298,9 @@ func sortMountsShortestFirst(mounts []mountSpec) {
 	})
 }
 
-// hasRootMount reports whether the plan already mounts "/".
-func hasRootMount(mounts []mountSpec) bool {
+// hasRoot reports whether the plan already mounts "/".
+// If nothing did, the caller adds it.
+func hasRoot(mounts []mountSpec) bool {
 	for _, spec := range mounts {
 		if spec.MountPoint == "/" {
 			return true
@@ -359,9 +309,9 @@ func hasRootMount(mounts []mountSpec) bool {
 	return false
 }
 
-// describeRootGroups renders groups for an error message, e.g.
-// "[/dev/sda1] and [/dev/sdb1]".
-func describeRootGroups(groups [][]string) string {
+// describeGroups formats root groups for an error message,
+// e.g. "[/dev/sda1] and [/dev/sdb1]".
+func describeGroups(groups [][]string) string {
 	parts := make([]string, 0, len(groups))
 	for _, group := range groups {
 		parts = append(parts, "["+strings.Join(group, " ")+"]")
@@ -369,7 +319,8 @@ func describeRootGroups(groups [][]string) string {
 	return strings.Join(parts, " and ")
 }
 
-// describeMounts renders a plan for logging.
+// describeMounts formats a plan for the log,
+// e.g. "/=/dev/sda6,/boot=/dev/sda2".
 func describeMounts(mounts []mountSpec) string {
 	parts := make([]string, 0, len(mounts))
 	for _, spec := range mounts {
@@ -378,14 +329,14 @@ func describeMounts(mounts []mountSpec) string {
 	return strings.Join(parts, ",")
 }
 
-// planFromProbe is the whole reduction from probe results to a mount plan. Kept
-// free of process execution so the interesting logic is unit testable.
-func planFromProbe(roots []string, uuids map[string]string, mounts map[string][]mountSpec) (mountPlan, error) {
+// buildPlan turns the gathered details into a mount plan: group, pick a root,
+// ensure "/" is mounted, sort. Pure, so the interesting logic is testable.
+func buildPlan(roots []string, uuids map[string]string, mounts map[string][]mountSpec) (mountPlan, error) {
 	if len(roots) == 0 {
 		return mountPlan{}, errors.New("no operating system was found on the supplied disks")
 	}
 
-	groups := groupRootsByUUID(roots, uuids)
+	groups := groupByFilesystem(roots, uuids)
 	if len(groups) == 0 {
 		return mountPlan{}, errors.New("no operating system was found on the supplied disks")
 	}
@@ -393,23 +344,23 @@ func planFromProbe(roots []string, uuids map[string]string, mounts map[string][]
 		return mountPlan{}, fmt.Errorf(
 			"guest looks genuinely multi-boot: found %d separate root filesystems %s. "+
 				"vJailbreak cannot pick one automatically",
-			len(groups), describeRootGroups(groups))
+			len(groups), describeGroups(groups))
 	}
 
 	group := groups[0]
-	root := chooseRootFromGroup(group)
+	root := pickRoot(group)
 	if root == "" {
 		return mountPlan{}, errors.New("could not choose a root filesystem for the guest")
 	}
 
 	plan := mountPlan{Root: root}
 	plan.Mounts = append(plan.Mounts, mounts[root]...)
-	if !hasRootMount(plan.Mounts) {
+	if !hasRoot(plan.Mounts) {
 		// No fstab (Windows), or an fstab that never named "/". Mounting the
 		// root mountable itself is what inspect_get_mountpoints falls back to.
 		plan.Mounts = append(plan.Mounts, mountSpec{Device: root, MountPoint: "/"})
 	}
-	sortMountsShortestFirst(plan.Mounts)
+	sortMounts(plan.Mounts)
 
 	return plan, nil
 }
@@ -418,8 +369,9 @@ func planFromProbe(roots []string, uuids map[string]string, mounts map[string][]
 // Resolution (runs guestfish)
 // ---------------------------------------------------------------------------
 
-// diskSetKey identifies a set of disks for the plan cache.
-func diskSetKey(disks []vm.VMDisk) string {
+// cacheKey builds the memoisation key for a set of disks
+// by joining their paths.
+func cacheKey(disks []vm.VMDisk) string {
 	paths := make([]string, 0, len(disks))
 	for _, disk := range disks {
 		paths = append(paths, disk.Path)
@@ -427,10 +379,9 @@ func diskSetKey(disks []vm.VMDisk) string {
 	return strings.Join(paths, "|")
 }
 
-// runGuestfishScript runs a script with no -i and nothing pre-mounted. This is
-// the only guestfish entry point that must not depend on a mount plan, because
-// it is what resolves the plan in the first place.
-func runGuestfishScript(disks []vm.VMDisk, script string) (string, error) {
+// runScript runs a guestfish script read-only with every disk attached and no -i,
+// returning its stdout. This is the one call that cannot use a mount plan.
+func runScript(disks []vm.VMDisk, script string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
 	cmd := exec.Command("guestfish", "--ro")
@@ -454,14 +405,14 @@ func runGuestfishScript(disks []vm.VMDisk, script string) (string, error) {
 	return stdoutBuf.String(), nil
 }
 
-// resolveMountPlan works out what to mount for these disks, memoising the
-// result. Two appliance boots: one to enumerate roots, one to identify them.
+// resolveMountPlan works out what to mount for a set of disks, replacing what
+// `guestfish -i` used to do. Two appliance boots, then cached per disk set.
 func resolveMountPlan(disks []vm.VMDisk) (mountPlan, error) {
 	if len(disks) == 0 {
 		return mountPlan{}, errors.New("no disks supplied; cannot resolve a guest mount plan")
 	}
 
-	key := diskSetKey(disks)
+	key := cacheKey(disks)
 
 	mountPlanCacheMu.Lock()
 	defer mountPlanCacheMu.Unlock()
@@ -472,24 +423,24 @@ func resolveMountPlan(disks []vm.VMDisk) (mountPlan, error) {
 
 	// Boot 1: enumerate roots. No -i, so a root filesystem spanning several
 	// devices cannot abort this.
-	out, err := runGuestfishScript(disks, "run\ninspect-os\n")
+	out, err := runScript(disks, "run\ninspect-os\n")
 	if err != nil {
 		return mountPlan{}, fmt.Errorf("failed to enumerate guest root filesystems: %w", err)
 	}
-	roots := parseInspectOSOutput(out)
+	roots := parseRoots(out)
 	if len(roots) == 0 {
 		return mountPlan{}, errors.New("no operating system was found on the supplied disks")
 	}
 
 	// Boot 2: identity and mount points for every candidate root at once, so
 	// that the multi-root case does not need a third boot.
-	probeOut, err := runGuestfishScript(disks, buildPlanProbeScript(roots))
+	detailsOut, err := runScript(disks, rootDetailsScript(roots))
 	if err != nil {
-		return mountPlan{}, fmt.Errorf("failed to probe guest root filesystems %v: %w", roots, err)
+		return mountPlan{}, fmt.Errorf("failed to read details for guest root filesystems %v: %w", roots, err)
 	}
-	uuids, mounts := parsePlanProbeOutput(probeOut)
+	uuids, mounts := parseRootDetails(detailsOut)
 
-	plan, err := planFromProbe(roots, uuids, mounts)
+	plan, err := buildPlan(roots, uuids, mounts)
 	if err != nil {
 		return mountPlan{}, err
 	}

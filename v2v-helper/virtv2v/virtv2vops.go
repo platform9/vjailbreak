@@ -542,7 +542,7 @@ func GetOsRelease(path string) (string, error) {
 	runGuestfishCat := func(imgPath, file string) (string, error) {
 		cmd := exec.Command("guestfish", "--ro", "-a", imgPath)
 		cmd.Stdin = strings.NewReader(
-			buildGuestfishMountScript(plan, false) + formatGuestfishCommand("cat", file) + "\n")
+			mountScript(plan, false) + guestfishLine("cat", file) + "\n")
 		log.Printf("Executing %s with input: cat %s", cmd.String(), file)
 
 		out, err := cmd.CombinedOutput()
@@ -814,7 +814,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		path)
 	// The command text is passed through verbatim - callers already supply a
 	// complete guestfish command line here, not a command plus separate args.
-	cmd.Stdin = strings.NewReader(buildGuestfishMountScript(plan, write) + command + "\n")
+	cmd.Stdin = strings.NewReader(mountScript(plan, write) + command + "\n")
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -844,7 +844,7 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 	// be prepended, and so that a failed non-root mount can be tolerated with
 	// guestfish's "-" command prefix.
 	cmd.Stdin = strings.NewReader(
-		buildGuestfishMountScript(plan, write) + formatGuestfishCommand(command, args...) + "\n")
+		mountScript(plan, write) + guestfishLine(command, args...) + "\n")
 	return cmd, nil
 }
 
@@ -854,7 +854,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %w", command, err)
 	}
-	log.Printf("Executing %s -- %s", cmd.String(), formatGuestfishCommand(command, args...))
+	log.Printf("Executing %s -- %s", cmd.String(), guestfishLine(command, args...))
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
