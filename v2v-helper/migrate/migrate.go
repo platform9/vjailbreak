@@ -2432,8 +2432,8 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 		"VM is running on an emulated SATA bus with a virtio probe disk attached. "+
 			"Log in and confirm the virtio storage driver installed, then answer this gate. "+
 			"In the guest: Get-PnpDevice -Class SCSIAdapter (expect a Red Hat VirtIO SCSI controller, status OK) "+
-			"and sc.exe query viostor (expect STATE: RUNNING). Shut the guest down cleanly before answering "+
-			"'%s'. Waiting up to %s; no answer is treated as '%s'.",
+			"and sc.exe query viostor (expect STATE: RUNNING). Leave the VM running - answering '%s' "+
+			"shuts it down cleanly before recreating it. Waiting up to %s; no answer is treated as '%s'.",
 		constants.LDMBootStatusSuccess, constants.LDMBootGateTimeout, constants.LDMBootStatusFinish))
 
 	answer := migobj.waitForLDMBootStatus(ctx)
@@ -2520,6 +2520,13 @@ func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VM
 		return errors.Wrap(err, "failed to locate the migrated VM before promotion")
 	}
 
+	// Stop before deleting. Deleting a running instance is a hard destroy, which
+	// leaves NTFS dirty with no ntfsfix to follow - the conversion phase is long
+	// past by now. An ACPI stop lets Windows flush and shut down properly.
+	if err := migobj.stopServerAndWait(ctx, serverID); err != nil {
+		return err
+	}
+
 	migobj.logMessage(fmt.Sprintf("Deleting server %s so it can be recreated on the virtio bus", serverID))
 	if err := migobj.Openstackclients.DeleteServer(ctx, serverID); err != nil {
 		return errors.Wrap(err, "failed to delete the server before promotion")
@@ -2528,38 +2535,19 @@ func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VM
 		return err
 	}
 
-	// Authoritative gate. Nova reports a server ACTIVE even when the guest has
-	// bugchecked, so the admin's confirmation cannot be the only check: verify
-	// against the disks themselves.
+	// No offline re-verification here on purpose.
 	//
-	// CreateTargetInstance detached these volumes from the appliance and handed
-	// them to the instance, so VMDisk.Path is stale and guestfish cannot reach
-	// them. Reattach here, and detach again before recreating - a volume still
-	// held by the appliance would be rejected by the next server create.
-	if err := migobj.attachAllVolumes(ctx, &vminfo); err != nil {
-		migobj.logMessage(fmt.Sprintf("Could not reattach volumes to verify the virtio driver (%v); staying on SATA", err))
-		return migobj.recreateLDMGuest(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex, diskBusSATA)
-	}
-
-	installed, driver, verifyErr := virtv2v.HasBootStartVirtioDriver(vminfo.VMDisks)
-
-	if err := migobj.DetachAllVolumes(ctx, vminfo); err != nil {
-		return errors.Wrap(err, "failed to detach volumes after verifying the virtio driver")
-	}
-	if err := migobj.waitForVolumesAvailable(ctx, vminfo); err != nil {
-		return err
-	}
-
-	if verifyErr != nil {
-		migobj.logMessage(fmt.Sprintf("Could not verify the virtio storage driver offline (%v); staying on SATA", verifyErr))
-		return migobj.recreateLDMGuest(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex, diskBusSATA)
-	}
-	if !installed {
-		migobj.logMessage("No virtio storage driver is installed in the guest; staying on SATA")
-		return migobj.recreateLDMGuest(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex, diskBusSATA)
-	}
-
-	migobj.logMessage(fmt.Sprintf("Verified %s is installed in the guest; recreating the VM on the virtio bus", driver))
+	// An earlier version reattached every volume to the appliance, ran guestfish to
+	// look for <systemroot>\System32\drivers\viostor.sys, then detached again. That
+	// was designed for an automatic promotion with no human in the loop. With this
+	// gate the admin has already run "Get-PnpDevice -Class SCSIAdapter" and
+	// "sc.exe query viostor" against the live guest, which is a stronger signal
+	// than a file's existence - it reports the driver actually running. Re-checking
+	// cost an appliance boot plus an attach/detach cycle per disk, and introduced a
+	// failure mode (a volume stuck attaching or detaching) purely to second-guess
+	// the operator with weaker evidence.
+	//
+	// If the guest does not come up on virtio, recreate it with hw_disk_bus=sata.
 
 	// Clear the field so CreateVM leaves the probe off the recreated server, but
 	// keep the ID: it is now detached and can finally be deleted.
@@ -2571,6 +2559,47 @@ func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VM
 	}
 	migobj.deleteProbeVolume(ctx, probeID)
 	return nil
+}
+
+// stopServerAndWait issues an ACPI shutdown and waits for the instance to reach
+// SHUTOFF, so the subsequent delete is not a hard destroy.
+//
+// A timeout is not fatal. The guest may be ignoring ACPI, or may have hung; the
+// delete still has to happen for the promotion to proceed, and the cost is a dirty
+// filesystem that Windows will chkdsk on the next boot rather than lost data.
+func (migobj *Migrate) stopServerAndWait(ctx context.Context, serverID string) error {
+	migobj.logMessage(fmt.Sprintf("Stopping server %s before recreating it on the virtio bus", serverID))
+	if err := migobj.Openstackclients.StopServer(ctx, serverID); err != nil {
+		return errors.Wrap(err, "failed to stop the server before promotion")
+	}
+
+	deadline := time.After(constants.LDMShutdownTimeout)
+	ticker := time.NewTicker(constants.LDMShutdownPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-deadline:
+			migobj.logMessage(fmt.Sprintf(
+				"Server %s did not reach SHUTOFF within %s; continuing with the delete. Windows may "+
+					"run chkdsk on the next boot.", serverID, constants.LDMShutdownTimeout))
+			return nil
+
+		case <-ticker.C:
+			status, err := migobj.Openstackclients.GetServerStatus(ctx, serverID)
+			if err != nil {
+				migobj.logMessage(fmt.Sprintf("Warning: could not read the status of server %s: %v", serverID, err))
+				continue
+			}
+			if strings.EqualFold(status, "SHUTOFF") {
+				migobj.logMessage(fmt.Sprintf("Server %s is SHUTOFF", serverID))
+				return nil
+			}
+		}
+	}
 }
 
 // recreateLDMGuest re-applies the boot volume's disk bus and rebuilds the instance.

@@ -60,6 +60,7 @@ type OpenstackOperations interface {
 	GetCinderVolumeServices(ctx context.Context) (interface{}, error)
 	GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error)
 	DeleteServer(ctx context.Context, serverID string) error
+	StopServer(ctx context.Context, serverID string) error
 	GetServerStatus(ctx context.Context, serverID string) (string, error)
 }
 

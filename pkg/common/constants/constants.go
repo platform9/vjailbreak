@@ -289,6 +289,15 @@ const (
 	// cleaned up. Destructive - it discards the migrated VM.
 	LDMBootStatusFailed = "failed"
 
+	// LDMShutdownTimeout bounds the wait for the guest to reach SHUTOFF before the
+	// promotion deletes it. Generous, because a Windows shutdown can be slow, but
+	// not fatal on expiry - the delete proceeds regardless.
+	LDMShutdownTimeout = 10 * time.Minute
+
+	// LDMShutdownPollInterval is how often the instance status is checked while
+	// waiting for the ACPI shutdown to take effect.
+	LDMShutdownPollInterval = 10 * time.Second
+
 	// LDMBootGateTimeout bounds the WaitingForLDMBootSuccess gate. The helper pod
 	// has RestartPolicy: Never and nothing recreates it, so the wait cannot be
 	// unbounded; it must also be shorter than any node maintenance cycle that

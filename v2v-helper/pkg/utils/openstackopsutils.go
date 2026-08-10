@@ -1262,6 +1262,27 @@ func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID str
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 
+// StopServer issues an ACPI shutdown to the guest and returns as soon as Nova has
+// accepted the request. Callers that need the instance to actually be down must
+// poll GetServerStatus for SHUTOFF.
+//
+// Treats an already-stopped instance as success: Nova returns 409 Conflict when
+// the server is not in a state it can stop from, and for our purposes "already
+// off" is the outcome we wanted.
+func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+
+	status, err := osclient.GetServerStatus(ctx, serverID)
+	if err == nil && strings.EqualFold(status, "SHUTOFF") {
+		PrintLog(fmt.Sprintf("Server %s is already SHUTOFF", serverID))
+		return nil
+	}
+
+	return DoRetryWithExponentialBackoff(ctx, func() error {
+		return servers.Stop(ctx, osclient.ComputeClient, serverID).ExtractErr()
+	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
+}
+
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
 // Uses the manageable_volumes endpoint which is the standard Cinder manage API
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {

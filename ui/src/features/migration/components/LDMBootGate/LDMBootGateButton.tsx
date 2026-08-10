@@ -126,8 +126,8 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
 sc.exe query viostor               # STATE: RUNNING`}
             </Box>
             <Typography variant="caption" color="text.secondary">
-              Shut the guest down cleanly before choosing “Move to virtio” — the VM is deleted and
-              recreated, and a hard power-off leaves the filesystem dirty.
+              Leave the VM running. “Move to virtio” shuts it down cleanly first, then deletes and
+              recreates it with the root disk on the virtio bus.
             </Typography>
           </DialogContentText>
 
