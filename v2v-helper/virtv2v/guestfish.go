@@ -67,16 +67,29 @@ type mountPlan struct {
 	Mounts []mountSpec
 }
 
-// ldmVolumePrefix is how libguestfs names a volume assembled from a Windows
-// Dynamic Disk group: "ldm_vol_<machine>-<group>_<volume>" under /dev/mapper
-// (daemon/ldm.c, via ldmtool). A root with this prefix means the system volume
-// itself lives on a dynamic disk.
-const ldmVolumePrefix = "/dev/mapper/ldm_vol_"
+// ldmPrefixes are how libguestfs names anything it assembles from a Windows
+// Dynamic Disk group. daemon/ldm.ml:23 states it outright: "All device mapper
+// devices are called /dev/mapper/ldm_vol_* or /dev/mapper/ldm_part_*", and
+// list_ldm_volumes is literally a prefix filter over /dev/mapper.
+//
+// Both forms are matched. A simple dynamic disk can surface as a partition
+// rather than a volume, and missing that would send an LDM guest into a
+// conversion that cannot work.
+var ldmPrefixes = []string{
+	"/dev/mapper/ldm_vol_",
+	"/dev/mapper/ldm_part_",
+}
 
 // isLDMDevice reports whether a mountable is a Windows Dynamic Disk volume.
 // Only the guest's root is ever checked; data disks on dynamic disks are fine.
 func isLDMDevice(device string) bool {
-	return strings.HasPrefix(strings.TrimSpace(device), ldmVolumePrefix)
+	device = strings.TrimSpace(device)
+	for _, prefix := range ldmPrefixes {
+		if strings.HasPrefix(device, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // Resolving a plan costs two appliance boots and the disks do not change
@@ -370,17 +383,23 @@ func pickRoot(group []string) string {
 }
 
 // rootRank scores how good a device is at representing a filesystem, lower being
-// better: a real partition, then a whole disk, then a subvolume mountable.
+// better: an LDM volume, then a partition, then a whole disk, then a mountable.
 func rootRank(root string) int {
 	switch {
+	case isLDMDevice(root):
+		// An assembled Windows Dynamic Disk volume always wins. If it is in the
+		// group at all then the system volume is on a dynamic disk, and that is
+		// what IsLDMSystemVolume has to see - picking a sibling here would hide
+		// it and send the guest into a conversion virt-v2v cannot do.
+		return 0
 	case strings.Contains(root, ":"):
 		// A mountable such as "btrfsvol:/dev/sda6/@/home": usable, but a plain
 		// device is a better representative.
-		return 2
+		return 3
 	case isBareDisk(root):
-		return 1
+		return 2
 	default:
-		return 0
+		return 1
 	}
 }
 

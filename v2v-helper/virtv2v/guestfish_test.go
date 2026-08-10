@@ -269,6 +269,26 @@ func TestPickRoot(t *testing.T) {
 			want:  "/dev/vg0/lv_root",
 		},
 		{
+			// An assembled Dynamic Disk volume must win, or IsLDMSystemVolume
+			// never sees it and the guest goes into a conversion that cannot work.
+			// Without the explicit rank this only passed because "m" sorts before
+			// "s" - luck, not design.
+			name:  "LDM volume beats a plain partition",
+			group: []string{"/dev/sda2", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1",
+		},
+		{
+			name:  "LDM volume beats a bare disk",
+			group: []string{"/dev/sdb", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1",
+		},
+		{
+			// libguestfs also creates /dev/mapper/ldm_part_* (daemon/ldm.ml:23).
+			name:  "LDM partition wins too",
+			group: []string{"/dev/sda2", "/dev/mapper/ldm_part_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_part_WIN-X-Dg0_Volume1",
+		},
+		{
 			name:  "empty group",
 			group: nil,
 			want:  "",
@@ -585,7 +605,11 @@ func TestIsLDMDevice(t *testing.T) {
 	}{
 		{"LDM volume", "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1", true},
 		{"LDM volume with trailing whitespace", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n", true},
+		// libguestfs creates both forms - daemon/ldm.ml:23. Matching only
+		// ldm_vol_ would miss a layout that surfaces as a partition.
+		{"LDM partition", "/dev/mapper/ldm_part_WIN-3RP74FF6NOG-Dg0_Volume1", true},
 		{"plain partition", "/dev/sda2", false},
+		{"unrelated device-mapper name starting ldm", "/dev/mapper/ldm-root", false},
 		{"LVM logical volume", "/dev/mapper/rhel-root", false},
 		{"LVM by volume group", "/dev/VolGroup00/LogVol00", false},
 		{"btrfs subvolume", "btrfsvol:/dev/sda6/@/home", false},
