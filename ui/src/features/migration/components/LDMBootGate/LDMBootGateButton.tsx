@@ -75,7 +75,7 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
 
   return (
     <>
-      <Tooltip title="Confirm virtio driver installation">
+      <Tooltip title="Action needed: move this VM to virtio, or keep it on SATA">
         <IconButton
           data-testid="ldm-boot-gate-button"
           onClick={(e) => {
@@ -100,23 +100,24 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Confirm virtio driver installation</DialogTitle>
+        <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Move this VM to virtio?</DialogTitle>
         <DialogContent sx={{ px: 3, pb: 2 }}>
           <DialogContentText component="div">
             <Typography variant="body2" gutterBottom>
-              The system volume of <strong>{migrationName}</strong> is on a Windows Dynamic Disk
-              (LDM), which virt-v2v cannot convert. The VM was created on an emulated SATA bus with
-              a scratch virtio disk attached so Windows would install the virtio storage driver on
-              first boot.
+              <strong>{migrationName}</strong> has migrated and is running, but on an emulated SATA
+              disk controller. Moving it to virtio gives noticeably better disk performance and
+              lifts the six-disk limit SATA imposes — but only if Windows has picked up the virtio
+              storage driver.
             </Typography>
 
             <Typography variant="body2" sx={{ mt: 2 }} gutterBottom>
-              Log into the guest and confirm the driver is running:
+              <strong>Step 1 — check inside the guest.</strong> Log in and run:
             </Typography>
             <Box
               component="pre"
               sx={{
                 mt: 1,
+                mb: 1.5,
                 p: 1.5,
                 borderRadius: 1,
                 bgcolor: 'action.hover',
@@ -124,12 +125,32 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
                 overflowX: 'auto'
               }}
             >
-              {`sc.exe query viostor    # STATE: RUNNING`}
+              {`sc.exe query viostor`}
             </Box>
-            <Typography variant="caption" color="text.secondary">
-              Leave the VM running. “Move to virtio” shuts it down cleanly first, then deletes and
-              recreates it with the root disk on the virtio bus.
+
+            <Typography variant="body2" gutterBottom>
+              <strong>Step 2 — choose based on what it says.</strong>
             </Typography>
+            <Box component="ul" sx={{ pl: 2.5, mt: 0.5, mb: 1.5 }}>
+              <li>
+                <Typography variant="body2">
+                  <code>STATE: 4 RUNNING</code> → <strong>Move to virtio</strong>
+                </Typography>
+              </li>
+              <li>
+                <Typography variant="body2">
+                  Anything else, or the service does not exist → <strong>Keep on SATA</strong>. The
+                  migration still completes successfully; the VM simply stays as it is.
+                </Typography>
+              </li>
+            </Box>
+
+            <Alert severity="info" sx={{ mt: 1 }}>
+              <strong>Move to virtio restarts the VM.</strong> It is shut down cleanly, deleted and
+              recreated with the same name, IP and MAC — expect a short outage. Leave the VM running
+              now; the shutdown is handled for you. If nobody answers within 24 hours this resolves
+              as “Keep on SATA”.
+            </Alert>
           </DialogContentText>
 
           {error && (
@@ -140,9 +161,14 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
 
           {confirmingFailure && (
             <Alert severity="error" sx={{ mt: 2 }}>
-              <AlertTitle>This deletes the migrated VM</AlertTitle>
-              The VM and its volumes will be removed. If the guest boots at all, choose “Keep on
-              SATA” instead — that completes the migration successfully.
+              <AlertTitle>This destroys the migrated VM</AlertTitle>
+              The VM and its volumes are deleted and the migration is marked failed. You would need
+              to migrate this VM again from the beginning.
+              <br />
+              <br />
+              Only use this if the guest is genuinely unusable. If it boots at all, choose{' '}
+              <strong>Keep on SATA</strong> — that keeps the VM and completes the migration
+              successfully.
             </Alert>
           )}
         </DialogContent>
