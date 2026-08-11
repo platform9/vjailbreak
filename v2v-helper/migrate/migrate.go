@@ -2547,6 +2547,15 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 				"volume %s stays attached and will be removed with the instance; to move to virtio later, "+
 				"delete and recreate the server with hw_disk_bus=virtio once the driver is installed.",
 			migobj.ldmProbeVolumeID))
+
+		// Re-emit the terminal event with a fresh timestamp, which is what moves the
+		// phase off WaitingForLDMBootSuccess. The original was emitted before the
+		// gate opened, and the gate has no time limit: once it ages past the API
+		// server's event TTL nothing matches any more, the controller leaves
+		// Status.Phase at its stored value, and the UI sits on "waiting" forever
+		// even though the migration is finished. The promotion path gets this for
+		// free because it recreates the server and emits the event again.
+		migobj.logMessage(fmt.Sprintf("%s: left on the emulated SATA bus", constants.EventMessageMigrationSucessful))
 		return nil
 	}
 }

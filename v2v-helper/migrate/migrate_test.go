@@ -4,6 +4,7 @@ package migrate
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -1229,6 +1230,51 @@ func TestWaitForLDMBootStatus(t *testing.T) {
 		cancel()
 		assert.Equal(t, constants.LDMBootStatusFinish, newMigobj(make(chan string)).waitForLDMBootStatus(ctx))
 	})
+}
+
+// "Keep on SATA" ends the migration without recreating anything, so unlike the
+// promotion path it emits no new "VM created successfully". The original one was
+// emitted before the gate opened, and the gate has no time limit - once it ages
+// past the API server's event TTL the controller matches nothing and leaves
+// Status.Phase at WaitingForLDMBootSuccess, so the UI shows the migration as
+// still waiting forever. The finish path must re-emit the terminal event.
+func TestFinishEmitsTerminalEvent(t *testing.T) {
+	events := make(chan string, 16)
+	watcher := make(chan string, 1)
+	watcher <- constants.LDMBootStatusFinish
+
+	migobj := &Migrate{
+		LDMBootStatusWatcher: watcher,
+		EventReporter:        events,
+		InPod:                true,
+		ldmProbeVolumeID:     "probe-id",
+	}
+
+	err := migobj.waitForLDMBootAndPromote(context.Background(), vm.VMInfo{}, nil, nil, nil, -1, nil)
+	assert.NoError(t, err)
+
+	close(events)
+	var emitted []string
+	for msg := range events {
+		emitted = append(emitted, msg)
+	}
+
+	assert.Contains(t, emitted, constants.EventMessageWaitingForLDMBootSuccess,
+		"the gate event must still be emitted so the phase holds while waiting")
+
+	var sawTerminal bool
+	for _, msg := range emitted {
+		if strings.Contains(msg, constants.EventMessageMigrationSucessful) {
+			sawTerminal = true
+		}
+	}
+	assert.True(t, sawTerminal,
+		"finish must re-emit %q or the phase never leaves WaitingForLDMBootSuccess",
+		constants.EventMessageMigrationSucessful)
+
+	// It must be the newest event, otherwise LDMGateHoldsPhase's ordering logic
+	// and the controller's newest-match loop would still resolve to the gate.
+	assert.Contains(t, emitted[len(emitted)-1], constants.EventMessageMigrationSucessful)
 }
 
 // The gate must not expire on its own. Like the admin cutover gate it waits

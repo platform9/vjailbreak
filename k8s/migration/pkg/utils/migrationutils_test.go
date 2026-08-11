@@ -600,6 +600,17 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 		}
 	})
 
+	t.Run("aged out gate event does not hold the phase", func(t *testing.T) {
+		// The gate has no time limit, so a wait longer than the API server's event
+		// TTL (1h by default) leaves no gate event to match. The gate must release
+		// on absence rather than hold; the finish path re-emits the terminal event
+		// so the controller still has something newer to resolve against.
+		events := []corev1.Event{at(constants.EventMessageMigrationSucessful, 0)}
+		if LDMGateHoldsPhase(events, constants.LDMBootStatusFinish) {
+			t.Error("held the phase after the gate event had expired")
+		}
+	})
+
 	t.Run("success holds while the rebuild is running", func(t *testing.T) {
 		// The only success event so far is the older one from the SATA build; it
 		// must not be mistaken for the rebuilt VM reporting in.

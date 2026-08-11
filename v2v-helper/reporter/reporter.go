@@ -326,7 +326,10 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					continue
 				}
 				fmt.Printf("Info: Watch established for pod %s with timeout %d seconds\n", r.PodName, timeoutSeconds)
-				defer watch.Stop()
+				// Stopped explicitly rather than with defer: this goroutine never
+				// returns, so a deferred Stop would never run and would leak one
+				// watch per reconnect - once every timeoutSeconds for as long as
+				// the admin takes to trigger cutover.
 				originalStartCutover := "no"
 				fmt.Printf("Info: Entering event loop for pod %s\n", r.PodName)
 				for event := range watch.ResultChan() {
@@ -343,6 +346,7 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 							// means a late event is dropped instead of panicking.
 							select {
 							case <-ctx.Done():
+								watch.Stop()
 								return
 							case ch <- cutover:
 								fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
@@ -351,6 +355,7 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 						}
 					}
 				}
+				watch.Stop()
 				fmt.Printf("Info: Watch channel closed for pod %s after ~%d seconds, retrying...\n", r.PodName, timeoutSeconds)
 				time.Sleep(5 * time.Second)
 			}
