@@ -13,7 +13,6 @@ import Typography from '@mui/material/Typography'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
-import AlertTitle from '@mui/material/AlertTitle'
 import CircularProgress from '@mui/material/CircularProgress'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
@@ -244,15 +243,6 @@ export const UpgradeModal = ({ show, onClose }) => {
               done={cleanupCompleted}
             />
 
-            {!cleanupCompleted && (
-              <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 1.5 }}>
-                <AlertTitle sx={{ mb: 0.25 }}>This permanently deletes data</AlertTitle>
-                Cleanup deletes all migration plans, credentials and custom resources in this
-                vJailbreak appliance. It cannot be undone, and cleanup is mandatory before an
-                upgrade can start.
-              </Alert>
-            )}
-
             <Typography variant="body2" mb={1} sx={{ color: theme.palette.text.secondary }}>
               The following will be cleaned up:
             </Typography>
@@ -359,7 +349,7 @@ export const UpgradeModal = ({ show, onClose }) => {
             <span style={{ width: '100%' }}>
               <ActionButton
                 onClick={() => setConfirmCleanupOpen(true)}
-                tone={cleanupCompleted ? 'secondary' : 'danger'}
+                tone="primary"
                 fullWidth
                 loading={cleanUpInProgress}
                 disabled={busy}
@@ -409,7 +399,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         title="Clean up before upgrade?"
         icon={<WarningAmberIcon color="warning" />}
         actionLabel="Yes, clean up"
-        actionColor="error"
+        actionColor="primary"
         cancelLabel="Cancel"
         confirmButtonTestId="confirm-cleanup-button"
         // Close first, then kick off cleanup: progress belongs on the Cleanup button below,
@@ -423,15 +413,6 @@ export const UpgradeModal = ({ show, onClose }) => {
             This deletes all custom resources in this vJailbreak appliance and{' '}
             <strong>cannot be undone</strong>. Any migration that is still running will be lost.
           </>
-        }
-        additionalContent={
-          <Box component="ul" sx={{ mt: 1.5, mb: 0, pl: 3 }}>
-            {CLEANUP_ITEMS.map((item) => (
-              <Typography component="li" variant="body2" key={item} color="text.secondary">
-                {item}
-              </Typography>
-            ))}
-          </Box>
         }
       />
     </React.Fragment>

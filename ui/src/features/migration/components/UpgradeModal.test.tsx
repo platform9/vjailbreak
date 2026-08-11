@@ -90,10 +90,15 @@ describe('UpgradeModal — cleanup gate', () => {
 })
 
 describe('UpgradeModal — cleanup warning', () => {
-  it('warns that cleanup is destructive and mandatory', async () => {
+  it('warns that cleanup is destructive only in the confirmation dialog', async () => {
+    const user = userEvent.setup()
     renderModal(<UpgradeModal show onClose={vi.fn()} />)
 
-    expect(screen.getByText('This permanently deletes data')).toBeInTheDocument()
+    expect(screen.queryByText(/cannot be undone/i)).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId('cleanup-button'))
+
+    expect(await screen.findByText('Clean up before upgrade?')).toBeInTheDocument()
     expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument()
   })
 
