@@ -329,7 +329,7 @@ export function derivePhaseStates(
         ((phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime) &&
           !options?.cutoverTriggered) ||
         // The LDM gate is a genuine pause too: the VM is up and nothing progresses
-        // until an admin answers or the gate times out.
+        // until an admin answers. Like admin cutover, it does not expire.
         phase === Phase.WaitingForLDMBootSuccess
       // While paused awaiting admin cutover, this counts up from when data copy actually
       // finished (i.e. how long cutover has been waiting to be triggered) - not cumulative

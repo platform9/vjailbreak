@@ -2516,8 +2516,8 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 			"Log in and confirm the virtio storage driver installed, then answer this gate. "+
 			"In the guest: Get-PnpDevice -Class SCSIAdapter (expect a Red Hat VirtIO SCSI controller, status OK) "+
 			"and sc.exe query viostor (expect STATE: RUNNING). Leave the VM running - answering '%s' "+
-			"shuts it down cleanly before recreating it. Waiting up to %s; no answer is treated as '%s'.",
-		constants.LDMBootStatusSuccess, constants.LDMBootGateTimeout, constants.LDMBootStatusFinish))
+			"shuts it down cleanly before recreating it. This gate does not expire; it waits until you answer.",
+		constants.LDMBootStatusSuccess))
 
 	answer := migobj.waitForLDMBootStatus(ctx)
 
@@ -2551,13 +2551,12 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 	}
 }
 
-// waitForLDMBootStatus blocks until the admin answers or the gate times out.
-// A timeout resolves to "finish" rather than "failed" on purpose: a working VM
-// exists by then, and timing out into a destructive cleanup would discard a
-// successful migration because nobody pressed a button.
+// waitForLDMBootStatus blocks until the admin answers. There is no deadline, for
+// the same reason the admin cutover gate has none: the operator may need a
+// maintenance window to reach the guest, and expiring the gate on their behalf
+// would either strand a VM on SATA or act without them. The wait ends only when
+// they answer or the migration context is cancelled.
 func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
-	deadline := time.After(constants.LDMBootGateTimeout)
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -2573,12 +2572,6 @@ func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
 				// Ignore anything unrecognised rather than resolving the gate on it.
 				continue
 			}
-
-		case <-deadline:
-			migobj.logMessage(fmt.Sprintf(
-				"No answer at the LDM boot gate within %s; completing the migration with the VM on SATA",
-				constants.LDMBootGateTimeout))
-			return constants.LDMBootStatusFinish
 		}
 	}
 }

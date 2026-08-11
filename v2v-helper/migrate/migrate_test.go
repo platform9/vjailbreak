@@ -1231,11 +1231,25 @@ func TestWaitForLDMBootStatus(t *testing.T) {
 	})
 }
 
-func TestLDMBootGateTimeoutDefaultsToFinish(t *testing.T) {
-	// The timeout must resolve to "finish", never "failed": at expiry there is a
-	// booted, network-connected VM and only an optimisation is outstanding.
-	assert.NotEqual(t, constants.LDMBootStatusFailed, constants.LDMBootStatusFinish)
-	assert.True(t, constants.LDMBootGateTimeout > 0)
+// The gate must not expire on its own. Like the admin cutover gate it waits
+// indefinitely, so an operator who needs a maintenance window to reach the guest
+// can still answer days later.
+func TestWaitForLDMBootStatusDoesNotExpire(t *testing.T) {
+	ch := make(chan string)
+	migobj := &Migrate{LDMBootStatusWatcher: ch, InPod: false}
+
+	done := make(chan string, 1)
+	go func() { done <- migobj.waitForLDMBootStatus(context.Background()) }()
+
+	select {
+	case answer := <-done:
+		t.Fatalf("gate resolved on its own with %q; it must wait for an answer", answer)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Still listening, and an answer that arrives late is still honoured.
+	ch <- constants.LDMBootStatusSuccess
+	assert.Equal(t, constants.LDMBootStatusSuccess, <-done)
 }
 
 func TestDetectLDMGuestSkipsNonWindows(t *testing.T) {

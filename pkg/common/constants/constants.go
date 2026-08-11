@@ -298,12 +298,6 @@ const (
 	// waiting for the ACPI shutdown to take effect.
 	LDMShutdownPollInterval = 10 * time.Second
 
-	// LDMBootGateTimeout bounds the WaitingForLDMBootSuccess gate. The helper pod
-	// has RestartPolicy: Never and nothing recreates it, so the wait cannot be
-	// unbounded; it must also be shorter than any node maintenance cycle that
-	// would evict the pod. Resolves to LDMBootStatusFinish on expiry.
-	LDMBootGateTimeout = 24 * time.Hour
-
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
 

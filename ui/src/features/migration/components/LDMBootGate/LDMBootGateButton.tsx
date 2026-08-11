@@ -146,8 +146,8 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
             <InlineHelp tone="default" icon="info" sx={{ mt: 1 }}>
               <strong>Move to virtio restarts the VM.</strong> It is shut down cleanly, deleted and
               recreated with the same name, IP and MAC — expect a short outage. Leave the VM running
-              now; the shutdown is handled for you. If nobody answers within 24 hours this resolves
-              as “Keep on SATA”.
+              now; the shutdown is handled for you. There is no time limit — the migration waits here
+              until you answer, so you can come back during a maintenance window.
             </InlineHelp>
           </DialogContentText>
 
