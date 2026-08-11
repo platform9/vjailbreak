@@ -241,3 +241,18 @@ Hot migration (**Copy live VMs, then power off**) minimizes downtime but still r
 :::caution
 Before migrating, verify that your application starts cleanly after a cold reboot. Applications that require manual intervention to restart (e.g., databases with crash-inconsistent state) should be cleanly shut down inside the VM before initiating cold migration.
 :::
+
+## Retrying a Failed Migration
+
+The **Retry** action reopens a failed migration in the migration form so its configuration can be corrected. The following limitations apply. See [Retry a Failed Migration](../../guides/how-to/retry_failed_migration/) for the full workflow.
+
+| Limitation | Detail |
+|---|---|
+| VMs with RDM disks cannot be retried | Shared RDM disk state prevents an automatic retry. The Retry button is disabled for these migrations and the migration must be restarted manually. |
+| A retry always produces a single-VM plan | Retrying one VM from a plan that covered several VMs moves that VM into a plan of its own. The remaining VMs stay in the original plan and are unaffected. |
+| Bulk retry cannot change configuration | **Retry Selected** restarts each migration with its existing configuration. To change settings, retry the migration individually. |
+| Credentials and source cluster are locked | A retry cannot change the VMware or OpenStack credentials or the source cluster. Create a new migration instead. |
+
+:::note
+Changing the target PCD cluster during a retry clears the network and storage mappings, because mappings are specific to a cluster. Select new mappings before submitting.
+:::
