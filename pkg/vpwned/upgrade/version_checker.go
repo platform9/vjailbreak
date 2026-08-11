@@ -17,6 +17,10 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// githubClientFactory builds the client used to list tags. Indirected through a
+// variable so tests can point it at a stub server instead of api.github.com.
+var githubClientFactory = newGitHubClient
+
 // newGitHubClient creates a GitHub client with optional token authentication.
 func newGitHubClient(ctx context.Context) *github.Client {
 	token := os.Getenv("GITHUB_TOKEN")
@@ -43,7 +47,7 @@ type ReleaseInfo struct {
 	DownloadURL  string
 }
 
-func GetCurrentVersion(ctx context.Context, clientset *kubernetes.Clientset) (string, error) {
+func GetCurrentVersion(ctx context.Context, clientset kubernetes.Interface) (string, error) {
 	configMap, err := clientset.CoreV1().ConfigMaps("migration-system").Get(ctx, "version-config", metav1.GetOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to get version-config ConfigMap: %w", err)
@@ -90,7 +94,7 @@ func GetAllTags(ctx context.Context) ([]string, error) {
 }
 
 func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, error) {
-	client := newGitHubClient(ctx)
+	client := githubClientFactory(ctx)
 	// Use per_page=100 to fetch all tags in a single request (GitHub default is 30).
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{PerPage: 100})
 	if err != nil {
@@ -123,7 +127,7 @@ func getAllTagsFromGitHub(ctx context.Context, owner, repo string) ([]string, er
 }
 
 func getTagsGreaterThanVersion(ctx context.Context, owner, repo, currentVersion string) ([]string, error) {
-	client := newGitHubClient(ctx)
+	client := githubClientFactory(ctx)
 	tags, _, err := client.Repositories.ListTags(ctx, owner, repo, &github.ListOptions{PerPage: 100})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch tags for repo %s/%s: %w", owner, repo, err)
