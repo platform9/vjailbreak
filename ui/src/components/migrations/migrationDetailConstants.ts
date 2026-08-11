@@ -23,6 +23,7 @@ export type MigrationPolicyFieldKey =
   | 'cutoverPolicy'
   | 'renameSuffix'
   | 'folderName'
+  | 'dataOnly'
   | 'disconnectSourceNetwork'
   | 'fallbackToDhcp'
   | 'networkPersistence'
@@ -36,6 +37,7 @@ export const MIGRATION_POLICY_FIELDS: Array<{ key: MigrationPolicyFieldKey; labe
   { key: 'cutoverPolicy', label: 'Cutover Policy' },
   { key: 'renameSuffix', label: 'Rename Suffix' },
   { key: 'folderName', label: 'Move to folder in VMware' },
+  { key: 'dataOnly', label: 'Data only (no VM creation)' },
   { key: 'disconnectSourceNetwork', label: 'Disconnect source network' },
   { key: 'fallbackToDhcp', label: 'Fallback to DHCP' },
   { key: 'networkPersistence', label: 'Persist source network' },
