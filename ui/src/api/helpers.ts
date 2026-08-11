@@ -32,6 +32,48 @@ export interface TrackingContext {
   userEmail?: string
 }
 
+// Retry config for the transient "object is being deleted" 409 a create hits
+// right after a same-named cred's finalizer-backed delete was kicked off
+// (e.g. rollback on failed validation) but hasn't finished yet.
+const DELETE_CONFLICT_RETRY_ATTEMPTS = 3
+const DELETE_CONFLICT_RETRY_INTERVAL_MS = 10000
+
+const isBeingDeletedConflict = (error: unknown): boolean => {
+  const response = (
+    error as { response?: { status?: number; data?: { reason?: string; message?: string } } }
+  )?.response
+  return (
+    response?.status === 409 &&
+    response?.data?.reason === 'AlreadyExists' &&
+    !!response?.data?.message?.includes('object is being deleted')
+  )
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Retries `operation` while it keeps failing with the "object is being deleted"
+// 409 conflict. Any other error rethrows immediately. After exhausting retries,
+// throws a friendly message instead of the raw k8s conflict error.
+const retryOnDeleteConflict = async <T>(
+  operation: () => Promise<T>,
+  friendlyMessage: string
+): Promise<T> => {
+  let lastError: unknown
+  for (let attempt = 0; attempt <= DELETE_CONFLICT_RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+      if (!isBeingDeletedConflict(error)) throw error
+      if (attempt < DELETE_CONFLICT_RETRY_ATTEMPTS) {
+        await sleep(DELETE_CONFLICT_RETRY_INTERVAL_MS)
+      }
+    }
+  }
+  console.error('Exhausted retries on "object is being deleted" conflict:', lastError)
+  throw new Error(friendlyMessage)
+}
+
 export const cleanupAllResources = async () => {
   // Clean up vmware creds
   try {
@@ -114,29 +156,42 @@ export const createOpenstackCredsWithSecretFlow = async (
 ) => {
   const secretName = `${credName}-openstack-secret`
 
-  // First create the secret
-  await createOpenstackCredsSecret(secretName, credentials, namespace)
-
-  // Then create the OpenStack credentials with the label
-  const credBody: any = {
-    apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
-    kind: 'OpenstackCreds',
-    metadata: {
-      name: credName,
-      namespace,
-      labels: {
-        'vjailbreak.k8s.pf9.io/is-pcd': isPcd ? 'true' : 'false'
-      }
-    },
-    spec: {
-      secretRef: {
-        name: secretName
+  try {
+    // Then create the OpenStack credentials with the label
+    const credBody: any = {
+      apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',
+      kind: 'OpenstackCreds',
+      metadata: {
+        name: credName,
+        namespace,
+        labels: {
+          'vjailbreak.k8s.pf9.io/is-pcd': isPcd ? 'true' : 'false'
+        }
       },
-      projectName: projectName
+      spec: {
+        secretRef: {
+          name: secretName
+        },
+        projectName: projectName
+      }
     }
-  }
 
-  return postOpenstackCredentials(credBody, namespace)
+    return await retryOnDeleteConflict(async () => {
+      // Re-upsert the secret on every attempt, in case it got deleted by a
+      // still-running rollback between now and when the 30s retry fires.
+      await createOpenstackCredsSecret(secretName, credentials, namespace)
+      return postOpenstackCredentials(credBody, namespace)
+    }, `Credential "${credName}" is still being removed from a previous attempt. Please wait a few seconds and try again.`)
+  } catch (error) {
+    // If postOpenstackCredentials fails, clean up the orphaned secret so a
+    // retry with the same credName doesn't hit a stale "already exists" error
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (cleanupError) {
+      console.error(`Failed to clean up orphaned secret ${secretName}:`, cleanupError)
+    }
+    throw error
+  }
 }
 
 // Create VMware credentials with secret
@@ -149,12 +204,29 @@ export const createVMwareCredsWithSecretFlow = async (
 
   await createVMwareCredsSecret(secretName, credentials, namespace)
 
-  return createVMwareCredsWithSecret(
-    credName,
-    secretName,
-    namespace,
-    credentials.VCENTER_DATACENTER
-  )
+  try {
+    return await retryOnDeleteConflict(async () => {
+      // Re-upsert the secret on every attempt: a still-running rollback from a
+      // prior failed attempt may delete it by name between now and when the
+      // 30s retry fires, so the secret must exist right before each try.
+      await createVMwareCredsSecret(secretName, credentials, namespace)
+      return createVMwareCredsWithSecret(
+        credName,
+        secretName,
+        namespace,
+        credentials.VCENTER_DATACENTER
+      )
+    }, `Credential "${credName}" is still being removed from a previous attempt. Please wait a few seconds and try again.`)
+  } catch (error) {
+    // If createVMwareCredsWithSecret fails, clean up the orphaned secret so a
+    // retry with the same credName doesn't hit a stale "already exists" error
+    try {
+      await deleteSecret(secretName, namespace)
+    } catch (cleanupError) {
+      console.error(`Failed to clean up orphaned secret ${secretName}:`, cleanupError)
+    }
+    throw error
+  }
 }
 
 export const deleteVMwareCredsWithSecretFlow = async (
@@ -280,12 +352,16 @@ export const createArrayCredsWithSecretFlow = async (
   const secretName = `${credName}-array-secret`
 
   try {
-    await createArrayCredsSecret(secretName, {
-      ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
-      ARRAY_USERNAME: credentials.ARRAY_USERNAME,
-      ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
-      ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION
-    }, namespace)
+    await createArrayCredsSecret(
+      secretName,
+      {
+        ARRAY_HOSTNAME: credentials.ARRAY_HOSTNAME,
+        ARRAY_USERNAME: credentials.ARRAY_USERNAME,
+        ARRAY_PASSWORD: credentials.ARRAY_PASSWORD,
+        ARRAY_SKIP_SSL_VERIFICATION: credentials.ARRAY_SKIP_SSL_VERIFICATION
+      },
+      namespace
+    )
 
     return await createArrayCredsWithSecret(
       credName,
@@ -314,7 +390,7 @@ export const deleteArrayCredsWithSecretFlow = async (
   try {
     const secretName = `${credName}-array-secret`
     await deleteArrayCredentials(credName, namespace)
-    
+
     // Try to delete the secret, but ignore 404 errors since the controller's
     // finalizer may have already deleted it
     try {
@@ -326,7 +402,7 @@ export const deleteArrayCredsWithSecretFlow = async (
       }
       console.log(`Secret ${secretName} was already deleted (likely by controller finalizer)`)
     }
-    
+
     return { success: true }
   } catch (error) {
     console.error(`Error deleting storage array credential ${credName}:`, error)

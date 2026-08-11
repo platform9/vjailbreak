@@ -161,7 +161,8 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     return (
       <Box sx={{ display: 'grid', gap: 0.5 }}>
         <span>
-          Ensure the vCenter FQDN/IP and DNS/network routing are correct so the vCenter server can be reached.
+          Ensure the vCenter FQDN/IP and DNS/network routing are correct so the vCenter server can
+          be reached.
         </span>
         <span>
           Learn more:{' '}
@@ -290,6 +291,11 @@ export default function VMwareCredentialsDrawer({ open, onClose }: VMwareCredent
     async (vals: VMwareCredentialFormValues) => {
       try {
         setSubmitting(true)
+        // Clear the previous attempt's cred name first so the validation-status
+        // poller (keyed off createdCredentialName) doesn't keep hitting the old,
+        // being-deleted object and re-surfacing its stale Failed status while
+        // this submit (and any internal retry) is still in flight.
+        setCreatedCredentialName(null)
         setValidatingVmwareCreds(true)
         setFormError(null)
 
