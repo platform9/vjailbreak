@@ -1298,23 +1298,8 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 		return fmt.Errorf("failed to resolve guest mount plan: %w", err)
 	}
 
-	buildArgs := func(mounts []mountSpec) []string {
-		args := []string{"--rw"}
-		for _, disk := range disks {
-			args = append(args, "-a", disk.Path)
-		}
-		for _, spec := range mounts {
-			mountArg := spec.Device + ":" + spec.MountPoint
-			if spec.Options != "" {
-				mountArg += ":" + spec.Options
-			}
-			args = append(args, "-m", mountArg)
-		}
-		return append(args, mountPoint)
-	}
-
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
-	mountCmd := exec.Command("guestmount", buildArgs(plan.Mounts)...)
+	mountCmd := exec.Command("guestmount", guestmountArgs(disks, plan.Mounts, mountPoint)...)
 	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 		// Unlike a guestfish script, guestmount cannot tolerate one failed mount,
 		// and inspect-get-mountpoints is documented as possibly returning
@@ -1323,7 +1308,11 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 		log.Printf("guestmount with the full mount plan failed (%v: %s); retrying with the root filesystem only",
 			mountErr, strings.TrimSpace(string(out)))
 
-		mountCmd = exec.Command("guestmount", buildArgs([]mountSpec{{Device: plan.Root, MountPoint: "/"}})...)
+		if strings.Contains(plan.Root, ":") {
+			return fmt.Errorf("cannot mount root %q with guestmount: -m cannot express a mountable", plan.Root)
+		}
+
+		mountCmd = exec.Command("guestmount", guestmountArgs(disks, []mountSpec{{Device: plan.Root, MountPoint: "/"}}, mountPoint)...)
 		if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 			return fmt.Errorf("guestmount failed: %v, output: %s", mountErr, string(out))
 		}

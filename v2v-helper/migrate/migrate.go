@@ -1210,6 +1210,13 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 // The all-disks pass is the fallback for a root filesystem that spans several
 // devices - multi-device btrfs, an LVM VG across two PVs, mdraid - where no single
 // disk is individually mountable and the per-disk pass therefore finds nothing.
+// Indirection points so detectBootVolume can be unit tested without a libguestfs
+// appliance. Production code never reassigns these.
+var (
+	runCommandInGuest           = virtv2v.RunCommandInGuest
+	runCommandInGuestAllVolumes = virtv2v.RunCommandInGuestAllVolumes
+)
+
 func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
 	bootVolumeIndex = -1
 
@@ -1221,7 +1228,7 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 	}
 
 	for idx := range vminfo.VMDisks {
-		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
+		ans, cmdErr := runCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
 		if cmdErr != nil || ans == "" {
 			continue
 		}
@@ -1237,7 +1244,7 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 	// by handleLinuxOSDetection or handleWindowsBootDetection.
 	utils.PrintLog("No single disk holds the boot filesystem; retrying with all disks attached")
 
-	ans, cmdErr := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, getBootCommand, false)
+	ans, cmdErr := runCommandInGuestAllVolumes(vminfo.VMDisks, getBootCommand, false)
 	if cmdErr != nil {
 		// Not fatal - the OS-specific handlers re-derive the boot disk and will
 		// fail with a more specific error if the guest is genuinely unusable.

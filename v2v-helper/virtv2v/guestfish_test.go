@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -549,5 +550,57 @@ func TestBuildPlan(t *testing.T) {
 			{Device: "/dev/sda6", MountPoint: "/"},
 			{Device: "/dev/sda2", MountPoint: "/boot"},
 		}, plan.Mounts)
+	})
+}
+
+func TestGuestmountArgs(t *testing.T) {
+	disks := []vm.VMDisk{{Path: "/dev/sda"}, {Path: "/dev/sdb"}}
+
+	t.Run("plain devices are passed through", func(t *testing.T) {
+		args := guestmountArgs(disks, []mountSpec{
+			{Device: "/dev/sda6", MountPoint: "/"},
+			{Device: "/dev/sda2", MountPoint: "/boot"},
+			{Device: "/dev/sda1", MountPoint: "/boot/efi", Options: "umask=0077"},
+		}, "/mnt/guest")
+
+		assert.Equal(t, []string{
+			"--rw",
+			"-a", "/dev/sda",
+			"-a", "/dev/sdb",
+			"-m", "/dev/sda6:/",
+			"-m", "/dev/sda2:/boot",
+			"-m", "/dev/sda1:/boot/efi:umask=0077",
+			"/mnt/guest",
+		}, args)
+	})
+
+	// guestmount -m splits on the first colon, so a mountable would be read as
+	// device "btrfsvol" with mountpoint "/dev/sda6/@/home". Dropping it keeps the
+	// plain devices usable instead of failing the whole mount.
+	t.Run("btrfs subvolume mountables are dropped", func(t *testing.T) {
+		args := guestmountArgs(disks, []mountSpec{
+			{Device: "/dev/sda6", MountPoint: "/"},
+			{Device: "/dev/sda2", MountPoint: "/boot"},
+			{Device: "btrfsvol:/dev/sda6/@/home", MountPoint: "/home"},
+			{Device: "btrfsvol:/dev/sda6/@/var", MountPoint: "/var"},
+		}, "/mnt/guest")
+
+		assert.Equal(t, []string{
+			"--rw",
+			"-a", "/dev/sda",
+			"-a", "/dev/sdb",
+			"-m", "/dev/sda6:/",
+			"-m", "/dev/sda2:/boot",
+			"/mnt/guest",
+		}, args)
+
+		for _, arg := range args {
+			assert.NotContains(t, arg, "btrfsvol")
+		}
+	})
+
+	t.Run("no mounts still yields a well formed command", func(t *testing.T) {
+		args := guestmountArgs(disks, nil, "/mnt/guest")
+		assert.Equal(t, []string{"--rw", "-a", "/dev/sda", "-a", "/dev/sdb", "/mnt/guest"}, args)
 	})
 }

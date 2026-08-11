@@ -137,12 +137,13 @@ func cacheKey(disks []vm.VMDisk) string {
 // runScript runs a guestfish script with every disk attached, read-only and with
 // no -i, and returns what it printed. Used before a plan exists.
 func runScript(disks []vm.VMDisk, script string) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-
 	cmd := exec.Command("guestfish", "--ro")
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
+	// Scoped to this exec rather than os.Setenv, which is a process-wide write
+	// and races with any other guestfish call in flight.
+	cmd.Env = append(os.Environ(), "LIBGUESTFS_BACKEND=direct")
 	cmd.Stdin = strings.NewReader(script)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
@@ -440,6 +441,33 @@ func mountLine(spec mountSpec, write bool) string {
 		command = "mount"
 	}
 	return guestfishLine(command, spec.Device, spec.MountPoint)
+}
+
+// guestmountArgs builds the guestmount command line for a mount plan.
+//
+// guestmount's -m takes one colon-delimited string, "dev[:mountpoint[:options]]",
+// unlike guestfish's mount command which takes separate arguments. A mountable
+// such as "btrfsvol:/dev/sda6/@/home" already contains a colon and would be
+// mis-parsed as device "btrfsvol", so those are dropped. Plain devices still
+// mount; callers fall back to the root alone if the result is not enough.
+func guestmountArgs(disks []vm.VMDisk, mounts []mountSpec, mountPoint string) []string {
+	args := []string{"--rw"}
+	for _, disk := range disks {
+		args = append(args, "-a", disk.Path)
+	}
+	for _, spec := range mounts {
+		if strings.Contains(spec.Device, ":") {
+			log.Printf("Skipping %s for guestmount: %q is a mountable, which -m cannot express",
+				spec.MountPoint, spec.Device)
+			continue
+		}
+		mountArg := spec.Device + ":" + spec.MountPoint
+		if spec.Options != "" {
+			mountArg += ":" + spec.Options
+		}
+		args = append(args, "-m", mountArg)
+	}
+	return append(args, mountPoint)
 }
 
 // guestfishLine builds one line of a guestfish script: the command followed by
