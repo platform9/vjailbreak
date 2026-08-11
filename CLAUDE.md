@@ -109,16 +109,18 @@ The UI pod runs as `ui-manager-sa` with a deliberately narrow ClusterRole. Nothi
 
 | Path | Purpose |
 |------|---------|
-| `k8s/migration/` | Kubernetes controller manager (Go, controller-runtime) |
-| `v2v-helper/` | Migration worker pod — disk copy and conversion (Go, libguestfs) |
+| `k8s/migration/` | Kubernetes controller manager (Go module, controller-runtime) |
+| `v2v-helper/` | Migration worker pod — disk copy and conversion (Go module, CGO/libguestfs) |
 | `ui/` | React/TypeScript frontend (MUI, Vite) |
-| `pkg/vpwned/` | REST API server (Go) for Cluster Conversion |
-| `pkg/common/` | Shared Go utilities |
+| `pkg/vpwned/` | REST API server (Go module) for Cluster Conversion |
+| `pkg/common/` | Shared Go utilities (Go module) |
 | `image_builder/` | Builds the vJailbreak appliance QCOW2 image |
 | `appliance/` | Vagrant-based k3s cluster for local testing |
 | `deploy/` | Generated Kubernetes manifests |
 | `docs/` | Astro documentation site |
 | `scripts/` | Utility and firstboot scripts |
+
+**Key CRDs**: Migration, MigrationPlan, MigrationBlueprint, VMwareCreds, OpenstackCreds, NetworkMapping, StorageMapping, MigrationTemplate
 
 ---
 
@@ -171,20 +173,6 @@ kubectl -n migration-system logs <migration-name>-v2v-helper
 **Check**: Guest OS support at https://libguestfs.org/virt-v2v-support.1.html
 
 ---
-
-## Repository Structure
-
-| Path | Purpose |
-|------|---------||
-| `k8s/migration/` | Controller (Go module) |
-| `v2v-helper/` | Migration worker (Go module, CGO required) |
-| `ui/` | React/TypeScript frontend |
-| `pkg/vpwned/` | API server (Go module) |
-| `pkg/common/` | Shared utilities (Go module) |
-| `scripts/` | Utility and firstboot scripts |
-| `deploy/` | Generated Kubernetes manifests |
-
-**Key CRDs**: Migration, MigrationPlan, VMwareCreds, OpenstackCreds, NetworkMapping, StorageMapping, MigrationTemplate
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
