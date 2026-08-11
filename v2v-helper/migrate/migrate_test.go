@@ -835,6 +835,80 @@ func TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// The LDM probe is tracked on the Migrate struct rather than in vminfo.VMDisks, so
+// DeleteAllVolumes cannot see it. Without an explicit delete here it is orphaned by
+// any failure between createLDMProbeVolume and the boot gate - delete_on_termination
+// only helps once a server exists to terminate.
+func TestCleanupDeletesLDMProbeVolume(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "probe-id").Return(nil).Times(1)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+		ldmProbeVolumeID: "probe-id",
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test ldm probe cleanup", nil, nil)
+	assert.NoError(t, err)
+	assert.Empty(t, migobj.ldmProbeVolumeID, "probe ID must be cleared so it is not deleted twice")
+}
+
+// A probe that is still attached cannot be deleted, and that must not stop the rest
+// of cleanup or fail the migration a second time.
+func TestCleanupTolerateProbeDeleteFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "probe-id").
+		Return(errors.New("Invalid volume: Volume is in status 'in-use'")).Times(1)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+		ldmProbeVolumeID: "probe-id",
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test probe delete failure", nil, nil)
+	assert.NoError(t, err)
+}
+
+// A non-LDM migration must not issue a stray delete.
+func TestCleanupSkipsProbeWhenAbsent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), gomock.Any()).Times(0)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test no probe", nil, nil)
+	assert.NoError(t, err)
+}
+
 // TestReportStagedVolumeIDs verifies that reportStagedVolumeIDs correctly collects
 // volume IDs from vminfo.VMDisks and patches them onto the Migration status.
 func TestReportStagedVolumeIDs(t *testing.T) {

@@ -2748,6 +2748,16 @@ func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message st
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to delete all volumes from host: %s\n", err))
 	}
+
+	// The probe is tracked outside vminfo.VMDisks, so DeleteAllVolumes cannot see
+	// it. It carries delete_on_termination, but that only helps once a server
+	// exists to terminate - a failure anywhere between createLDMProbeVolume and
+	// the boot gate would otherwise orphan it.
+	if probeID := migobj.ldmProbeVolumeID; probeID != "" {
+		migobj.ldmProbeVolumeID = ""
+		migobj.deleteProbeVolume(ctx, probeID)
+	}
+
 	err = migobj.VMops.CleanUpSnapshots(true)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to cleanup snapshot of source VM: %s\n", err))
