@@ -46,6 +46,7 @@ First, we will gather some configuration details. We will use those pieces of co
 * [Creation of Kubernetes resources](#creation-of-kubernetes-resources)
     * [Create the StorageMapping custom resource](#create-the-storagemapping-custom-resource)
     * [Create the NetworkMapping custom resource](#create-the-networkmapping-custom-resource)
+    * [(Optional) Explicitly select the target OpenStack flavor](#optional-explicitly-select-the-target-openstack-flavor)
     * [Create the MigrationTemplate custom resource](#create-the-migrationtemplate-custom-resource)
     * [Create the MigrationPlan custom resource](#create-the-migrationplan-custom-resource)
 * [Monitor the progress](#monitor-the-progress)
@@ -122,6 +123,7 @@ From the YAML, note down the following:
 * Get the datastores under `spec.vms.datastores`. This will be used for storage mapping.
 * Get the networks under `spec.vms.networks`. This will be used for network mapping.
 * (Optional) Get the Operating System type under `spec.vms.osFamily`. The reason for keeping it optional is that vJailbreak can auto-detect the OS most of the time, if the VM is turned on in VMware. For cold migration or migration of a VM that is in powered off state, this field will be required.
+* (Optional) Note the VM's `spec.vms.cpu` and `spec.vms.memory`. If you don't explicitly choose a target flavor (see [Explicitly select the target OpenStack flavor](#optional-explicitly-select-the-target-openstack-flavor) below), vJailbreak uses these values to auto-select the closest matching OpenStack flavor at migration time.
 
 For example, if following is the output of the above command: 
 
@@ -281,6 +283,45 @@ kubectl apply -f network-mapping.yaml
 
 Read more about `NetworkMapping` in [the CRDs reference document](https://platform9.github.io/vjailbreak/reference/reference/#network-mapping).
 
+
+#### (Optional) Explicitly select the target OpenStack flavor
+
+By default, vJailbreak picks the target VM's OpenStack flavor automatically: it looks for a flavor whose vCPU and RAM exactly match the source VM, or the next best match if there is no exact match. This "best guess" match is based on size alone, so if your OpenStack environment has multiple flavors with the same vCPU/RAM but different extra specs or tags (for example, different host aggregates, GPU passthrough, or hotplug support), vJailbreak may not pick the one you intended.
+
+To avoid this, you can explicitly pin a VM to a specific flavor by setting `spec.targetFlavorId` on its `VMwareMachine` custom resource, before creating the `MigrationPlan`.
+
+First, find the flavor ID you want to use. Using the OpenStack CLI against your target OpenStack/PCD environment, list the available flavors:
+
+```
+openstack flavor list
+```
+
+This prints each flavor's ID, name, vCPU count, RAM, and disk size, for example:
+
+```
++--------------------------------------+--------------+------+------+-----------+-------+-----------+
+| ID                                   | Name         |  RAM | Disk | Ephemeral | VCPUs | Is Public |
++--------------------------------------+--------------+------+------+-----------+-------+-----------+
+| d2a1e2d0-1111-4a3e-9c3e-abc123456789 | m1.medium.gpu| 8192 |   40 |         0 |     4 | True      |
+| f8b2c3d1-2222-4b4f-8d4f-def456789012 | m1.medium    | 8192 |   40 |         0 |     4 | True      |
++--------------------------------------+--------------+------+------+-----------+-------+-----------+
+```
+
+Identify the flavor that matches what you want (by name and/or by inspecting its extra specs/tags with `openstack flavor show <flavor-name-or-id>`), and copy its `ID` column.
+
+Once you've identified the flavor ID you want (`d2a1e2d0-1111-4a3e-9c3e-abc123456789` in this example), patch the `VMwareMachine` resource for the VM being migrated:
+
+```
+kubectl patch vmwaremachine -n migration-system <vm-name> --type merge -p '{"spec":{"targetFlavorId":"d2a1e2d0-1111-4a3e-9c3e-abc123456789"}}'
+```
+
+You can confirm it was set correctly with:
+
+```
+kubectl get vmwaremachine -n migration-system <vm-name> -o jsonpath='{.spec.targetFlavorId}'
+```
+
+**Note**: `targetFlavorId` is read once, when vJailbreak creates the migration ConfigMap for the VM (as part of `MigrationPlan` processing). Set it on the `VMwareMachine` before creating the `MigrationPlan` for that VM. If it is left blank, vJailbreak falls back to the automatic best-match flavor selection described above.
 
 #### Create the MigrationTemplate custom resource
 
