@@ -68,6 +68,32 @@ If any principle in the constitution conflicts with a user request, flag it expl
 - Run `cd k8s/migration && make test` for controller tests
 - ALWAYS run tests before submitting PRs
 
+### Migration Form Field Parity (Constitution Principle VIII — NON-NEGOTIABLE)
+Adding a field, block, section, or toggle to the Migration Form is NOT done until the same PR updates all four surfaces. Never defer any of them to a follow-up ticket.
+
+| # | Surface | Files | What must happen |
+|---|---------|-------|------------------|
+| 1 | Migration Form | `ui/src/features/migration/pages/MigrationForm.tsx`, `ui/src/features/migration/steps/` | Capture + validate the field |
+| 2 | Migration Details Page | `ui/src/features/migration/components/detail/MigrationDetailsTab.tsx`, `ui/src/features/migration/utils/migrationDetailFields.ts` | Display the persisted value |
+| 3 | Retry Form | `ui/src/features/migration/components/RetryMigration.tsx`, `hooks/useRetryPrefill.ts`, `hooks/useRetrySubmit.ts`, `utils/retryFormState.ts` | Prefill from the failed Migration CR AND include in the retry submit payload |
+| 4 | Migration Template / Blueprint UI | `ui/src/features/migration/components/templates/SaveAsTemplateDialog.tsx`, `templates/TemplateDetailDrawer.tsx`, `ui/src/api/migration-blueprints/` | Save into the blueprint and restore when applied |
+
+- Writing the field into the CR is not enough — surface 2 needs it rendered, surface 3 needs it prefilled *and* re-submitted.
+
+- Add a unit test per surface asserting round-trip (`migrationDetailFields.test.ts`, `retryFormState.test.ts`, `migrationBlueprints.test.ts`, and the step's own `*.test.tsx`).
+
+- Before finishing, state explicitly which of the four surfaces were changed. If one genuinely does not apply, say why.
+
+### UI Kubernetes Access (Constitution Principle IX — NON-NEGOTIABLE)
+The UI pod runs as `ui-manager-sa` with a deliberately narrow ClusterRole. Nothing is readable by default.
+
+- **New vJailbreak CRD the UI reads** → add the plural name (plus `<plural>/status` if status is read) to the `vjailbreak.k8s.pf9.io` rules of `ui-manager-role` in `ui/deploy/ui.yaml`, then run `make generate-manifests`. Never hand-edit `deploy/installer.yaml`, `deploy/00crds.yaml`, or `k8s/migration/dist/install.yaml`.
+
+- **New core/non-CRD resource the UI reads** (pods, pod logs, configmaps, events…) → do NOT call the K8s API directly. Add a method + path-regex entry to `allowedRoutes` in `pkg/vpwned/server/k8s_proxy_handler.go` and call it from the UI under `K8S_PROXY_BASE_PATH` (`ui/src/api/constants.ts`, `/sdk/vpw/v1/k8s/...`). The proxy allowlists by method+path and verifies the caller is `system:serviceaccount:migration-system:ui-manager-sa`; an unlisted route 403s even when RBAC would permit it.
+
+- Every new `allowedRoutes` entry needs a table-driven case in `pkg/vpwned/server/k8s_proxy_handler_test.go` — one allowed method, one rejected.
+
+
 ### Module Structure
 - Four independent Go modules — run `go` commands from the correct directory:
   - Controller: `k8s/migration/`
