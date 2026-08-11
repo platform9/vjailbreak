@@ -1467,11 +1467,12 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return migobj.markBootVolumesBootable(ctx, vminfo, bootVolumeIndex, espDiskIndex)
 	}
 
-	// Two things are skipped for an LDM guest and nothing else: virt-v2v-in-place,
-	// and the offline VMware Tools cleanup - the latter because it takes a single
-	// disk path and cannot reach a volume spanning a disk group. ntfsfix, firstboot
-	// injection and marking the volume bootable all still run. Resolved back in
-	// ConvertVolumes, which needed it before applying image metadata.
+	// Three things are skipped for an LDM guest and nothing else: virt-v2v-in-place,
+	// the offline VMware Tools cleanup (it takes a single disk path and cannot reach
+	// a volume spanning a disk group), and the Windows firstboot scripts (nothing in
+	// the guest would ever run them - see below). ntfsfix and marking the volume
+	// bootable still run. Resolved back in ConvertVolumes, which needed it before
+	// applying image metadata.
 	isLDMGuest := migobj.isLDMGuest
 
 	firstbootscripts := []string{}
@@ -1481,43 +1482,15 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		if err := virtv2v.NTFSFix(vminfo.VMDisks[bootVolumeIndex].Path); err != nil {
 			return errors.Wrap(err, "failed to run ntfsfix")
 		}
-		firstbootscripts = append(firstbootscripts, "Firstboot-Init-Windows")
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "Firstboot-Scheduler.ps1",
-			Async:  false,
-		})
-		if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
-			utils.PrintLog("Successfully added VirtIO PowerShell script to guest")
-			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-				Script: "install-virtio-win12.ps1",
-				Async:  false,
-			})
+		if isLDMGuest {
+			migobj.logMessage("Skipping Windows firstboot scripts: they are started by the service virt-v2v installs, which is skipped for this guest. Install virtio-win, bring dynamic disks online and uninstall VMware Tools on the source instead.")
 		}
-		if persisNetwork {
-			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-				Script: "Orchestrate-NICRecovery.ps1",
-				Async:  true,
-			})
-		}
-		firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-			Script: "disk-online-fix.ps1",
-			Async:  true,
-		})
-		if removeVMwareTools {
-			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-				Script: "vmware-tools-deletion.ps1",
-				Async:  true,
-			})
-		}
-		userFirstBootScripts, err := virtv2v.PushWindowsFirstBoot(vminfo.OSType)
+
+		var err error
+		firstbootscripts, firstbootwinscripts, err = windowsFirstbootScripts(
+			isLDMGuest, persisNetwork, removeVMwareTools, vminfo.OSType)
 		if err != nil {
 			return err
-		}
-		for _, scriptName := range userFirstBootScripts {
-			firstbootwinscripts = append(firstbootwinscripts, virtv2v.FirstBootWindows{
-				Script: scriptName,
-				Async:  true,
-			})
 		}
 	}
 
@@ -1582,10 +1555,7 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		}
 		utils.PrintLog("virt-v2v conversion completed successfully")
 	} else {
-		// firstbootscripts are only consumed by ConvertDisk's --firstboot flags, and
-		// the launcher they rely on is installed by virt-v2v itself. Anything copied
-		// in by InjectFirstBootScriptsFromStore below will sit on disk unexecuted.
-		utils.PrintLog("virt-v2v-in-place skipped for this guest; all other conversion steps still run")
+		utils.PrintLog("virt-v2v-in-place skipped for this guest; ntfsfix and marking the boot volume bootable still run")
 	}
 
 	if strings.ToLower(vminfo.OSType) == constants.OSFamilyWindows {
@@ -1599,12 +1569,64 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 			}
 		}
 
-		if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
-			return errors.Wrap(err, "failed to inject first boot scripts")
+		if !isLDMGuest {
+			if err := virtv2v.InjectFirstBootScriptsFromStore(vminfo.VMDisks, vminfo.VMDisks[bootVolumeIndex].Path, firstbootwinscripts); err != nil {
+				return errors.Wrap(err, "failed to inject first boot scripts")
+			}
 		}
 	}
 
 	return migobj.markBootVolumesBootable(ctx, vminfo, bootVolumeIndex, espDiskIndex)
+}
+
+// pushWindowsFirstBoot is an indirection point so windowsFirstbootScripts can be
+// unit tested without the on-disk script store. Production code never reassigns it.
+var pushWindowsFirstBoot = virtv2v.PushWindowsFirstBoot
+
+// windowsFirstbootScripts returns the virt-v2v --firstboot names and the store
+// scripts to inject for a Windows guest.
+//
+// An LDM guest gets neither. The scripts are only ever started by the firstboot
+// service, and that service is installed by virt-v2v itself
+// (Firstboot.Windows.install_service in common/mlcustomize/firstboot.ml puts
+// rhsrvany.exe and firstboot.bat in place and adds an auto-start entry under
+// HKLM\SYSTEM\<CCS>\services\firstboot). Skipping virt-v2v means none of that
+// exists, so injecting the scripts would only copy dead files into the guest -
+// and PushWindowsFirstBoot can fail the migration outright over scripts that
+// could never have run.
+func windowsFirstbootScripts(isLDMGuest, persisNetwork, removeVMwareTools bool,
+	osType string) ([]string, []virtv2v.FirstBootWindows, error) {
+
+	if isLDMGuest {
+		return nil, nil, nil
+	}
+
+	firstbootscripts := []string{"Firstboot-Init-Windows"}
+	firstbootwinscripts := []virtv2v.FirstBootWindows{
+		{Script: "Firstboot-Scheduler.ps1", Async: false},
+		{Script: "install-virtio-win12.ps1", Async: false},
+	}
+	if persisNetwork {
+		firstbootwinscripts = append(firstbootwinscripts,
+			virtv2v.FirstBootWindows{Script: "Orchestrate-NICRecovery.ps1", Async: true})
+	}
+	firstbootwinscripts = append(firstbootwinscripts,
+		virtv2v.FirstBootWindows{Script: "disk-online-fix.ps1", Async: true})
+	if removeVMwareTools {
+		firstbootwinscripts = append(firstbootwinscripts,
+			virtv2v.FirstBootWindows{Script: "vmware-tools-deletion.ps1", Async: true})
+	}
+
+	userFirstBootScripts, err := pushWindowsFirstBoot(osType)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, scriptName := range userFirstBootScripts {
+		firstbootwinscripts = append(firstbootwinscripts,
+			virtv2v.FirstBootWindows{Script: scriptName, Async: true})
+	}
+
+	return firstbootscripts, firstbootwinscripts, nil
 }
 
 // markBootVolumesBootable flags the boot volume - and, for UEFI multi-disk layouts,
@@ -2569,9 +2591,9 @@ func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
 func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VMInfo,
 	networkids, portids, ipaddresses []string, espDiskIndex int) error {
 
-	// Resolved from the boot volume's attachment, with no state requirement: the
-	// admin was asked to shut the guest down before answering, so it is expected
-	// to be SHUTOFF here.
+	// Resolved from the boot volume's attachment, with no state requirement. The
+	// guest is still running at this point - stopServerAndWait below shuts it
+	// down - so a lookup that insisted on ACTIVE or on SHUTOFF would be wrong.
 	serverID, err := migobj.resolveTargetServerID(ctx, vminfo)
 	if err != nil {
 		return errors.Wrap(err, "failed to locate the migrated VM before promotion")
