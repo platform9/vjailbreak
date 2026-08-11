@@ -156,9 +156,6 @@ export const createOpenstackCredsWithSecretFlow = async (
 ) => {
   const secretName = `${credName}-openstack-secret`
 
-  // First create the secret
-  await createOpenstackCredsSecret(secretName, credentials, namespace)
-
   try {
     // Then create the OpenStack credentials with the label
     const credBody: any = {
@@ -182,7 +179,7 @@ export const createOpenstackCredsWithSecretFlow = async (
     return await retryOnDeleteConflict(async () => {
       // Re-upsert the secret on every attempt, in case it got deleted by a
       // still-running rollback between now and when the 30s retry fires.
-      // await createOpenstackCredsSecret(secretName, credentials, namespace)
+      await createOpenstackCredsSecret(secretName, credentials, namespace)
       return postOpenstackCredentials(credBody, namespace)
     }, `Credential "${credName}" is still being removed from a previous attempt. Please wait a few seconds and try again.`)
   } catch (error) {
