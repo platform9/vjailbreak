@@ -7,14 +7,12 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Button,
-  Alert,
-  AlertTitle,
   Box,
   Typography,
   CircularProgress
 } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
+import { ActionButton, Banner, InlineHelp } from 'src/components/design-system'
 import { setLDMBootStatus, type LDMBootStatus } from '../../api/migrations'
 
 interface LDMBootGateButtonProps {
@@ -145,64 +143,75 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
               </li>
             </Box>
 
-            <Alert severity="info" sx={{ mt: 1 }}>
+            <InlineHelp tone="default" icon="info" sx={{ mt: 1 }}>
               <strong>Move to virtio restarts the VM.</strong> It is shut down cleanly, deleted and
               recreated with the same name, IP and MAC — expect a short outage. Leave the VM running
               now; the shutdown is handled for you. If nobody answers within 24 hours this resolves
               as “Keep on SATA”.
-            </Alert>
+            </InlineHelp>
           </DialogContentText>
 
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <InlineHelp tone="critical" icon="danger" sx={{ mt: 2 }}>
               {error}
-            </Alert>
+            </InlineHelp>
           )}
 
           {confirmingFailure && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              <AlertTitle>This destroys the migrated VM</AlertTitle>
-              The VM and its volumes are deleted and the migration is marked failed. You would need
-              to migrate this VM again from the beginning.
-              <br />
-              <br />
-              Only use this if the guest is genuinely unusable. If it boots at all, choose{' '}
-              <strong>Keep on SATA</strong> — that keeps the VM and completes the migration
-              successfully.
-            </Alert>
+            <Banner
+              variant="error"
+              title="This destroys the migrated VM"
+              message={
+                <>
+                  The VM and its volumes are deleted and the migration is marked failed. You would
+                  need to migrate this VM again from the beginning.
+                  <br />
+                  <br />
+                  Only use this if the guest is genuinely unusable. If it boots at all, choose{' '}
+                  <strong>Keep on SATA</strong> — that keeps the VM and completes the migration
+                  successfully.
+                </>
+              }
+              sx={{ mt: 2 }}
+            />
           )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, gap: 1, flexWrap: 'wrap' }}>
-          <Button
+          <ActionButton
             data-testid="ldm-gate-fail-button"
             onClick={() => (confirmingFailure ? answer('failed') : setConfirmingFailure(true))}
-            color="error"
+            tone="danger"
+            variant="text"
+            loading={pending === 'failed'}
             disabled={busy}
             sx={{ mr: 'auto' }}
           >
             {confirmingFailure ? 'Yes, fail and clean up' : 'Fail migration'}
-          </Button>
-          <Button onClick={() => setOpen(false)} disabled={busy}>
+          </ActionButton>
+          <ActionButton tone="secondary" variant="text" onClick={() => setOpen(false)} disabled={busy}>
             Cancel
-          </Button>
-          <Button
+          </ActionButton>
+          <ActionButton
             data-testid="ldm-gate-finish-button"
             onClick={() => answer('finish')}
+            tone="secondary"
             variant="outlined"
+            loading={pending === 'finish'}
             disabled={busy}
           >
             Keep on SATA
-          </Button>
-          <Button
+          </ActionButton>
+          <ActionButton
             data-testid="ldm-gate-success-button"
             onClick={() => answer('success')}
+            tone="primary"
             variant="contained"
-            color="primary"
+            loading={pending === 'success'}
             disabled={busy}
           >
             Move to virtio
-          </Button>
+          </ActionButton>
         </DialogActions>
       </Dialog>
     </>
