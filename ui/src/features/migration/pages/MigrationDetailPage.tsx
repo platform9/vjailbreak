@@ -55,7 +55,11 @@ export default function MigrationDetailPage() {
     return () => clearInterval(id)
   }, [cutoverTriggered, refetch])
 
-  // Stop aggressive polling once migration moves past the final-delta-sync phase
+  // Stop aggressive polling once migration moves past the final-delta-sync phase.
+  // WaitingForLDMBootSuccess is listed because the same flag drives polling after
+  // the LDM gate is answered, and "success" holds that phase while the VM is
+  // stopped, deleted and rebuilt on virtio - precisely when fast refresh is
+  // wanted. Without it polling would be cancelled on the very next render.
   useEffect(() => {
     if (!cutoverTriggered) return
     const phase = migration?.status?.phase as Phase | undefined
@@ -63,6 +67,7 @@ export default function MigrationDetailPage() {
       phase &&
       phase !== Phase.AwaitingAdminCutOver &&
       phase !== Phase.AwaitingCutOverStartTime &&
+      phase !== Phase.WaitingForLDMBootSuccess &&
       phase !== Phase.CopyingChangedBlocks
     ) {
       setCutoverTriggered(false)

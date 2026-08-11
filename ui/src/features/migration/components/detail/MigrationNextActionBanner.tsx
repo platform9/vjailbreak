@@ -43,6 +43,15 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
         </Alert>
       )
 
+    case Phase.WaitingForLDMBootSuccess:
+      return (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <strong>Action required.</strong> The VM is running on an emulated SATA bus because its
+          system volume is on a Windows Dynamic Disk. Log in and confirm whether the virtio storage
+          driver installed, then choose whether to move it to virtio or keep it on SATA.
+        </Alert>
+      )
+
     case Phase.Succeeded:
       return (
         <Alert severity="success" sx={{ mb: 2 }}>

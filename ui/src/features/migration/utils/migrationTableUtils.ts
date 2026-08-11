@@ -15,6 +15,7 @@ export const PHASE_STEPS: Record<string, number> = {
   [Phase.ConvertingDisk]: 6,
   [Phase.AwaitingCutOverStartTime]: 7,
   [Phase.AwaitingAdminCutOver]: 8,
+  [Phase.WaitingForLDMBootSuccess]: 8,
   [Phase.Succeeded]: 9,
   [Phase.DataCopied]: 9,
   [Phase.Failed]: 10,
@@ -23,7 +24,8 @@ export const PHASE_STEPS: Record<string, number> = {
 
 export const AWAITING_ACTION_PHASES: Phase[] = [
   Phase.AwaitingAdminCutOver,
-  Phase.AwaitingCutOverStartTime
+  Phase.AwaitingCutOverStartTime,
+  Phase.WaitingForLDMBootSuccess
 ]
 
 export const IN_PROGRESS_PHASES: Phase[] = [

@@ -31,7 +31,7 @@ export default function MigrationProgress({ progressText, phase, syncWarningMess
     }
     if (phase === Phase.Succeeded || phase === Phase.DataCopied) {
       return <CheckCircleOutlineIcon sx={{ color: 'success.main' }} />
-    } else if (phase === Phase.AwaitingAdminCutOver) {
+    } else if (phase === Phase.AwaitingAdminCutOver || phase === Phase.WaitingForLDMBootSuccess) {
       return <PauseCircleOutlineIcon sx={{ color: 'warning.main' }} />
     } else if (
       [

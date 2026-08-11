@@ -412,7 +412,8 @@ export function getPhaseColorKey(phase: Phase | string | undefined): PhaseColorK
     case Phase.Failed:
     case Phase.ValidationFailed:      return 'error'
     case Phase.AwaitingAdminCutOver:
-    case Phase.AwaitingCutOverStartTime: return 'warning'
+    case Phase.AwaitingCutOverStartTime:
+    case Phase.WaitingForLDMBootSuccess:  return 'warning'
     case Phase.Pending:
     case Phase.Unknown:               return 'default'
     default:                          return 'info'
