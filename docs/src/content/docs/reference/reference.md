@@ -84,6 +84,28 @@ spec:
   - source: vcenter-datastore-2
     target: ceph
 ```
+## VMwareMachine
+- `VMwareMachine` represents a discovered VMware VM and is created automatically by vJailbreak when a `VMwareCreds` resource is reconciled; it is not created by hand. `spec.vms` is a read-only snapshot of the VM's properties in vCenter (name, CPU, memory, datastores, networks, etc.) used to populate other resources such as `StorageMapping` and `NetworkMapping`.
+```yaml
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VMwareMachine
+metadata:
+  name: vm-1
+  namespace: migration-system
+spec:
+  vms:
+    name: vm-1
+    cpu: 4
+    memory: 8192
+    osFamily: linuxGuest
+    datastores:
+      - datastore-1
+    networks:
+      - network-1
+  targetFlavorId: "" # optional
+```
+- `targetFlavorId`: Optional. The OpenStack flavor ID to use for this VM's target VM. Set this to explicitly pin the migration to a specific flavor instead of relying on vJailbreak's automatic best-match selection (matched only on vCPU/RAM, so it cannot distinguish between same-sized flavors with different tags or extra specs). Must be set before the corresponding `MigrationPlan` is created, since it is read once when the per-VM migration ConfigMap is generated. If left empty, vJailbreak selects the closest matching flavor based on `spec.vms.cpu` and `spec.vms.memory`.
+
 ## MigrationTemplate
 ```yaml
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1

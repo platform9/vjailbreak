@@ -55,7 +55,7 @@ For the full symptom description, root cause analysis, and verification steps, s
 
 ### How does Vjailbreak handle flavors of the vm in the target openstack environment?
 
-vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment.
+vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment. When migrating via CLI/kubectl, the same explicit choice can be made by setting `spec.targetFlavorId` on the VM's `VMwareMachine` custom resource — see [Explicitly select the target OpenStack flavor](../../guides/CLI-API/migrating_using_cli_and_kubectl/#optional-explicitly-select-the-target-openstack-flavor).
 
 If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (We always try to find the exact match if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
 
