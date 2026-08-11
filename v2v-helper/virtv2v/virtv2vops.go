@@ -534,9 +534,15 @@ func GetOsRelease(path string) (string, error) {
 		"/etc/SuSE-release", // SLES 11
 	}
 
+	plan, planErr := resolveMountPlan([]vm.VMDisk{{Path: path}})
+	if planErr != nil {
+		return "", fmt.Errorf("failed to get OS release from %s: %w", path, planErr)
+	}
+
 	runGuestfishCat := func(imgPath, file string) (string, error) {
-		cmd := exec.Command("guestfish", "--ro", "-a", imgPath, "-i")
-		cmd.Stdin = strings.NewReader(fmt.Sprintf("cat %s", file))
+		cmd := exec.Command("guestfish", "--ro", "-a", imgPath)
+		cmd.Stdin = strings.NewReader(
+			mountScript(plan, false) + guestfishLine("cat", file) + "\n")
 		log.Printf("Executing %s with input: cat %s", cmd.String(), file)
 
 		out, err := cmd.CombinedOutput()
@@ -784,9 +790,19 @@ func AddFirstBootScript(firstbootscript, firstbootscriptname string) error {
 	return nil
 }
 
-// Runs command inside temporary qemu-kvm that virt-v2v creates
+// Runs command inside temporary qemu-kvm that virt-v2v creates.
+//
+// The guest is mounted from an explicitly resolved mount plan rather than with
+// guestfish's -i option. See guestfish.go for why: -i aborts on any guest whose
+// root filesystem spans more than one device.
 func RunCommandInGuest(path string, command string, write bool) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+
+	plan, err := resolveMountPlan([]vm.VMDisk{{Path: path}})
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %w", command, err)
+	}
+
 	option := "--ro"
 	if write {
 		option = "--rw"
@@ -795,9 +811,10 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 		"guestfish",
 		option,
 		"-a",
-		path,
-		"-i")
-	cmd.Stdin = strings.NewReader(command)
+		path)
+	// The command text is passed through verbatim - callers already supply a
+	// complete guestfish command line here, not a command plus separate args.
+	cmd.Stdin = strings.NewReader(mountScript(plan, write) + command + "\n")
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -806,7 +823,12 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 	return strings.ToLower(strings.TrimSpace(string(out))), nil
 }
 
-func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args ...string) *exec.Cmd {
+func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args ...string) (*exec.Cmd, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return nil, err
+	}
+
 	option := "--ro"
 	if write {
 		option = "--rw"
@@ -818,19 +840,25 @@ func prepareGuestfishCommand(disks []vm.VMDisk, command string, write bool, args
 	for _, disk := range disks {
 		cmd.Args = append(cmd.Args, "-a", disk.Path)
 	}
-	cmd.Args = append(cmd.Args, "-i", "--", command)
-	cmd.Args = append(cmd.Args, args...)
-	return cmd
+	// Commands go on stdin rather than after "--" so that the mount preamble can
+	// be prepended, and so that a failed non-root mount can be tolerated with
+	// guestfish's "-" command prefix.
+	cmd.Stdin = strings.NewReader(
+		mountScript(plan, write) + guestfishLine(command, args...) + "\n")
+	return cmd, nil
 }
 
 func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, args ...string) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	cmd := prepareGuestfishCommand(disks, command, write, args...)
-	log.Printf("Executing %s", cmd.String())
+	cmd, err := prepareGuestfishCommand(disks, command, write, args...)
+	if err != nil {
+		return "", fmt.Errorf("failed to run command (%s): %w", command, err)
+	}
+	log.Printf("Executing %s -- %s", cmd.String(), guestfishLine(command, args...))
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
-	err := cmd.Run()
+	err = cmd.Run()
 	if stderrBuf.Len() > 0 {
 		log.Printf("guestfish stderr (%s): %s", command, strings.TrimSpace(stderrBuf.String()))
 	}
@@ -1223,7 +1251,10 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	// Run the script
 	var runErr error
 
-	cmd := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
+	cmd, cmdErr := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
+	if cmdErr != nil {
+		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)
+	}
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -1257,18 +1288,34 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 	defer os.RemoveAll(mountPoint)
 
-	// Construct the guestmount command
-	args := []string{"-i", "--rw"}
-
-	for _, disk := range disks {
-		args = append(args, "-a", disk.Path)
+	// Construct the guestmount command.
+	//
+	// guestmount's -i option shares inspect_mount_handle() with guestfish, so it
+	// fails identically on a guest whose root filesystem spans several devices.
+	// Mount the explicitly resolved plan instead.
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return fmt.Errorf("failed to resolve guest mount plan: %w", err)
 	}
-	args = append(args, mountPoint)
 
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
-	mountCmd := exec.Command("guestmount", args...)
-	if out, err := mountCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("guestmount failed: %v, output: %s", err, string(out))
+	mountCmd := exec.Command("guestmount", guestmountArgs(disks, plan.Mounts, mountPoint)...)
+	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
+		// Unlike a guestfish script, guestmount cannot tolerate one failed mount,
+		// and inspect-get-mountpoints is documented as possibly returning
+		// filesystems that are absent or unmountable. Retry with the root alone so
+		// that a stale fstab entry cannot break network persistence outright.
+		log.Printf("guestmount with the full mount plan failed (%v: %s); retrying with the root filesystem only",
+			mountErr, strings.TrimSpace(string(out)))
+
+		if strings.Contains(plan.Root, ":") {
+			return fmt.Errorf("cannot mount root %q with guestmount: -m cannot express a mountable", plan.Root)
+		}
+
+		mountCmd = exec.Command("guestmount", guestmountArgs(disks, []mountSpec{{Device: plan.Root, MountPoint: "/"}}, mountPoint)...)
+		if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
+			return fmt.Errorf("guestmount failed: %v, output: %s", mountErr, string(out))
+		}
 	}
 
 	// Unmount even if the script execution fails
