@@ -1146,12 +1146,11 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		})
 	}
 
-	// A guest whose system volume is on a Dynamic Disk (LDM) boots on an emulated
-	// bus, because virt-v2v cannot convert it and so never makes a virtio storage
-	// driver boot-critical. Attaching one scratch volume on the virtio bus gives
-	// Windows a real device to install viostor against on first boot, which is the
-	// prerequisite for ever moving the root disk to virtio. Nova fixes disk_bus in
-	// the BDM at create time, so this cannot be added to a running instance later.
+	// An LDM guest boots on an emulated bus, so no virtio storage driver is ever
+	// made boot-critical. One scratch volume on the virtio bus gives Windows a real
+	// device to install viostor against on first boot - the prerequisite for moving
+	// the root disk to virtio later. Nova fixes disk_bus at create time, so this
+	// cannot be added to a running instance afterwards.
 	if vminfo.LDMProbeVolumeID != "" {
 		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
 			DeleteOnTermination: true,
@@ -1271,13 +1270,10 @@ func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID str
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 
-// StopServer issues an ACPI shutdown to the guest and returns as soon as Nova has
-// accepted the request. Callers that need the instance to actually be down must
-// poll GetServerStatus for SHUTOFF.
-//
-// Treats an already-stopped instance as success: Nova returns 409 Conflict when
-// the server is not in a state it can stop from, and for our purposes "already
-// off" is the outcome we wanted.
+// StopServer issues an ACPI shutdown and returns once Nova accepts the request;
+// callers needing the instance actually down must poll GetServerStatus. An
+// already-stopped instance counts as success, since "already off" is the outcome
+// we wanted and Nova would otherwise return 409.
 func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string) error {
 	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
 

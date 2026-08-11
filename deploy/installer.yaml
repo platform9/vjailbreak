@@ -1561,19 +1561,10 @@ spec:
                 description: InitiateCutover is the flag to initiate cutover
                 type: boolean
               ldmBootStatus:
-                description: "LDMBootStatus is the admin's answer at the WaitingForLDMBootSuccess
-                  gate,\nwhich only applies to a guest whose system volume is on a
-                  Dynamic Disk (LDM).\nSuch a guest is created on an emulated SATA
-                  bus because virt-v2v cannot\nconvert it; a scratch virtio volume
-                  is attached so Windows installs the\nvirtio storage driver on first
-                  boot.\n\n\tsuccess - driver confirmed loaded; recreate the VM on
-                  the virtio bus\n\tfinish  - leave the VM on SATA and complete the
-                  migration successfully\n\tfailed  - the migration is unusable; fail
-                  it and run the standard cleanup\n\nEmpty means still waiting. A
-                  timeout at the gate is treated as \"finish\",\nbecause by then a
-                  working VM already exists and only an optimisation is\noutstanding.
-                  Deliberately separate from InitiateCutover so the cutover flow\nis
-                  untouched."
+                description: |-
+                  LDMBootStatus answers the WaitingForLDMBootSuccess gate: "success" recreates
+                  the VM on virtio, "finish" leaves it on SATA and completes, "failed" fails and
+                  cleans up. Empty means still waiting; a timeout resolves as "finish".
                 enum:
                 - success
                 - finish

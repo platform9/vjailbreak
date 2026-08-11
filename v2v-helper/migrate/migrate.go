@@ -388,12 +388,9 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 }
 
 // resolveTargetServerID returns the ID of the server the boot volume is attached
-// to, whatever state that server is in.
-//
-// Kept separate from verifyVMCreatedDespiteTimeout, which additionally insists the
-// server is ACTIVE. That is right for its own purpose but wrong for the LDM
-// promotion, where the admin is told to shut the guest down cleanly first - so it
-// is SHUTOFF by design and an ACTIVE check rejects every promotion.
+// to, in whatever state it is. Kept separate from verifyVMCreatedDespiteTimeout,
+// which also insists on ACTIVE - wrong for the LDM promotion, where the guest is
+// deliberately stopped first and an ACTIVE check would reject every promotion.
 func (migobj *Migrate) resolveTargetServerID(ctx context.Context, vminfo vm.VMInfo) (string, error) {
 	vjailbreakUUID, err := utils.GetCurrentInstanceUUID()
 	if err != nil {
@@ -1470,23 +1467,11 @@ func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMIn
 		return migobj.markBootVolumesBootable(ctx, vminfo, bootVolumeIndex, espDiskIndex)
 	}
 
-	// A Windows system volume on a Dynamic Disk (LDM) cannot be converted by
-	// virt-v2v: upstream documents it as unsupported and has no guard for it, so
-	// conversion either produces an unbootable disk or wedges with the disks half
-	// written.
-	//
-	// Two things are skipped for an LDM guest, and nothing else: virt-v2v-in-place,
-	// and the offline VMware Tools cleanup. Everything else in this function is ours
-	// and still applies - ntfsfix, firstboot injection, marking the volume bootable.
-	//
-	// RunOfflineVMwareCleanup is skipped because it cannot work here, not as policy:
-	// it hands a single disk path to guestfish (virtv2vops.go:1370), and an LDM
-	// volume spanning several disks cannot be assembled from one member. It fails
-	// soft and returns nil, so today this is a silent no-op; skipping it explicitly
-	// at least says so in the log.
-	//
-	// The answer was resolved in ConvertVolumes, which needed it before applying
-	// image metadata; reuse it rather than booting the appliance a second time.
+	// Two things are skipped for an LDM guest and nothing else: virt-v2v-in-place,
+	// and the offline VMware Tools cleanup - the latter because it takes a single
+	// disk path and cannot reach a volume spanning a disk group. ntfsfix, firstboot
+	// injection and marking the volume bootable all still run. Resolved back in
+	// ConvertVolumes, which needed it before applying image metadata.
 	isLDMGuest := migobj.isLDMGuest
 
 	firstbootscripts := []string{}
@@ -2576,15 +2561,11 @@ func (migobj *Migrate) waitForLDMBootStatus(ctx context.Context) string {
 	}
 }
 
-// promoteLDMGuestToVirtio recreates the instance with its root disk on the virtio
-// bus. Nova fixes disk_bus in the block device mapping at server create, so this
-// cannot be done by editing volume_image_metadata on the running instance - the
-// server has to be deleted and built again.
-//
-// The volumes survive the delete (delete_on_termination is false on all but the
-// probe), the port is pre-created and passed by ID so MAC and IP are preserved,
-// and CreateTargetInstance is reused so ESP ordering, RDM LUNs and instance
-// metadata are all reproduced rather than reimplemented.
+// promoteLDMGuestToVirtio recreates the instance with its root disk on virtio.
+// Nova fixes disk_bus in the BDM at server create, so editing volume metadata on
+// a running instance does nothing - the server must be rebuilt. Volumes and the
+// port survive the delete, so MAC and IP are preserved, and CreateTargetInstance
+// is reused so ESP ordering and instance metadata are not reimplemented.
 func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VMInfo,
 	networkids, portids, ipaddresses []string, espDiskIndex int) error {
 
@@ -2616,19 +2597,11 @@ func (migobj *Migrate) promoteLDMGuestToVirtio(ctx context.Context, vminfo vm.VM
 		return err
 	}
 
-	// No offline re-verification here on purpose.
-	//
-	// An earlier version reattached every volume to the appliance, ran guestfish to
-	// look for <systemroot>\System32\drivers\viostor.sys, then detached again. That
-	// was designed for an automatic promotion with no human in the loop. With this
-	// gate the admin has already run "Get-PnpDevice -Class SCSIAdapter" and
-	// "sc.exe query viostor" against the live guest, which is a stronger signal
-	// than a file's existence - it reports the driver actually running. Re-checking
-	// cost an appliance boot plus an attach/detach cycle per disk, and introduced a
-	// failure mode (a volume stuck attaching or detaching) purely to second-guess
-	// the operator with weaker evidence.
-	//
-	// If the guest does not come up on virtio, recreate it with hw_disk_bus=sata.
+	// No offline re-verification here on purpose. The operator has already run
+	// "sc.exe query viostor" against the live guest, which reports the driver
+	// actually running - a stronger signal than any file check from outside.
+	// Re-checking cost an appliance boot and an attach/detach cycle per disk.
+	// If the guest does not come up, recreate it with hw_disk_bus=sata.
 
 	// Clear the field so CreateVM leaves the probe off the recreated server, but
 	// keep the ID: it is now detached and can finally be deleted.
@@ -2725,13 +2698,10 @@ func (migobj *Migrate) waitForVolumesAvailable(ctx context.Context, vminfo vm.VM
 	return nil
 }
 
-// deleteProbeVolume removes the scratch volume once it is detached and has served
-// its purpose. Best effort: a leftover 1GB volume is not worth failing an
-// otherwise successful migration over.
-//
-// Only safe to call while the volume is detached. On the "finish" path the probe
-// is still attached to a running instance, so it is left in place instead - it
-// carries delete_on_termination, so it goes away with the instance.
+// deleteProbeVolume removes the scratch volume once it is detached. Best effort:
+// a leftover 1GB volume is not worth failing a successful migration over. Only
+// safe while detached - on the "finish" path the probe is still attached, so it
+// is left to delete_on_termination instead.
 func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
 	if volumeID == "" {
 		return

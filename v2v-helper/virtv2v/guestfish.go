@@ -67,14 +67,9 @@ type mountPlan struct {
 	Mounts []mountSpec
 }
 
-// ldmPrefixes are how libguestfs names anything it assembles from a Windows
-// Dynamic Disk group. daemon/ldm.ml:23 states it outright: "All device mapper
-// devices are called /dev/mapper/ldm_vol_* or /dev/mapper/ldm_part_*", and
-// list_ldm_volumes is literally a prefix filter over /dev/mapper.
-//
-// Both forms are matched. A simple dynamic disk can surface as a partition
-// rather than a volume, and missing that would send an LDM guest into a
-// conversion that cannot work.
+// ldmPrefixes are how libguestfs names anything assembled from a Windows Dynamic
+// Disk group (daemon/ldm.ml:23). Both forms are matched: a simple dynamic disk
+// can surface as a partition rather than a volume.
 var ldmPrefixes = []string{
 	"/dev/mapper/ldm_vol_",
 	"/dev/mapper/ldm_part_",
@@ -186,14 +181,10 @@ func runScript(disks []vm.VMDisk, script string) (string, error) {
 	return stdoutBuf.String(), nil
 }
 
-// parseRoots turns the output of `inspect-os` into a list of root filesystems,
-// one per line. Blank lines, stray whitespace and exact duplicates are dropped.
-//
-// The dedup matters for Windows Dynamic Disks: Ldm.list_ldm_volumes reports a
-// volume once per member disk, so the same device path comes back twice. The
-// same path can never be two operating systems, and collapsing it here means the
-// reduction does not depend on vfs-uuid, which is tolerated and may fail on a
-// dm device. Inert for every other guest - identical paths never repeat.
+// parseRoots turns `inspect-os` output into a list of root filesystems, dropping
+// blanks and exact duplicates. A Dynamic Disk volume is reported once per member
+// disk, so the same path repeats; collapsing here means the reduction does not
+// depend on vfs-uuid, which is tolerated and may fail. Inert for other guests.
 func parseRoots(out string) []string {
 	var roots []string
 	seen := make(map[string]bool)

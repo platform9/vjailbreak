@@ -869,16 +869,10 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 }
 
 // IsLDMSystemVolume reports whether the guest's system volume sits on a Windows
-// Dynamic Disk (LDM), and returns the root mountable it resolved.
-//
-// virt-v2v documents a Windows system disk on a dynamic disk as unsupported
-// (virt-v2v.pod, "Converting Windows guests ... dynamic disks"), but has no guard
-// for it: conversion either writes a disk that cannot boot or wedges partway
-// through. Data disks on dynamic disks are fine and are deliberately not flagged
-// here - only the root is checked.
-//
-// The mount plan is memoised per disk set, so when one has already been resolved
-// for these disks this costs no additional appliance boot.
+// Dynamic Disk, and returns the root it resolved. virt-v2v documents these as
+// unsupported but has no guard, so conversion produces an unbootable disk or
+// wedges. Only the root is checked - data disks on dynamic disks convert fine.
+// Reuses the memoised mount plan, so it costs no extra appliance boot.
 func IsLDMSystemVolume(disks []vm.VMDisk) (bool, string, error) {
 	plan, err := resolveMountPlan(disks)
 	if err != nil {

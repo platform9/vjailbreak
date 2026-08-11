@@ -108,20 +108,9 @@ type MigrationSpec struct {
 	// InitiateCutover is the flag to initiate cutover
 	InitiateCutover bool `json:"initiateCutover"`
 
-	// LDMBootStatus is the admin's answer at the WaitingForLDMBootSuccess gate,
-	// which only applies to a guest whose system volume is on a Dynamic Disk (LDM).
-	// Such a guest is created on an emulated SATA bus because virt-v2v cannot
-	// convert it; a scratch virtio volume is attached so Windows installs the
-	// virtio storage driver on first boot.
-	//
-	//	success - driver confirmed loaded; recreate the VM on the virtio bus
-	//	finish  - leave the VM on SATA and complete the migration successfully
-	//	failed  - the migration is unusable; fail it and run the standard cleanup
-	//
-	// Empty means still waiting. A timeout at the gate is treated as "finish",
-	// because by then a working VM already exists and only an optimisation is
-	// outstanding. Deliberately separate from InitiateCutover so the cutover flow
-	// is untouched.
+	// LDMBootStatus answers the WaitingForLDMBootSuccess gate: "success" recreates
+	// the VM on virtio, "finish" leaves it on SATA and completes, "failed" fails and
+	// cleans up. Empty means still waiting; a timeout resolves as "finish".
 	// +optional
 	// +kubebuilder:validation:Enum=success;finish;failed
 	LDMBootStatus string `json:"ldmBootStatus,omitempty"`

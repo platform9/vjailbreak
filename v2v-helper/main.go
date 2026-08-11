@@ -37,14 +37,10 @@ func main() {
 	ldmBootStatusChan := make(chan string)
 	ackChan := make(chan struct{})
 
-	// Only eventReporterChan is closed here, because main is its sender.
-	//
-	// The two label-watcher channels are written by goroutines that outlive main:
-	// they loop until ctx is done, and a pod update can land while the deferred
-	// closes are running. Closing them from the receiving side panicked with
-	// "send on closed channel" once the LDM gate started patching pod labels,
-	// which wakes the cutover watcher on every pod update. The channels are
-	// garbage collected with the process, so there is nothing to close.
+	// Only eventReporterChan is closed here, because main is its sender. The label
+	// watchers send from goroutines that outlive main, so closing those from the
+	// receiving side panicked with "send on closed channel" once the LDM gate began
+	// patching pod labels. They are garbage collected with the process.
 	defer close(eventReporterChan)
 
 	// Start reporter goroutines
