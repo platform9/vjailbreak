@@ -243,17 +243,6 @@ func (r *Reporter) GetCutoverLabel() (string, error) {
 	return "", fmt.Errorf("failed to get cutover label")
 }
 
-// GetLDMBootStatusLabel reads the admin's answer at the WaitingForLDMBootSuccess
-// gate. Unlike GetCutoverLabel, an absent label is not an error: it is the normal
-// state for every guest that is not an LDM guest, and for an LDM guest that the
-// admin has not answered yet.
-func (r *Reporter) GetLDMBootStatusLabel() (string, error) {
-	if err := r.GetPod(); err != nil {
-		return "", fmt.Errorf("failed to get pod: %v", err)
-	}
-	return r.Pod.Labels[constants.LDMBootStatusLabel], nil
-}
-
 // WatchLDMBootStatusLabel is a parallel watcher to WatchPodLabels for the
 // ldmBootStatus label. It is a second watch on the same pod rather than an
 // extension of WatchPodLabels, because widening that channel to carry which
@@ -267,6 +256,14 @@ func (r *Reporter) WatchLDMBootStatusLabel(ctx context.Context, ch chan<- string
 				fmt.Printf("Info: Context canceled while watching %s for pod %s\n", constants.LDMBootStatusLabel, r.PodName)
 				return
 			default:
+				// ResourceVersion is deliberately left unset. For a watch that means
+				// "Get State and Start at Most Recent", which begins with synthetic
+				// ADDED events describing the pod as it exists now. That is what
+				// makes the reconnect below safe: an answer set while this watch was
+				// down arrives as the first event of the next one, so no separate
+				// bootstrap read is needed. Setting a ResourceVersion would opt into
+				// "Start at Exact", which suppresses those synthetic events and
+				// would genuinely lose an answer set during the gap.
 				timeoutSeconds := int64(172800)
 				watcher, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
 					FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
@@ -278,6 +275,8 @@ func (r *Reporter) WatchLDMBootStatusLabel(ctx context.Context, ch chan<- string
 					continue
 				}
 
+				// Reset per reconnect on purpose, so the synthetic ADDED event
+				// re-delivers an answer that arrived while the watch was down.
 				last := ""
 				for event := range watcher.ResultChan() {
 					pod, ok := event.Object.(*corev1.Pod)
