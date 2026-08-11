@@ -1198,18 +1198,18 @@ func (migobj *Migrate) attachAllVolumes(ctx context.Context, vminfo *vm.VMInfo) 
 	return nil
 }
 
-// detectBootVolume confirms the guest is inspectable with every disk attached and
-// returns whatever the boot-detection command reported.
+// detectBootVolume finds the disk holding the boot filesystem, trying each disk on
+// its own first and only then all of them together.
 //
-// All disks are attached for a single probe. Probing them one at a time cannot
-// work when the root filesystem spans several disks - a multi-device btrfs, an
-// LVM VG across two PVs, or mdraid - because none of the disks is individually
-// mountable. That used to surface as a bare "No boot volume detected" warning
-// with the real cause discarded.
+// The per-disk pass is deliberately kept. Attaching one disk at a time means
+// inspection can only ever see one root, which is what lets a guest with LDM data
+// disks migrate today: the basic system disk answers on its own and the dynamic
+// disks are never inspected. Probing everything at once would surface those as
+// extra roots and turn a working migration into a multi-boot failure.
 //
-// The concrete boot disk index is always re-derived afterwards by
-// handleLinuxOSDetection or handleWindowsBootDetection, so this function does not
-// try to guess it.
+// The all-disks pass is the fallback for a root filesystem that spans several
+// devices - multi-device btrfs, an LVM VG across two PVs, mdraid - where no single
+// disk is individually mountable and the per-disk pass therefore finds nothing.
 func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string) (bootVolumeIndex int, osPath string, err error) {
 	bootVolumeIndex = -1
 
@@ -1219,6 +1219,23 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 		utils.PrintLog("WARNING: No disks attached; cannot detect boot volume")
 		return -1, "", nil
 	}
+
+	for idx := range vminfo.VMDisks {
+		ans, cmdErr := virtv2v.RunCommandInGuest(vminfo.VMDisks[idx].Path, getBootCommand, false)
+		if cmdErr != nil || ans == "" {
+			continue
+		}
+
+		utils.PrintLog(fmt.Sprintf("Boot volume detected: Disk %d (%s)", idx, vminfo.VMDisks[idx].Name))
+		osPath = strings.TrimSpace(ans)
+		bootVolumeIndex = idx
+		return bootVolumeIndex, osPath, nil
+	}
+
+	// No single disk was mountable on its own, so the root spans several of them.
+	// Retry with everything attached; the boot disk index is re-derived afterwards
+	// by handleLinuxOSDetection or handleWindowsBootDetection.
+	utils.PrintLog("No single disk holds the boot filesystem; retrying with all disks attached")
 
 	ans, cmdErr := virtv2v.RunCommandInGuestAllVolumes(vminfo.VMDisks, getBootCommand, false)
 	if cmdErr != nil {
@@ -1232,7 +1249,7 @@ func (migobj *Migrate) detectBootVolume(vminfo vm.VMInfo, getBootCommand string)
 	utils.PrintLog(fmt.Sprintf("Guest inspected successfully across %d disk(s); boot disk index is resolved during OS detection",
 		len(vminfo.VMDisks)))
 
-	return bootVolumeIndex, osPath, nil
+	return -1, osPath, nil
 }
 
 // handleLinuxOSDetection handles OS detection and validation for Linux systems
