@@ -21,6 +21,7 @@ export const ACTIVE_MIGRATION_PHASES = new Set<Phase>([
   Phase.ConvertingDisk,
   Phase.AwaitingCutOverStartTime,
   Phase.AwaitingAdminCutOver,
+  Phase.WaitingForLDMBootSuccess,
   Phase.Unknown
 ])
 

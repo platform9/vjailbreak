@@ -14,6 +14,7 @@ import { Migration, Phase } from '../../api/migrations'
 import { useMigrationFormActions } from '../../context/MigrationFormContext'
 import { getPhaseColorKey, getPhaseLabel } from '../../utils/phaseUtils'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
+import { LDMBootGateButton } from '../LDMBootGate/LDMBootGateButton'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResourcesQuery'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
@@ -75,6 +76,11 @@ export default function MigrationDetailHeader({
   const isRetryDisabled = (migration.status as { retryable?: boolean } | undefined)?.retryable === false
   const isAwaitingCutover =
     phase === Phase.AwaitingAdminCutOver || phase === Phase.AwaitingCutOverStartTime
+  const isAwaitingLDMBoot = phase === Phase.WaitingForLDMBootSuccess
+  // Both are operator gates: the migration is parked and the only useful actions
+  // are answering it or deleting. Kept separate from isAwaitingCutover so the
+  // cutover conditions below are untouched.
+  const isAwaitingOperator = isAwaitingCutover || isAwaitingLDMBoot
   const isTerminal = phase === Phase.Succeeded || phase === Phase.DataCopied || isFailed
 
   const planName =
@@ -161,13 +167,21 @@ export default function MigrationDetailHeader({
             </>
           )}
 
-          {isAwaitingCutover && (
+          {isAwaitingOperator && (
             <>
-              <TriggerAdminCutoverButton
-                migrationName={migrationName}
-                namespace={namespace}
-                onSuccess={onCutoverSuccess}
-              />
+              {isAwaitingCutover ? (
+                <TriggerAdminCutoverButton
+                  migrationName={migrationName}
+                  namespace={namespace}
+                  onSuccess={onCutoverSuccess}
+                />
+              ) : (
+                <LDMBootGateButton
+                  migrationName={migrationName}
+                  namespace={namespace}
+                  onSuccess={onCutoverSuccess}
+                />
+              )}
               <Button
                 variant="outlined"
                 color="error"
@@ -179,7 +193,7 @@ export default function MigrationDetailHeader({
             </>
           )}
 
-          {!isFailed && !isAwaitingCutover && !isTerminal && (
+          {!isFailed && !isAwaitingOperator && !isTerminal && (
             <Button
               variant="outlined"
               color="error"

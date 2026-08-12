@@ -195,10 +195,18 @@ func CreateCutoverTriggeredCondition(migration *vjailbreakv1alpha1.Migration, ev
 // don't represent a real failure.
 func isFailureEventMessage(msg string) bool {
 	trimmed := strings.TrimSpace(msg)
-	if strings.HasPrefix(trimmed, constants.EventMessageWarningPrefix) {
+	lower := strings.ToLower(trimmed)
+
+	// Matched case-insensitively so the prefix that exempts a message from failure
+	// detection is the same one the reporter uses to raise the Kubernetes event to
+	// Warning severity (it looks for uppercase "WARNING"). Matching only the exact
+	// "Warning:" would force a choice between the two: a best-effort failure worded
+	// with "WARNING:" would stay exempt from neither, and since these messages
+	// interpolate wrapped errors that usually read "failed to ...", it would create
+	// a Failed condition for something explicitly non-fatal.
+	if strings.HasPrefix(lower, strings.ToLower(constants.EventMessageWarningPrefix)) {
 		return false
 	}
-	lower := strings.ToLower(trimmed)
 	return strings.Contains(lower, strings.ToLower(constants.EventMessageMigrationFailed)) ||
 		strings.Contains(lower, strings.ToLower(constants.EventMessageFailed))
 }
@@ -263,6 +271,65 @@ func SetCutoverLabel(initiateCutover bool, currentLabel string) string {
 	}
 	// If initiateCutover is false, set the label to "yes" (User should not be able to change it)
 	return constants.StartCutOverYes
+}
+
+// SetLDMBootStatusLabel publishes the operator's gate answer to the pod label the
+// helper watches. Write-once: the answer is acted on immediately, so a later
+// change has nothing left to affect. Unknown values are ignored rather than
+// published, so a typo cannot resolve the gate.
+func SetLDMBootStatusLabel(ldmBootStatus, currentLabel string) string {
+	if currentLabel != "" {
+		return currentLabel
+	}
+	switch ldmBootStatus {
+	case constants.LDMBootStatusSuccess, constants.LDMBootStatusFinish, constants.LDMBootStatusFailed:
+		return ldmBootStatus
+	default:
+		return currentLabel
+	}
+}
+
+// LDMGateHoldsPhase reports whether a migration is at the LDM boot gate, or still
+// rebuilding after the operator answered, and so is not Succeeded yet. Decided
+// from the label, not event order: the gate event and "VM created successfully"
+// land in the same second and sort.Slice is not stable. Only the "still
+// promoting" case compares timestamps, which is safe - promotion takes minutes.
+func LDMGateHoldsPhase(events []corev1.Event, ldmBootStatus string) bool {
+	newest := func(marker string) (metav1.Time, bool) {
+		var found metav1.Time
+		var ok bool
+		for i := range events {
+			if !strings.Contains(events[i].Message, marker) {
+				continue
+			}
+			if !ok || found.Before(&events[i].CreationTimestamp) {
+				found, ok = events[i].CreationTimestamp, true
+			}
+		}
+		return found, ok
+	}
+
+	if _, gateSeen := newest(constants.EventMessageWaitingForLDMBootSuccess); !gateSeen {
+		return false
+	}
+
+	// Unanswered: definitively still waiting, whatever order the events arrived in.
+	if ldmBootStatus == "" {
+		return true
+	}
+
+	// Answered. "finish" and "failed" complete immediately and never emit this, so
+	// its absence means there is nothing left to wait for.
+	promotedAt, promoting := newest(constants.EventMessagePromotingLDMGuest)
+	if !promoting {
+		return false
+	}
+
+	// The promotion is done once the rebuilt VM reports success, which is strictly
+	// newer than the promotion starting. The success event from the first, SATA
+	// build is older and must not be mistaken for it.
+	succeededAt, succeeded := newest(constants.EventMessageMigrationSucessful)
+	return !succeeded || !promotedAt.Before(&succeededAt)
 }
 
 // SplitEventStringOnComma splits a string by comma and returns a slice of substrings.

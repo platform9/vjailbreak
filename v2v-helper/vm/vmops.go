@@ -85,6 +85,11 @@ type VMInfo struct {
 	RDMDisks          []vjailbreakv1alpha1.RDMDisk
 	GatewayIP         map[string]string
 	TargetMetadata    map[string]string
+	// LDMProbeVolumeID is a scratch volume attached on the virtio bus so a guest
+	// booting on SATA still performs a real PnP install of viostor. Offline driver
+	// injection does not work here; presenting an actual device is what does.
+	// Empty for every other guest.
+	LDMProbeVolumeID string
 }
 
 type NIC struct {

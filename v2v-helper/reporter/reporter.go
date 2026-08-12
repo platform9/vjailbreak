@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -242,6 +243,68 @@ func (r *Reporter) GetCutoverLabel() (string, error) {
 	return "", fmt.Errorf("failed to get cutover label")
 }
 
+// WatchLDMBootStatusLabel is a parallel watcher to WatchPodLabels for the
+// ldmBootStatus label. It is a second watch on the same pod rather than an
+// extension of WatchPodLabels, because widening that channel to carry which
+// label changed would ripple into the existing cutover wait loop. The cost is
+// one extra watch; the benefit is that the cutover path is untouched.
+func (r *Reporter) WatchLDMBootStatusLabel(ctx context.Context, ch chan<- string) {
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Printf("Info: Context canceled while watching %s for pod %s\n", constants.LDMBootStatusLabel, r.PodName)
+				return
+			default:
+				// ResourceVersion is deliberately left unset. For a watch that means
+				// "Get State and Start at Most Recent", which begins with synthetic
+				// ADDED events describing the pod as it exists now. That is what
+				// makes the reconnect below safe: an answer set while this watch was
+				// down arrives as the first event of the next one, so no separate
+				// bootstrap read is needed. Setting a ResourceVersion would opt into
+				// "Start at Exact", which suppresses those synthetic events and
+				// would genuinely lose an answer set during the gap.
+				timeoutSeconds := int64(172800)
+				watcher, err := r.Clientset.CoreV1().Pods(r.PodNamespace).Watch(ctx, metav1.ListOptions{
+					FieldSelector:  fmt.Sprintf("metadata.name=%s", r.PodName),
+					TimeoutSeconds: &timeoutSeconds,
+				})
+				if err != nil {
+					fmt.Printf("Error: Failed to watch %s for pod %s: %v\n", constants.LDMBootStatusLabel, r.PodName, err)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+
+				// Reset per reconnect on purpose, so the synthetic ADDED event
+				// re-delivers an answer that arrived while the watch was down.
+				last := ""
+				for event := range watcher.ResultChan() {
+					pod, ok := event.Object.(*corev1.Pod)
+					if !ok {
+						continue
+					}
+					status := pod.Labels[constants.LDMBootStatusLabel]
+					if status == "" || status == last {
+						continue
+					}
+					fmt.Printf("Info: %s changed for pod %s: %q -> %q\n", constants.LDMBootStatusLabel, r.PodName, last, status)
+					// Same shutdown race as the cutover watcher: this goroutine
+					// outlives main, so drop a late event rather than panicking.
+					select {
+					case <-ctx.Done():
+						watcher.Stop()
+						return
+					case ch <- status:
+						last = status
+					}
+				}
+				watcher.Stop()
+				time.Sleep(5 * time.Second)
+			}
+		}
+	}()
+}
+
 func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 	go func() {
 		for {
@@ -262,7 +325,10 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					continue
 				}
 				fmt.Printf("Info: Watch established for pod %s with timeout %d seconds\n", r.PodName, timeoutSeconds)
-				defer watch.Stop()
+				// Stopped explicitly rather than with defer: this goroutine never
+				// returns, so a deferred Stop would never run and would leak one
+				// watch per reconnect - once every timeoutSeconds for as long as
+				// the admin takes to trigger cutover.
 				originalStartCutover := "no"
 				fmt.Printf("Info: Entering event loop for pod %s\n", r.PodName)
 				for event := range watch.ResultChan() {
@@ -274,12 +340,21 @@ func (r *Reporter) WatchPodLabels(ctx context.Context, ch chan<- string) {
 					if cutover, ok := pod.Labels["startCutover"]; ok {
 						if cutover != originalStartCutover {
 							fmt.Printf("Info: Label changed for pod %s: %s -> %s\n", r.PodName, originalStartCutover, cutover)
-							ch <- cutover
-							fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
-							originalStartCutover = cutover
+							// Never send blindly. This goroutine outlives main, so a
+							// bare send races with shutdown; selecting on ctx.Done()
+							// means a late event is dropped instead of panicking.
+							select {
+							case <-ctx.Done():
+								watch.Stop()
+								return
+							case ch <- cutover:
+								fmt.Printf("Info: Sent label %s for pod %s to channel\n", cutover, r.PodName)
+								originalStartCutover = cutover
+							}
 						}
 					}
 				}
+				watch.Stop()
 				fmt.Printf("Info: Watch channel closed for pod %s after ~%d seconds, retrying...\n", r.PodName, timeoutSeconds)
 				time.Sleep(5 * time.Second)
 			}

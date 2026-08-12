@@ -8,6 +8,7 @@ import {
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import { Migration, Phase } from '../../api/migrations'
 import { TriggerAdminCutoverButton } from '../TriggerAdminCutover/TriggerAdminCutoverButton'
+import { LDMBootGateButton } from '../LDMBootGate/LDMBootGateButton'
 import { VJAILBREAK_DEFAULT_NAMESPACE } from 'src/api/constants'
 import { durationBetween } from '../../utils/phaseUtils'
 
@@ -221,6 +222,98 @@ function AwaitingCutoverDetail({
   )
 }
 
+// ─── Awaiting LDM Boot Verification ──────────────────────────────────────────
+
+const LDM_CHECKS = [
+  'Get-PnpDevice -Class SCSIAdapter — expect a Red Hat VirtIO SCSI controller, status OK',
+  'sc.exe query viostor — expect STATE: RUNNING',
+]
+
+/**
+ * The LDM counterpart to AwaitingCutoverDetail. Without it this phase falls
+ * through to GenericActiveDetail, which renders a progress spinner and implies
+ * the migration is still working when it is actually blocked on the operator.
+ */
+function AwaitingLDMBootDetail({
+  migration,
+  onSuccess,
+}: {
+  migration: Migration
+  onSuccess?: () => void
+}) {
+  const migrationName = migration.metadata?.name ?? ''
+  const namespace =
+    (migration.metadata?.namespace as string | undefined) ?? VJAILBREAK_DEFAULT_NAMESPACE
+
+  return (
+    <Box
+      sx={{
+        p: 3,
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'warning.light',
+        mb: 2,
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        Currently · LDM Boot Verification
+      </Typography>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+        Confirm the virtio driver installed
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        This guest&apos;s system volume is on a Windows Dynamic Disk, which virt-v2v cannot convert.
+        The VM was created on an emulated SATA bus with a scratch virtio disk attached so Windows
+        would install the virtio storage driver on first boot. Log in and confirm, then choose how
+        to finish. There is no time limit — the migration waits here until you answer.
+      </Typography>
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          bgcolor: 'warning.50',
+          borderRadius: 1,
+          border: '1px solid',
+          borderColor: 'warning.200',
+          mb: 2,
+        }}
+      >
+        <Box>
+          <Typography variant="body2" fontWeight={600}>
+            Waiting for your answer
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Leave the VM running — moving to virtio shuts it down for you.
+          </Typography>
+        </Box>
+        <LDMBootGateButton
+          migrationName={migrationName}
+          namespace={namespace}
+          onSuccess={onSuccess}
+        />
+      </Box>
+
+      <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 1 }}>
+        Check in the guest:
+      </Typography>
+      <List dense disablePadding>
+        {LDM_CHECKS.map((item) => (
+          <ListItem key={item} disableGutters sx={{ py: 0.25 }}>
+            <CheckCircleIcon sx={{ fontSize: 14, color: 'success.main', mr: 1, flexShrink: 0 }} />
+            <Typography variant="caption" color="text.secondary">
+              {item}
+            </Typography>
+          </ListItem>
+        ))}
+      </List>
+    </Box>
+  )
+}
+
 // ─── Success ──────────────────────────────────────────────────────────────────
 
 function calcMigrationElapsed(start: Date | string | undefined, endMs: number): string {
@@ -406,6 +499,9 @@ export default function MigrationPhaseDetail({
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
       return <AwaitingCutoverDetail migration={migration} onSuccess={onCutoverSuccess} />
+
+    case Phase.WaitingForLDMBootSuccess:
+      return <AwaitingLDMBootDetail migration={migration} onSuccess={onCutoverSuccess} />
 
     case Phase.Succeeded:
       return <SuccessDetail migration={migration} />

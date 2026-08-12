@@ -67,6 +67,26 @@ type mountPlan struct {
 	Mounts []mountSpec
 }
 
+// ldmPrefixes are how libguestfs names anything assembled from a Windows Dynamic
+// Disk group (daemon/ldm.ml:23). Both forms are matched: a simple dynamic disk
+// can surface as a partition rather than a volume.
+var ldmPrefixes = []string{
+	"/dev/mapper/ldm_vol_",
+	"/dev/mapper/ldm_part_",
+}
+
+// isLDMDevice reports whether a mountable is a Windows Dynamic Disk volume.
+// Only the guest's root is ever checked; data disks on dynamic disks are fine.
+func isLDMDevice(device string) bool {
+	device = strings.TrimSpace(device)
+	for _, prefix := range ldmPrefixes {
+		if strings.HasPrefix(device, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // Resolving a plan costs two appliance boots and the disks do not change
 // identity within a migration, so memoise per disk set.
 var (
@@ -161,15 +181,19 @@ func runScript(disks []vm.VMDisk, script string) (string, error) {
 	return stdoutBuf.String(), nil
 }
 
-// parseRoots turns the output of `inspect-os` into a list of root filesystems,
-// one per line. Blank lines and stray whitespace are ignored.
+// parseRoots turns `inspect-os` output into a list of root filesystems, dropping
+// blanks and exact duplicates. A Dynamic Disk volume is reported once per member
+// disk, so the same path repeats; collapsing here means the reduction does not
+// depend on vfs-uuid, which is tolerated and may fail. Inert for other guests.
 func parseRoots(out string) []string {
 	var roots []string
+	seen := make(map[string]bool)
 	for _, line := range strings.Split(out, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || seen[line] {
 			continue
 		}
+		seen[line] = true
 		roots = append(roots, line)
 	}
 	return roots
@@ -350,17 +374,23 @@ func pickRoot(group []string) string {
 }
 
 // rootRank scores how good a device is at representing a filesystem, lower being
-// better: a real partition, then a whole disk, then a subvolume mountable.
+// better: an LDM volume, then a partition, then a whole disk, then a mountable.
 func rootRank(root string) int {
 	switch {
+	case isLDMDevice(root):
+		// An assembled Windows Dynamic Disk volume always wins. If it is in the
+		// group at all then the system volume is on a dynamic disk, and that is
+		// what IsLDMSystemVolume has to see - picking a sibling here would hide
+		// it and send the guest into a conversion virt-v2v cannot do.
+		return 0
 	case strings.Contains(root, ":"):
 		// A mountable such as "btrfsvol:/dev/sda6/@/home": usable, but a plain
 		// device is a better representative.
-		return 2
+		return 3
 	case isBareDisk(root):
-		return 1
+		return 2
 	default:
-		return 0
+		return 1
 	}
 }
 

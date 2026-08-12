@@ -48,6 +48,17 @@ func TestParseRoots(t *testing.T) {
 			out:  "btrfsvol:/dev/sda6/@/.snapshots/1/snapshot\n",
 			want: []string{"btrfsvol:/dev/sda6/@/.snapshots/1/snapshot"},
 		},
+		{
+			// A Windows LDM volume is reported once per member disk.
+			name: "duplicate root paths collapse",
+			out:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n",
+			want: []string{"/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+		},
+		{
+			name: "distinct roots are kept even if one repeats",
+			out:  "/dev/sda1\n/dev/sdb1\n/dev/sda1\n",
+			want: []string{"/dev/sda1", "/dev/sdb1"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -256,6 +267,26 @@ func TestPickRoot(t *testing.T) {
 			name:  "lvm path counts as a partition",
 			group: []string{"/dev/sdb", "/dev/vg0/lv_root"},
 			want:  "/dev/vg0/lv_root",
+		},
+		{
+			// An assembled Dynamic Disk volume must win, or IsLDMSystemVolume
+			// never sees it and the guest goes into a conversion that cannot work.
+			// Without the explicit rank this only passed because "m" sorts before
+			// "s" - luck, not design.
+			name:  "LDM volume beats a plain partition",
+			group: []string{"/dev/sda2", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1",
+		},
+		{
+			name:  "LDM volume beats a bare disk",
+			group: []string{"/dev/sdb", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1",
+		},
+		{
+			// libguestfs also creates /dev/mapper/ldm_part_* (daemon/ldm.ml:23).
+			name:  "LDM partition wins too",
+			group: []string{"/dev/sda2", "/dev/mapper/ldm_part_WIN-X-Dg0_Volume1"},
+			want:  "/dev/mapper/ldm_part_WIN-X-Dg0_Volume1",
 		},
 		{
 			name:  "empty group",
@@ -551,6 +582,46 @@ func TestBuildPlan(t *testing.T) {
 			{Device: "/dev/sda2", MountPoint: "/boot"},
 		}, plan.Mounts)
 	})
+
+	t.Run("LDM volume listed once per member disk collapses, case preserved", func(t *testing.T) {
+		// Ldm.list_ldm_volumes reports a spanned volume once per member disk, so
+		// inspect-os returns the same device path twice.
+		const ldm = "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1"
+
+		plan, err := planFromProbe([]string{ldm, ldm}, map[string]string{ldm: "1234abcd"}, nil)
+
+		assert.NoError(t, err)
+		assert.Equal(t, ldm, plan.Root)
+		assert.Equal(t, []mountSpec{{Device: ldm, MountPoint: "/"}}, plan.Mounts)
+		assert.True(t, isLDMDevice(plan.Root))
+	})
+}
+
+func TestIsLDMDevice(t *testing.T) {
+	tests := []struct {
+		name   string
+		device string
+		want   bool
+	}{
+		{"LDM volume", "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1", true},
+		{"LDM volume with trailing whitespace", "/dev/mapper/ldm_vol_WIN-X-Dg0_Volume1\n", true},
+		// libguestfs creates both forms - daemon/ldm.ml:23. Matching only
+		// ldm_vol_ would miss a layout that surfaces as a partition.
+		{"LDM partition", "/dev/mapper/ldm_part_WIN-3RP74FF6NOG-Dg0_Volume1", true},
+		{"plain partition", "/dev/sda2", false},
+		{"unrelated device-mapper name starting ldm", "/dev/mapper/ldm-root", false},
+		{"LVM logical volume", "/dev/mapper/rhel-root", false},
+		{"LVM by volume group", "/dev/VolGroup00/LogVol00", false},
+		{"btrfs subvolume", "btrfsvol:/dev/sda6/@/home", false},
+		{"empty", "", false},
+		{"prefix appears mid-path only", "/dev/sda1/dev/mapper/ldm_vol_x", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, isLDMDevice(tt.device))
+		})
+	}
 }
 
 func TestGuestmountArgs(t *testing.T) {

@@ -4,6 +4,7 @@ package migrate
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -835,6 +836,80 @@ func TestCleanup_PartialVolumes_DeletesCreatedVolumeAndPorts(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// The LDM probe is tracked on the Migrate struct rather than in vminfo.VMDisks, so
+// DeleteAllVolumes cannot see it. Without an explicit delete here it is orphaned by
+// any failure between createLDMProbeVolume and the boot gate - delete_on_termination
+// only helps once a server exists to terminate.
+func TestCleanupDeletesLDMProbeVolume(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "probe-id").Return(nil).Times(1)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+		ldmProbeVolumeID: "probe-id",
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test ldm probe cleanup", nil, nil)
+	assert.NoError(t, err)
+	assert.Empty(t, migobj.ldmProbeVolumeID, "probe ID must be cleared so it is not deleted twice")
+}
+
+// A probe that is still attached cannot be deleted, and that must not stop the rest
+// of cleanup or fail the migration a second time.
+func TestCleanupTolerateProbeDeleteFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), "probe-id").
+		Return(errors.New("Invalid volume: Volume is in status 'in-use'")).Times(1)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+		ldmProbeVolumeID: "probe-id",
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test probe delete failure", nil, nil)
+	assert.NoError(t, err)
+}
+
+// A non-LDM migration must not issue a stray delete.
+func TestCleanupSkipsProbeWhenAbsent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	ctx := context.Background()
+
+	mockOpenStackOps := openstack.NewMockOpenstackOperations(ctrl)
+	mockVMOps := vm.NewMockVMOperations(ctrl)
+
+	mockOpenStackOps.EXPECT().DeleteVolume(gomock.Any(), gomock.Any()).Times(0)
+	mockVMOps.EXPECT().CleanUpSnapshots(true).Return(nil).Times(1)
+
+	migobj := Migrate{
+		Openstackclients: mockOpenStackOps,
+		VMops:            mockVMOps,
+		InPod:            false,
+	}
+
+	err := migobj.cleanup(ctx, vm.VMInfo{}, "test no probe", nil, nil)
+	assert.NoError(t, err)
+}
+
 // TestReportStagedVolumeIDs verifies that reportStagedVolumeIDs correctly collects
 // volume IDs from vminfo.VMDisks and patches them onto the Migration status.
 func TestReportStagedVolumeIDs(t *testing.T) {
@@ -1041,4 +1116,193 @@ func TestBlockDriverFromMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLDMImageMetadata(t *testing.T) {
+	t.Run("non-LDM guest derives nothing", func(t *testing.T) {
+		assert.Nil(t, ldmImageMetadata(false))
+	})
+
+	t.Run("LDM guest is pinned to the sata bus", func(t *testing.T) {
+		// virt-v2v cannot convert an LDM system disk, so no virtio storage driver
+		// is boot-critical and the disks must arrive on a bus with an in-box driver.
+		assert.Equal(t, map[string]string{"hw_disk_bus": "sata"}, ldmImageMetadata(true))
+	})
+}
+
+func TestMergeBootVolumeImageMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		derived map[string]string
+		profile map[string]string
+		want    map[string]string
+	}{
+		{
+			name:    "nothing to apply returns nil so the API call is skipped",
+			derived: nil,
+			profile: nil,
+			want:    nil,
+		},
+		{
+			name:    "empty maps also return nil",
+			derived: map[string]string{},
+			profile: map[string]string{},
+			want:    nil,
+		},
+		{
+			name:    "profile alone is passed through unchanged",
+			derived: nil,
+			profile: map[string]string{"hw_video_model": "vga"},
+			want:    map[string]string{"hw_video_model": "vga"},
+		},
+		{
+			name:    "derived alone is applied",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: nil,
+			want:    map[string]string{"hw_disk_bus": "sata"},
+		},
+		{
+			name:    "disjoint keys are unioned",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: map[string]string{"hw_video_model": "vga"},
+			want:    map[string]string{"hw_disk_bus": "sata", "hw_video_model": "vga"},
+		},
+		{
+			// The important one: a user who deliberately set a bus must not have it
+			// silently overridden by our LDM default.
+			name:    "explicit profile wins over the derived value",
+			derived: map[string]string{"hw_disk_bus": "sata"},
+			profile: map[string]string{"hw_disk_bus": "virtio"},
+			want:    map[string]string{"hw_disk_bus": "virtio"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, mergeBootVolumeImageMetadata(tt.derived, tt.profile))
+		})
+	}
+}
+
+func TestMergeBootVolumeImageMetadataDoesNotMutateInputs(t *testing.T) {
+	derived := map[string]string{"hw_disk_bus": "sata"}
+	profile := map[string]string{"hw_disk_bus": "virtio", "os_type": "windows"}
+
+	merged := mergeBootVolumeImageMetadata(derived, profile)
+	merged["hw_video_model"] = "vga"
+
+	// migobj.ImageMetadata is reused elsewhere (blockDriverFromMetadata), so the
+	// merge must not write through to either argument.
+	assert.Equal(t, map[string]string{"hw_disk_bus": "sata"}, derived)
+	assert.Equal(t, map[string]string{"hw_disk_bus": "virtio", "os_type": "windows"}, profile)
+}
+
+func TestWaitForLDMBootStatus(t *testing.T) {
+	newMigobj := func(watcher chan string) *Migrate {
+		return &Migrate{LDMBootStatusWatcher: watcher, InPod: false}
+	}
+
+	t.Run("success is returned as given", func(t *testing.T) {
+		ch := make(chan string, 1)
+		ch <- constants.LDMBootStatusSuccess
+		assert.Equal(t, constants.LDMBootStatusSuccess, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("failed is returned as given", func(t *testing.T) {
+		ch := make(chan string, 1)
+		ch <- constants.LDMBootStatusFailed
+		assert.Equal(t, constants.LDMBootStatusFailed, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("unrecognised values do not resolve the gate", func(t *testing.T) {
+		// A typo must not be able to promote or destroy anything; the gate keeps
+		// waiting until a real answer arrives.
+		ch := make(chan string, 2)
+		ch <- "yes"
+		ch <- constants.LDMBootStatusFinish
+		assert.Equal(t, constants.LDMBootStatusFinish, newMigobj(ch).waitForLDMBootStatus(context.Background()))
+	})
+
+	t.Run("cancelled context leaves the VM on sata rather than failing it", func(t *testing.T) {
+		// A working VM exists by this point, so an interrupted wait must not be
+		// treated as a failed migration.
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		assert.Equal(t, constants.LDMBootStatusFinish, newMigobj(make(chan string)).waitForLDMBootStatus(ctx))
+	})
+}
+
+// "Keep on SATA" ends the migration without recreating anything, so unlike the
+// promotion path it emits no new "VM created successfully". The original one was
+// emitted before the gate opened, and the gate has no time limit - once it ages
+// past the API server's event TTL the controller matches nothing and leaves
+// Status.Phase at WaitingForLDMBootSuccess, so the UI shows the migration as
+// still waiting forever. The finish path must re-emit the terminal event.
+func TestFinishEmitsTerminalEvent(t *testing.T) {
+	events := make(chan string, 16)
+	watcher := make(chan string, 1)
+	watcher <- constants.LDMBootStatusFinish
+
+	migobj := &Migrate{
+		LDMBootStatusWatcher: watcher,
+		EventReporter:        events,
+		InPod:                true,
+		ldmProbeVolumeID:     "probe-id",
+	}
+
+	err := migobj.waitForLDMBootAndPromote(context.Background(), vm.VMInfo{}, nil, nil, nil, -1, nil)
+	assert.NoError(t, err)
+
+	close(events)
+	var emitted []string
+	for msg := range events {
+		emitted = append(emitted, msg)
+	}
+
+	assert.Contains(t, emitted, constants.EventMessageWaitingForLDMBootSuccess,
+		"the gate event must still be emitted so the phase holds while waiting")
+
+	var sawTerminal bool
+	for _, msg := range emitted {
+		if strings.Contains(msg, constants.EventMessageMigrationSucessful) {
+			sawTerminal = true
+		}
+	}
+	assert.True(t, sawTerminal,
+		"finish must re-emit %q or the phase never leaves WaitingForLDMBootSuccess",
+		constants.EventMessageMigrationSucessful)
+
+	// It must be the newest event, otherwise LDMGateHoldsPhase's ordering logic
+	// and the controller's newest-match loop would still resolve to the gate.
+	assert.Contains(t, emitted[len(emitted)-1], constants.EventMessageMigrationSucessful)
+}
+
+// The gate must not expire on its own. Like the admin cutover gate it waits
+// indefinitely, so an operator who needs a maintenance window to reach the guest
+// can still answer days later.
+func TestWaitForLDMBootStatusDoesNotExpire(t *testing.T) {
+	ch := make(chan string)
+	migobj := &Migrate{LDMBootStatusWatcher: ch, InPod: false}
+
+	done := make(chan string, 1)
+	go func() { done <- migobj.waitForLDMBootStatus(context.Background()) }()
+
+	select {
+	case answer := <-done:
+		t.Fatalf("gate resolved on its own with %q; it must wait for an answer", answer)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	// Still listening, and an answer that arrives late is still honoured.
+	ch <- constants.LDMBootStatusSuccess
+	assert.Equal(t, constants.LDMBootStatusSuccess, <-done)
+}
+
+func TestDetectLDMGuestSkipsNonWindows(t *testing.T) {
+	// Guards the early return: a Linux guest must never reach IsLDMSystemVolume,
+	// which would boot the libguestfs appliance for nothing.
+	migobj := &Migrate{}
+	migobj.detectLDMGuest(vm.VMInfo{OSType: "linux", Name: "ubuntu-vm"})
+	assert.False(t, migobj.isLDMGuest)
+	assert.Empty(t, migobj.ldmProbeVolumeID)
 }

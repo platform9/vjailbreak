@@ -241,6 +241,15 @@ func (osclient *OpenStackClients) DeleteVolume(ctx context.Context, volumeID str
 		if err == nil {
 			return nil
 		}
+		// A 404 is the goal state, not a transient failure - the volume is gone,
+		// so deletion has succeeded. This happens routinely with volumes carrying
+		// delete_on_termination, which Nova removes along with the server. Retrying
+		// can never turn it into a 204, so return immediately instead of burning
+		// the full retry budget on a fixed outcome.
+		if gophercloud.ResponseCodeIs(err, http.StatusNotFound) {
+			PrintLog(fmt.Sprintf("Volume %s no longer exists; treating delete as successful", volumeID))
+			return nil
+		}
 		PrintLog(fmt.Sprintf("Transient error deleting volume %s (attempt %d/%d): %s", volumeID, i+1, constants.DeleteOperationRetryCount, err))
 		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
@@ -1137,6 +1146,24 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 		})
 	}
 
+	// An LDM guest boots on an emulated bus, so no virtio storage driver is ever
+	// made boot-critical. One scratch volume on the virtio bus gives Windows a real
+	// device to install viostor against on first boot - the prerequisite for moving
+	// the root disk to virtio later. Nova fixes disk_bus at create time, so this
+	// cannot be added to a running instance afterwards.
+	if vminfo.LDMProbeVolumeID != "" {
+		serverCreateOpts.BlockDevice = append(serverCreateOpts.BlockDevice, servers.BlockDevice{
+			DeleteOnTermination: true,
+			DestinationType:     servers.DestinationVolume,
+			SourceType:          servers.SourceVolume,
+			UUID:                vminfo.LDMProbeVolumeID,
+			DiskBus:             "virtio",
+			BootIndex:           -1,
+		})
+		PrintLog(fmt.Sprintf("Attaching virtio probe volume %s to LDM guest %s so Windows installs the virtio storage driver on first boot",
+			vminfo.LDMProbeVolumeID, vminfo.Name))
+	}
+
 	// Prepare scheduler hints for server group if specified
 	var schedulerHints servers.SchedulerHintOptsBuilder
 	if serverGroupID != "" {
@@ -1240,6 +1267,24 @@ func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID str
 	PrintLog(fmt.Sprintf("OPENSTACK API: Deleting server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
 	return DoRetryWithExponentialBackoff(ctx, func() error {
 		return servers.Delete(ctx, osclient.ComputeClient, serverID).ExtractErr()
+	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
+}
+
+// StopServer issues an ACPI shutdown and returns once Nova accepts the request;
+// callers needing the instance actually down must poll GetServerStatus. An
+// already-stopped instance counts as success, since "already off" is the outcome
+// we wanted and Nova would otherwise return 409.
+func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+
+	status, err := osclient.GetServerStatus(ctx, serverID)
+	if err == nil && strings.EqualFold(status, "SHUTOFF") {
+		PrintLog(fmt.Sprintf("Server %s is already SHUTOFF", serverID))
+		return nil
+	}
+
+	return DoRetryWithExponentialBackoff(ctx, func() error {
+		return servers.Stop(ctx, osclient.ComputeClient, serverID).ExtractErr()
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 

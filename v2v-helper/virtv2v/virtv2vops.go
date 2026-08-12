@@ -868,6 +868,19 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	return strings.ToLower(stdoutBuf.String()), nil
 }
 
+// IsLDMSystemVolume reports whether the guest's system volume sits on a Windows
+// Dynamic Disk, and returns the root it resolved. virt-v2v documents these as
+// unsupported but has no guard, so conversion produces an unbootable disk or
+// wedges. Only the root is checked - data disks on dynamic disks convert fine.
+// Reuses the memoised mount plan, so it costs no extra appliance boot.
+func IsLDMSystemVolume(disks []vm.VMDisk) (bool, string, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to resolve guest root to check for LDM: %w", err)
+	}
+	return isLDMDevice(plan.Root), plan.Root, nil
+}
+
 // GetDeviceNumberFromPartition returns the device index for a given partition name
 func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
 	command := "part-to-dev"

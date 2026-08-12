@@ -34,14 +34,21 @@ func main() {
 
 	eventReporterChan := make(chan string)
 	podLabelWatcherChan := make(chan string)
+	ldmBootStatusChan := make(chan string)
 	ackChan := make(chan struct{})
 
+	// Only eventReporterChan is closed here, because main is its sender. The label
+	// watchers send from goroutines that outlive main, so closing those from the
+	// receiving side panicked with "send on closed channel" once the LDM gate began
+	// patching pod labels. They are garbage collected with the process.
 	defer close(eventReporterChan)
-	defer close(podLabelWatcherChan)
 
 	// Start reporter goroutines
 	eventReporter.UpdatePodEvents(ctx, eventReporterChan, ackChan)
 	eventReporter.WatchPodLabels(ctx, podLabelWatcherChan)
+	// Second watch on the same pod, for the LDM boot gate. Kept separate so the
+	// cutover watcher and its channel type stay untouched.
+	eventReporter.WatchLDMBootStatusLabel(ctx, ldmBootStatusChan)
 
 	// Helper function to report and handle errors
 	handleError := func(msg string) {
@@ -146,6 +153,7 @@ func main() {
 		Nbdops:                  []nbd.NBDOperations{},
 		EventReporter:           eventReporterChan,
 		PodLabelWatcher:         podLabelWatcherChan,
+		LDMBootStatusWatcher:    ldmBootStatusChan,
 		InPod:                   reporter.IsRunningInPod(),
 		MigrationTimes: migrate.MigrationTimes{
 			DataCopyStart:  starttime,
