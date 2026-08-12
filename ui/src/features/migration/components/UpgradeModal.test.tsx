@@ -233,3 +233,57 @@ describe('UpgradeModal — upgrade', () => {
     await waitFor(() => expect(initiateUpgrade).toHaveBeenCalledWith('v0.1.5', true))
   })
 })
+
+describe('UpgradeModal — progress and alert placement', () => {
+  it('renders upgrade progress below the version card, not inside it, and above the warning', async () => {
+    let resolveUpgrade: (value: { upgradeStarted: boolean }) => void = () => {}
+    initiateUpgrade.mockImplementation(() => new Promise((resolve) => { resolveUpgrade = resolve }))
+    const user = userEvent.setup()
+    renderModal(<UpgradeModal show onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Select a version...')).toBeInTheDocument())
+    await selectVersion(user, 'v0.1.4')
+    await user.click(screen.getByTestId('cleanup-button'))
+    await user.click(await screen.findByTestId('confirm-cleanup-button'))
+    await waitFor(() => expect(upgradeButton()).toBeEnabled())
+
+    await user.click(upgradeButton())
+    resolveUpgrade({ upgradeStarted: true })
+
+    const progress = await screen.findByTestId('upgrade-progress')
+    const card = screen.getByTestId('version-step-card')
+
+    // Status for the whole dialog, so it must not be nested in the version card.
+    expect(card).not.toContainElement(progress)
+
+    // ...and it must come after the card but before the processing warning.
+    expect(card.compareDocumentPosition(progress) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    const warning = screen.getByText('Processing. Please do not close or refresh this page.')
+    expect(progress.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('centres the progress row and the processing warning', async () => {
+    let resolveUpgrade: (value: { upgradeStarted: boolean }) => void = () => {}
+    initiateUpgrade.mockImplementation(() => new Promise((resolve) => { resolveUpgrade = resolve }))
+    const user = userEvent.setup()
+    renderModal(<UpgradeModal show onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Select a version...')).toBeInTheDocument())
+    await selectVersion(user, 'v0.1.4')
+    await user.click(screen.getByTestId('cleanup-button'))
+    await user.click(await screen.findByTestId('confirm-cleanup-button'))
+    await waitFor(() => expect(upgradeButton()).toBeEnabled())
+
+    await user.click(upgradeButton())
+    resolveUpgrade({ upgradeStarted: true })
+
+    const progress = await screen.findByTestId('upgrade-progress')
+    expect(progress).toHaveStyle({ justifyContent: 'center' })
+
+    const warning = screen
+      .getByText('Processing. Please do not close or refresh this page.')
+      .closest('.MuiAlert-root')
+    expect(warning).toHaveStyle({ justifyContent: 'center' })
+  })
+})
