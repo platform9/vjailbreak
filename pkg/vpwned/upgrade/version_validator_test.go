@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"reflect"
@@ -1822,5 +1823,111 @@ func TestApplyAllCRDsApplyFailure(t *testing.T) {
 
 	if err := ApplyAllCRDs(context.Background(), kubeClient, "v0.4.9"); err == nil {
 		t.Fatal("ApplyAllCRDs() error = nil, want the apply failure surfaced")
+	}
+}
+
+// deploymentSnapshot is what a backup ConfigMap holds: a serialized live Deployment.
+// Status is already settled so the restore's readiness wait returns on its first check.
+func deploymentSnapshot(name string, replicas int32) string {
+	return fmt.Sprintf(`apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  replicas: %d
+status:
+  readyReplicas: %d
+  updatedReplicas: %d
+`, name, Namespace, replicas, replicas, replicas)
+}
+
+// Rollback can only restore what was snapshotted, so every deployment the upgrade
+// replaces has to be backed up first.
+func TestBackupResourcesWithIDBacksUpEveryDeployment(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DeploymentConfigs {
+		objs = append(objs, deployment(cfg.Name, 1, 1, 1))
+	}
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := BackupResourcesWithID(context.Background(), kubeClient, &rest.Config{}, "id-1"); err != nil {
+		t.Fatalf("BackupResourcesWithID() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DeploymentConfigs {
+		cm := &corev1.ConfigMap{}
+		key := client.ObjectKey{Name: "backup-deploy-" + cfg.Name, Namespace: Namespace}
+		if err := kubeClient.Get(context.Background(), key, cm); err != nil {
+			t.Errorf("no backup for %s: %v — rollback would have nothing to restore", cfg.Name, err)
+			continue
+		}
+		if cm.Data["resource"] == "" {
+			t.Errorf("backup for %s holds no serialized resource", cfg.Name)
+		}
+	}
+}
+
+func TestRestoreResourcesRestoresEveryDeployment(t *testing.T) {
+	// Seeded settled at the snapshot's replica count: zero running replicas satisfies the
+	// controller scale-down wait, and ready==desired satisfies each readiness wait, so no
+	// wait sleeps through its poll interval.
+	var objs []client.Object
+	for _, cfg := range DeploymentConfigs {
+		objs = append(objs, deployment(cfg.Name, 2, 2, 0))
+		objs = append(objs, backupConfigMap("backup-deploy-"+cfg.Name, "id-1",
+			deploymentSnapshot(cfg.Name, 2), 0))
+	}
+
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := RestoreResources(context.Background(), kubeClient, "id-1"); err != nil {
+		t.Fatalf("RestoreResources() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DeploymentConfigs {
+		dep := &appsv1.Deployment{}
+		key := client.ObjectKey{Name: cfg.Name, Namespace: Namespace}
+		if err := kubeClient.Get(context.Background(), key, dep); err != nil {
+			t.Errorf("%s was not restored: %v", cfg.Name, err)
+			continue
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 2 {
+			t.Errorf("%s replicas = %v, want the 2 recorded in its snapshot", cfg.Name, dep.Spec.Replicas)
+		}
+	}
+}
+
+// A deployment with no snapshot must be skipped without stopping the restore of the
+// others.
+func TestRestoreResourcesSkipsDeploymentWithoutBackup(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DeploymentConfigs {
+		objs = append(objs, deployment(cfg.Name, 2, 2, 0))
+		if cfg.Name == "vjailbreak-ai" {
+			continue // no snapshot for the AI pod
+		}
+		objs = append(objs, backupConfigMap("backup-deploy-"+cfg.Name, "id-1",
+			deploymentSnapshot(cfg.Name, 2), 0))
+	}
+
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := RestoreResources(context.Background(), kubeClient, "id-1"); err != nil {
+		t.Fatalf("RestoreResources() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DeploymentConfigs {
+		if cfg.Name == "vjailbreak-ai" {
+			continue
+		}
+		dep := &appsv1.Deployment{}
+		key := client.ObjectKey{Name: cfg.Name, Namespace: Namespace}
+		if err := kubeClient.Get(context.Background(), key, dep); err != nil {
+			t.Fatalf("%s was not restored: %v", cfg.Name, err)
+		}
+		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 2 {
+			t.Errorf("%s replicas = %v, want 2 from its snapshot", cfg.Name, dep.Spec.Replicas)
+		}
 	}
 }

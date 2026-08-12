@@ -56,7 +56,18 @@ var DeploymentConfigs = []DeploymentConfig{
 		ContainerName: "vjailbreak-ui-container",
 		ImagePrefix:   "quay.io/platform9/vjailbreak-ui",
 	},
+	{
+		Namespace:     Namespace,
+		Name:          "vjailbreak-ai",
+		ContainerName: "vjailbreak-ai",
+		ImagePrefix:   "quay.io/platform9/vjailbreak-ai",
+	},
 }
+
+var (
+	deploymentWaitTimeout  = 5 * time.Minute
+	deploymentPollInterval = 10 * time.Second
+)
 
 // UpgradeExecutor handles the upgrade process as a standalone job
 type UpgradeExecutor struct {
@@ -329,11 +340,19 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
+	e.updateProgress("Applying AI deployment from GitHub", StatusDeploying, "")
+	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, "deploy/08vjailbreak-ai-deployment.yaml"); err != nil {
+		return fmt.Errorf("failed to apply AI deployment: %w", err)
+	}
+	e.incrementCompletedSteps()
+	e.saveProgress(ctx)
+
 	e.updateProgress("Waiting for all deployments to be ready", StatusDeploying, "")
 	for _, cfg := range []DeploymentConfig{
 		controllerConfig,
 		{Name: "migration-vpwned-sdk", Namespace: Namespace},
 		{Name: "vjailbreak-ui", Namespace: Namespace},
+		{Name: "vjailbreak-ai", Namespace: Namespace},
 	} {
 		if err := e.waitForDeploymentReady(ctx, cfg); err != nil {
 			return fmt.Errorf("deployment %s not ready: %w", cfg.Name, err)
@@ -406,8 +425,8 @@ func (e *UpgradeExecutor) scaleDeployment(ctx context.Context, cfg DeploymentCon
 }
 
 func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg DeploymentConfig) error {
-	timeout := 5 * time.Minute
-	interval := 10 * time.Second
+	timeout := deploymentWaitTimeout
+	interval := deploymentPollInterval
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -496,8 +515,8 @@ func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg Deploy
 }
 
 func (e *UpgradeExecutor) waitForDeploymentScaledDown(ctx context.Context, cfg DeploymentConfig) error {
-	timeout := 5 * time.Minute
-	interval := 10 * time.Second
+	timeout := deploymentWaitTimeout
+	interval := deploymentPollInterval
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -692,23 +711,28 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 	log.Printf("Rollback job started: %s -> %s (backupID=%s)", targetVersion, previousVersion, backupID)
 
 	existingBackupID := backupID
-	if existingBackupID == "" {
-		existingProgress, err := e.loadProgress(ctx)
-		if err == nil && existingProgress != nil && existingProgress.BackupID != "" {
+	var storedReplicas map[string]int32
+	if existingProgress, err := e.loadProgress(ctx); err == nil && existingProgress != nil {
+		if existingBackupID == "" && existingProgress.BackupID != "" {
 			existingBackupID = existingProgress.BackupID
 			log.Printf("Loaded BackupID from existing progress: %s", existingBackupID)
+		}
+		if len(existingProgress.OriginalReplicas) > 0 {
+			storedReplicas = existingProgress.OriginalReplicas
+			log.Printf("Loaded original replica counts from existing progress: %v", storedReplicas)
 		}
 	}
 
 	e.progress = &UpgradeProgress{
-		CurrentStep:     "Starting rollback",
-		TotalSteps:      TotalRollbackSteps,
-		CompletedSteps:  0,
-		Status:          StatusRollingBack,
-		StartTime:       time.Now(),
-		PreviousVersion: previousVersion,
-		TargetVersion:   targetVersion,
-		BackupID:        existingBackupID,
+		CurrentStep:      "Starting rollback",
+		TotalSteps:       TotalRollbackSteps,
+		CompletedSteps:   0,
+		Status:           StatusRollingBack,
+		StartTime:        time.Now(),
+		PreviousVersion:  previousVersion,
+		TargetVersion:    targetVersion,
+		BackupID:         existingBackupID,
+		OriginalReplicas: storedReplicas,
 	}
 	e.saveProgress(ctx)
 
@@ -759,6 +783,14 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 		originalReplicas = readReplicas
 	}
 
+	// A failed upgrade leaves the controller scaled to zero, which is exactly when a
+	// rollback is triggered. Restoring zero would finish "successfully" with no controller
+	// running and nothing reconciling migrations.
+	if originalReplicas < 1 {
+		log.Printf("Original replicas for %s read as %d; restoring 1 instead", controllerConfig.Name, originalReplicas)
+		originalReplicas = 1
+	}
+
 	if _, err := e.scaleDeployment(ctx, controllerConfig, 0, "Scaling down controller for rollback"); err != nil {
 		return e.handleRollbackFailure(ctx, err)
 	}
@@ -795,6 +827,11 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, previousVersion, "deploy/07ui-deployment.yaml"); err != nil {
 		log.Printf("Warning: Failed to restore UI deployment: %v", err)
 	}
+
+	e.updateProgress("Restoring AI deployment from GitHub", StatusRollingBack, "")
+	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, previousVersion, "deploy/08vjailbreak-ai-deployment.yaml"); err != nil {
+		log.Printf("Warning: Failed to restore AI deployment: %v", err)
+	}
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
@@ -811,6 +848,7 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 		controllerConfig,
 		{Name: "migration-vpwned-sdk", Namespace: Namespace},
 		{Name: "vjailbreak-ui", Namespace: Namespace},
+		{Name: "vjailbreak-ai", Namespace: Namespace},
 	} {
 		if err := e.waitForDeploymentReady(ctx, cfg); err != nil {
 			log.Printf("Warning: Deployment %s not ready: %v", cfg.Name, err)

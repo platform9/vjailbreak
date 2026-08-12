@@ -347,13 +347,12 @@ func TestCheckImagesExist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read recorded skopeo args: %v", err)
 	}
-	for _, image := range []string{
-		"docker://quay.io/platform9/vjailbreak-ui:v0.4.9",
-		"docker://quay.io/platform9/vjailbreak-controller:v0.4.9",
-		"docker://quay.io/platform9/vjailbreak-vpwned:v0.4.9",
-	} {
+	// Derived from DeploymentConfigs so a new workload cannot be added without its image
+	// being verified before the upgrade job starts.
+	for _, cfg := range DeploymentConfigs {
+		image := "docker://" + cfg.ImagePrefix + ":v0.4.9"
 		if !strings.Contains(string(recorded), image) {
-			t.Errorf("skopeo was not asked about %s; got:\n%s", image, recorded)
+			t.Errorf("skopeo was not asked about %s (%s); got:\n%s", image, cfg.Name, recorded)
 		}
 	}
 }
