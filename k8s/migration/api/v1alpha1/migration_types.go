@@ -110,7 +110,8 @@ type MigrationSpec struct {
 
 	// LDMBootStatus answers the WaitingForLDMBootSuccess gate: "success" recreates
 	// the VM on virtio, "finish" leaves it on SATA and completes, "failed" fails and
-	// cleans up. Empty means still waiting; a timeout resolves as "finish".
+	// cleans up. Empty means still waiting. The gate does not expire; like the admin
+	// cutover gate it waits until an operator answers.
 	// +optional
 	// +kubebuilder:validation:Enum=success;finish;failed
 	LDMBootStatus string `json:"ldmBootStatus,omitempty"`

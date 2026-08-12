@@ -130,6 +130,30 @@ func TestCreateFailedCondition(t *testing.T) {
 			wantConditions: 0,
 			wantFailed:     false,
 		},
+		{
+			// The reporter raises an event to Warning severity only on uppercase
+			// "WARNING", so non-fatal messages are worded that way. The exemption has
+			// to match it or they would be read as failures - and these interpolate
+			// wrapped errors, which almost always contain "failed to".
+			name: "uppercase WARNING prefix is exempt just like Warning:",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason,
+					"WARNING: failed to delete the virtio probe volume abc-123: request failed"),
+			},
+			wantConditions: 0,
+			wantFailed:     false,
+		},
+		{
+			// The exemption is a prefix, not a substring: a real failure that merely
+			// mentions a warning later in the text must still be caught.
+			name: "WARNING appearing mid-message does not exempt a real failure",
+			events: []corev1.Event{
+				makeEvent(constants.MigrationReason,
+					"failed to create target instance (see WARNING above). Trying to perform cleanup"),
+			},
+			wantConditions: 1,
+			wantFailed:     true,
+		},
 	}
 
 	for _, tt := range tests {

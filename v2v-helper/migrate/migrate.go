@@ -2533,7 +2533,7 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 		if err := migobj.promoteLDMGuestToVirtio(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex); err != nil {
 			// Promotion is an optimisation on top of a working VM. Report the
 			// failure but do not fail a migration that already succeeded.
-			migobj.logMessage(fmt.Sprintf("Promotion to virtio did not complete (%v); the VM remains on the SATA bus", err))
+			migobj.logMessage(fmt.Sprintf("WARNING: promotion to virtio did not complete (%v); the VM remains on the SATA bus", err))
 		}
 		return nil
 
@@ -2662,14 +2662,14 @@ func (migobj *Migrate) stopServerAndWait(ctx context.Context, serverID string) e
 
 		case <-deadline:
 			migobj.logMessage(fmt.Sprintf(
-				"Server %s did not reach SHUTOFF within %s; continuing with the delete. Windows may "+
-					"run chkdsk on the next boot.", serverID, constants.LDMShutdownTimeout))
+				"WARNING: server %s did not reach SHUTOFF within %s; continuing with the delete. "+
+					"Windows may run chkdsk on the next boot.", serverID, constants.LDMShutdownTimeout))
 			return nil
 
 		case <-ticker.C:
 			status, err := migobj.Openstackclients.GetServerStatus(ctx, serverID)
 			if err != nil {
-				migobj.logMessage(fmt.Sprintf("Warning: could not read the status of server %s: %v", serverID, err))
+				migobj.logMessage(fmt.Sprintf("WARNING: could not read the status of server %s: %v", serverID, err))
 				continue
 			}
 			if strings.EqualFold(status, "SHUTOFF") {
@@ -2734,7 +2734,7 @@ func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
 	// probe carries delete_on_termination, so Nova removes it along with the
 	// server the promotion just deleted.
 	if err := migobj.Openstackclients.DeleteVolume(ctx, volumeID); err != nil {
-		migobj.logMessage(fmt.Sprintf("Warning: failed to delete the virtio probe volume %s: %v", volumeID, err))
+		migobj.logMessage(fmt.Sprintf("WARNING: failed to delete the virtio probe volume %s: %v", volumeID, err))
 		return
 	}
 	migobj.logMessage(fmt.Sprintf("Deleted the virtio probe volume %s", volumeID))

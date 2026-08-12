@@ -195,10 +195,18 @@ func CreateCutoverTriggeredCondition(migration *vjailbreakv1alpha1.Migration, ev
 // don't represent a real failure.
 func isFailureEventMessage(msg string) bool {
 	trimmed := strings.TrimSpace(msg)
-	if strings.HasPrefix(trimmed, constants.EventMessageWarningPrefix) {
+	lower := strings.ToLower(trimmed)
+
+	// Matched case-insensitively so the prefix that exempts a message from failure
+	// detection is the same one the reporter uses to raise the Kubernetes event to
+	// Warning severity (it looks for uppercase "WARNING"). Matching only the exact
+	// "Warning:" would force a choice between the two: a best-effort failure worded
+	// with "WARNING:" would stay exempt from neither, and since these messages
+	// interpolate wrapped errors that usually read "failed to ...", it would create
+	// a Failed condition for something explicitly non-fatal.
+	if strings.HasPrefix(lower, strings.ToLower(constants.EventMessageWarningPrefix)) {
 		return false
 	}
-	lower := strings.ToLower(trimmed)
 	return strings.Contains(lower, strings.ToLower(constants.EventMessageMigrationFailed)) ||
 		strings.Contains(lower, strings.ToLower(constants.EventMessageFailed))
 }
