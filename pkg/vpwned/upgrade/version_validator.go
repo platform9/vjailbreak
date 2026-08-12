@@ -225,7 +225,7 @@ func BackupResourcesWithID(ctx context.Context, kubeClient client.Client, restCo
 		}
 	}
 
-	vjailbreakDeployments := []string{"migration-controller-manager", "migration-vpwned-sdk", "vjailbreak-ui"}
+	vjailbreakDeployments := []string{"migration-controller-manager", "migration-vpwned-sdk", "vjailbreak-ui", "vjailbreak-ai"}
 	for _, depName := range vjailbreakDeployments {
 		dep := &appsv1.Deployment{}
 		if err := kubeClient.Get(ctx, client.ObjectKey{Name: depName, Namespace: Namespace}, dep); err == nil {
@@ -313,6 +313,7 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 	controllerName := "migration-controller-manager"
 	uiName := "vjailbreak-ui"
 	sdkName := "migration-vpwned-sdk"
+	aiName := "vjailbreak-ai"
 	ns := Namespace
 	findDeployBackup := func(name string) (corev1.ConfigMap, bool) {
 		key := "backup-deploy-" + name
@@ -399,6 +400,29 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 		}
 	} else {
 		log.Printf("No SDK backup found for %s", sdkName)
+	}
+
+	if cm, ok := findDeployBackup(aiName); ok {
+		yamlData := cm.Data["resource"]
+		desired := parseReplicasFromDeploymentYAML([]byte(yamlData))
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to apply AI deployment backup %s: %v", cm.Name, err)
+		} else {
+			if desired < 1 {
+				desired = 1
+			}
+			if err := scaleDeploymentTo(ctx, kubeClient, aiName, ns, desired); err != nil {
+				log.Printf("Failed to scale AI %s to %d: %v", aiName, desired, err)
+			} else {
+				if err := waitForDeploymentReadyLocal(ctx, kubeClient, aiName, ns, 5*time.Minute); err != nil {
+					log.Printf("AI %s did not become ready: %v", aiName, err)
+				} else {
+					log.Printf("AI %s is ready", aiName)
+				}
+			}
+		}
+	} else {
+		log.Printf("No AI backup found for %s", aiName)
 	}
 
 	for _, cm := range otherBackups {

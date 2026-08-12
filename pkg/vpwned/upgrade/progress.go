@@ -34,6 +34,7 @@ const (
 	StatusUnknown            = "unknown"
 )
 
-const TotalUpgradeSteps = 11
+// One step per deployment manifest applied, so this grows when a deployment is added.
+const TotalUpgradeSteps = 12
 
 const TotalRollbackSteps = 5

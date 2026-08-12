@@ -192,6 +192,7 @@ func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
 		"quay.io/platform9/vjailbreak-ui:" + tag,
 		"quay.io/platform9/vjailbreak-controller:" + tag,
 		"quay.io/platform9/vjailbreak-vpwned:" + tag,
+		"quay.io/platform9/vjailbreak-ai:" + tag,
 	}
 
 	for _, imageName := range images {

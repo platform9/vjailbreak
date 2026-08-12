@@ -226,11 +226,13 @@ export const UpgradeModal = ({ show, onClose }) => {
     color: theme.palette.text.primary
   }
 
+  const alertSx = { mb: 2, justifyContent: 'center' }
+
   return (
     <React.Fragment>
       <Dialog open={show} onClose={busy ? undefined : onClose} maxWidth="sm" fullWidth>
         <DialogTitle>Upgrade vJailbreak</DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ pb: 0 }}>
           {/* Step 1 — mandatory cleanup */}
           <Box sx={cardSx}>
             <StepHeader
@@ -273,7 +275,7 @@ export const UpgradeModal = ({ show, onClose }) => {
           </Box>
 
           {/* Step 2 — target version */}
-          <Box sx={cardSx}>
+          <Box sx={cardSx} data-testid="version-step-card">
             <StepHeader
               index={2}
               title="Select target version"
@@ -299,29 +301,35 @@ export const UpgradeModal = ({ show, onClose }) => {
                   </MenuItem>
                 ))}
             </Select>
-
-            {upgradeInProgress && (
-              <Box display="flex" alignItems="center" gap={1.5} mt={1.5}>
-                <CircularProgress size={18} />
-                <Typography variant="body2">{getUIStatusMessage(progressData?.status)}</Typography>
-              </Box>
-            )}
           </Box>
+          {upgradeInProgress && (
+            <Box
+              display="flex"
+              justifyContent="center"
+              alignItems="center"
+              gap={1.5}
+              mb={2}
+              data-testid="upgrade-progress"
+            >
+              <CircularProgress size={18} />
+              <Typography variant="body2">{getUIStatusMessage(progressData?.status)}</Typography>
+            </Box>
+          )}
 
           {(busy || upgradeMutation.isPending || cleanupMutation.isPending) && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
+            <Alert severity="warning" sx={alertSx}>
               Processing. Please do not close or refresh this page.
             </Alert>
           )}
 
           {errorMsg && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={alertSx}>
               {errorMsg}
             </Alert>
           )}
 
           {successMsg && (
-            <Alert severity="success" sx={{ mb: 2 }}>
+            <Alert severity="success" sx={alertSx}>
               {successMsg}
             </Alert>
           )}
