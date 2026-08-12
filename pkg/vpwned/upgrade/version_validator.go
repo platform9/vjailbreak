@@ -22,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
-	"k8s.io/apimachinery/pkg/types"
 	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -574,9 +573,15 @@ func applyRestoredObject(ctx context.Context, kubeClient client.Client, data []b
 	return kubeClient.Update(ctx, unstructuredObj)
 }
 
+// newDynamicClient builds the dynamic client used for custom-resource cleanup.
+// Indirected through a variable so tests can supply a fake dynamic client.
+var newDynamicClient = func(config *rest.Config) (dynamic.Interface, error) {
+	return dynamic.NewForConfig(config)
+}
+
 func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	log.Println("Starting automatic resource cleanup...")
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	dynamicClient, err := newDynamicClient(restConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create dynamic client: %w", err)
 	}
@@ -650,7 +655,7 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 		Resource: crInfo.Plural,
 	}
 
-	dynamicClient, err := dynamic.NewForConfig(restConfig)
+	dynamicClient, err := newDynamicClient(restConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create dynamic client for %s: %w", crInfo.Kind, err)
 	}
@@ -674,6 +679,30 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 	}
 
 	return nil
+}
+
+// UpgradeFieldManager owns every field the upgrade/rollback flow applies. Server-side
+// apply tracks ownership per field manager, so a stable name is required across runs.
+const UpgradeFieldManager = "vjailbreak-upgrade"
+
+// applyManifestObject installs or updates a manifest object with server-side apply.
+func applyManifestObject(ctx context.Context, kubeClient client.Client, u *unstructured.Unstructured) error {
+	obj := u.DeepCopy()
+	// The applied config must describe intent only: a resourceVersion turns the apply
+	// into an optimistic-concurrency check, and managedFields belong to the API server.
+	obj.SetResourceVersion("")
+	obj.SetManagedFields(nil)
+
+	return retry.OnError(
+		retry.DefaultRetry,
+		func(err error) bool {
+			return kerrors.IsTooManyRequests(err) || kerrors.IsConflict(err)
+		},
+		func() error {
+			return kubeClient.Patch(ctx, obj, client.Apply,
+				client.FieldOwner(UpgradeFieldManager), client.ForceOwnership)
+		},
+	)
 }
 
 func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) error {
@@ -730,44 +759,11 @@ func ApplyAllCRDs(ctx context.Context, kubeClient client.Client, tag string) err
 			}
 		}
 
-		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}
-
-		existing := &unstructured.Unstructured{}
-		existing.SetGroupVersionKind(u.GroupVersionKind())
-		err := kubeClient.Get(ctx, key, existing)
-
-		if kerrors.IsNotFound(err) {
-			if err := retry.OnError(
-				retry.DefaultRetry,
-				func(err error) bool {
-					return kerrors.IsTooManyRequests(err)
-				},
-				func() error {
-					return kubeClient.Create(ctx, u)
-				},
-			); err != nil {
-				log.Printf("Failed to create %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
-				return err
-			}
-			log.Printf("Created %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
-		} else if err == nil {
-			u.SetResourceVersion(existing.GetResourceVersion())
-			if err := retry.OnError(
-				retry.DefaultRetry,
-				func(err error) bool {
-					return kerrors.IsTooManyRequests(err)
-				},
-				func() error {
-					return kubeClient.Update(ctx, u)
-				},
-			); err != nil {
-				log.Printf("Failed to update %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
-				return err
-			}
-			log.Printf("Updated %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
-		} else {
-			return fmt.Errorf("failed to get existing resource %s/%s: %w", u.GetNamespace(), u.GetName(), err)
+		if err := applyManifestObject(ctx, kubeClient, u); err != nil {
+			log.Printf("Failed to apply %s %s/%s: %v", u.GetKind(), u.GetNamespace(), u.GetName(), err)
+			return err
 		}
+		log.Printf("Applied %s %s/%s", u.GetKind(), u.GetNamespace(), u.GetName())
 	}
 
 	log.Printf("Successfully applied all resources from manifest %s", tag)
@@ -880,47 +876,12 @@ func ApplyManifestFromGitHub(ctx context.Context, kubeClient client.Client, tag,
 			u.SetNamespace(Namespace)
 		}
 
-		key := types.NamespacedName{Name: u.GetName(), Namespace: u.GetNamespace()}
-
-		existing := &unstructured.Unstructured{}
-		existing.SetGroupVersionKind(u.GroupVersionKind())
-		err := kubeClient.Get(ctx, key, existing)
-
-		retryFn := func(err error) bool {
-			return kerrors.IsTooManyRequests(err) || kerrors.IsConflict(err)
+		if err := applyManifestObject(ctx, kubeClient, u); err != nil {
+			return fmt.Errorf("failed to apply %s %s/%s: %w",
+				u.GetKind(), u.GetNamespace(), u.GetName(), err)
 		}
-
-		if kerrors.IsNotFound(err) {
-			if err := retry.OnError(
-				retry.DefaultRetry,
-				retryFn,
-				func() error {
-					return kubeClient.Create(ctx, u)
-				},
-			); err != nil {
-				return fmt.Errorf("failed to create %s %s/%s: %w",
-					u.GetKind(), u.GetNamespace(), u.GetName(), err)
-			}
-			log.Printf("Created %s %s/%s from GitHub manifest",
-				u.GetKind(), u.GetNamespace(), u.GetName())
-		} else if err == nil {
-			patch := client.MergeFrom(existing.DeepCopy())
-			if err := retry.OnError(
-				retry.DefaultRetry,
-				retryFn,
-				func() error {
-					return kubeClient.Patch(ctx, u, patch)
-				},
-			); err != nil {
-				return fmt.Errorf("failed to patch %s %s/%s: %w",
-					u.GetKind(), u.GetNamespace(), u.GetName(), err)
-			}
-			log.Printf("Patched %s %s/%s from GitHub manifest",
-				u.GetKind(), u.GetNamespace(), u.GetName())
-		} else {
-			return fmt.Errorf("failed to get existing resource %s/%s: %w",
-				u.GetNamespace(), u.GetName(), err)
-		}
+		log.Printf("Applied %s %s/%s from GitHub manifest",
+			u.GetKind(), u.GetNamespace(), u.GetName())
 	}
 
 	log.Printf("Successfully applied manifest %s from tag %s", manifestPath, tag)
