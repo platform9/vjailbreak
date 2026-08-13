@@ -7,7 +7,6 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
-  Box,
   Typography,
   CircularProgress
 } from '@mui/material'
@@ -31,7 +30,7 @@ interface LDMBootGateButtonProps {
  * against that device on first boot. The admin confirms whether that worked.
  *
  * Deliberately three explicit actions rather than a yes/no confirm: "Keep on SATA"
- * is a successful outcome and "Fail migration" destroys a working VM, and that
+ * is a successful outcome and "Rollback Migration" destroys a working VM, and that
  * difference cannot survive being collapsed into a single confirm button.
  */
 export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
@@ -101,53 +100,16 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
         <DialogTitle sx={{ px: 3, pt: 3, pb: 1 }}>Move this VM to virtio?</DialogTitle>
         <DialogContent sx={{ px: 3, pb: 2 }}>
           <DialogContentText component="div">
-            <Typography variant="body2" gutterBottom>
-              <strong>{migrationName}</strong> has migrated and is running, but on an emulated SATA
-              disk controller. Moving it to virtio gives noticeably better disk performance and
-              lifts the six-disk limit SATA imposes — but only if Windows has picked up the virtio
-              storage driver.
+            <Typography variant="body2">
+              <strong>{migrationName}</strong> has migrated and is running on an emulated SATA
+              controller. Moving it to virtio improves disk performance and lifts SATA&apos;s
+              six-disk limit. Keeping it on SATA completes the migration as it is.
             </Typography>
 
-            <Typography variant="body2" sx={{ mt: 2 }} gutterBottom>
-              <strong>Step 1 — check inside the guest.</strong> Log in and run:
-            </Typography>
-            <Box
-              component="pre"
-              sx={{
-                mt: 1,
-                mb: 1.5,
-                p: 1.5,
-                borderRadius: 1,
-                bgcolor: 'action.hover',
-                fontSize: '0.75rem',
-                overflowX: 'auto'
-              }}
-            >
-              {`sc.exe query viostor`}
-            </Box>
-
-            <Typography variant="body2" gutterBottom>
-              <strong>Step 2 — choose based on what it says.</strong>
-            </Typography>
-            <Box component="ul" sx={{ pl: 2.5, mt: 0.5, mb: 1.5 }}>
-              <li>
-                <Typography variant="body2">
-                  <code>STATE: 4 RUNNING</code> → <strong>Move to virtio</strong>
-                </Typography>
-              </li>
-              <li>
-                <Typography variant="body2">
-                  Anything else, or the service does not exist → <strong>Keep on SATA</strong>. The
-                  migration still completes successfully; the VM simply stays as it is.
-                </Typography>
-              </li>
-            </Box>
-
-            <InlineHelp tone="default" icon="info" sx={{ mt: 1 }}>
-              <strong>Move to virtio restarts the VM.</strong> It is shut down cleanly, deleted and
-              recreated with the same name, IP and MAC — expect a short outage. Leave the VM running
-              now; the shutdown is handled for you. There is no time limit — the migration waits here
-              until you answer, so you can come back during a maintenance window.
+            <InlineHelp tone="default" icon="info" sx={{ mt: 2 }}>
+              Moving to virtio shuts the VM down, deletes and recreates it with the same name, IP
+              and MAC — expect a short outage. Leave it running; the shutdown is handled for you.
+              There is no time limit, so you can come back during a maintenance window.
             </InlineHelp>
           </DialogContentText>
 
@@ -160,11 +122,11 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
           {confirmingFailure && (
             <Banner
               variant="error"
-              title="This destroys the migrated VM"
+              title="This rolls back and destroys the migrated VM"
               message={
                 <>
-                  The VM and its volumes are deleted and the migration is marked failed. You would
-                  need to migrate this VM again from the beginning.
+                  The VM and its volumes are deleted, and the migration is marked failed. You
+                  would need to migrate this VM again from the beginning.
                   <br />
                   <br />
                   Only use this if the guest is genuinely unusable. If it boots at all, choose{' '}
@@ -187,7 +149,7 @@ export const LDMBootGateButton: React.FC<LDMBootGateButtonProps> = ({
             disabled={busy}
             sx={{ mr: 'auto' }}
           >
-            {confirmingFailure ? 'Yes, fail and clean up' : 'Fail migration'}
+            {confirmingFailure ? 'Yes, roll back and clean up' : 'Rollback Migration'}
           </ActionButton>
           <ActionButton tone="secondary" variant="text" onClick={() => setOpen(false)} disabled={busy}>
             Cancel
