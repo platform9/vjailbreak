@@ -159,66 +159,6 @@ func TestLDMGateNeedsTerminalFallback(t *testing.T) {
 	}
 }
 
-func TestKeepReconciling(t *testing.T) {
-	tests := []struct {
-		name     string
-		podPhase corev1.PodPhase
-		phase    vjailbreakv1alpha1.VMMigrationPhase
-		want     bool
-	}{
-		{
-			// The reported bug: a reconcile landed before the gate event was created,
-			// resolved to Succeeded off the pre-gate success event, and stopped
-			// requeuing while the pod sat at the gate. Nothing else would wake it.
-			name:     "succeeded phase with a running pod keeps reconciling",
-			podPhase: corev1.PodRunning,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
-			want:     true,
-		},
-		{
-			name:     "succeeded phase with a finished pod stops",
-			podPhase: corev1.PodSucceeded,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
-			want:     false,
-		},
-		{
-			name:     "failed phase with a finished pod stops",
-			podPhase: corev1.PodFailed,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseFailed,
-			want:     false,
-		},
-		{
-			name:     "gate phase with a running pod keeps reconciling",
-			podPhase: corev1.PodRunning,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess,
-			want:     true,
-		},
-		{
-			name:     "in-progress phase keeps reconciling",
-			podPhase: corev1.PodRunning,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseCopying,
-			want:     true,
-		},
-		{
-			// Pod gone but the phase never reached a terminal state - keep looking.
-			name:     "non-terminal phase with a finished pod keeps reconciling",
-			podPhase: corev1.PodSucceeded,
-			phase:    vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess,
-			want:     true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			pod := &corev1.Pod{Status: corev1.PodStatus{Phase: tt.podPhase}}
-			if got := keepReconciling(pod, tt.phase); got != tt.want {
-				t.Errorf("keepReconciling(pod=%s, phase=%s) = %v, want %v",
-					tt.podPhase, tt.phase, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestIsMigrationAppEvent(t *testing.T) {
 	tests := []struct {
 		name   string

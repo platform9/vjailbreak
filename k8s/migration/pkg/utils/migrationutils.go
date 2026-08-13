@@ -332,8 +332,7 @@ func LDMHeldPhase(events []corev1.Event, ldmBootStatus string) (vjailbreakv1alph
 	}
 
 	// The promotion is done once the rebuilt VM reports success, which is strictly
-	// newer than the promotion starting. The success event from the first, SATA
-	// build is older and must not be mistaken for it.
+	// newer than the promotion starting.
 	succeededAt, succeeded := newest(constants.EventMessageMigrationSucessful)
 	if !succeeded || !promotedAt.Before(&succeededAt) {
 		return vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio, true

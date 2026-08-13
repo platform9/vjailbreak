@@ -315,29 +315,13 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		}
 	}
 
-	if keepReconciling(pod, migration.Status.Phase) {
+	if string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseValidationFailed) &&
+		string(migration.Status.Phase) != string(vjailbreakv1alpha1.VMMigrationPhaseSucceeded) {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
 	return ctrl.Result{}, nil
-}
-
-// keepReconciling reports whether the migration still needs periodic requeues.
-//
-// A terminal phase alone is not enough. Events are created asynchronously by the
-// helper's reporter goroutine, so a reconcile can land after "VM created
-// successfully" but before the LDM gate event exists, resolve to Succeeded, and
-// then stop requeuing - and nothing brings it back, because the controller watches
-// only Migrations and Pods, and the pod predicate fires on Status.Phase changes
-// while the pod sits Running at the gate. Requeue while the pod is alive: a
-// migration cannot legitimately be terminal while its own helper is still working.
-func keepReconciling(pod *corev1.Pod, phase vjailbreakv1alpha1.VMMigrationPhase) bool {
-	if pod.Status.Phase == corev1.PodPending || pod.Status.Phase == corev1.PodRunning {
-		return true
-	}
-	return phase != vjailbreakv1alpha1.VMMigrationPhaseFailed &&
-		phase != vjailbreakv1alpha1.VMMigrationPhaseValidationFailed &&
-		phase != vjailbreakv1alpha1.VMMigrationPhaseSucceeded
 }
 
 // reconcileDelete handles the cleanup logic when Migration object is deleted.
@@ -436,10 +420,7 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 		vjailbreakv1alpha1.VMMigrationPhasePending,
 		vjailbreakv1alpha1.VMMigrationPhaseValidationFailed}
 
-	// Resolved before the loop on purpose. The gate event and "VM created
-	// successfully" land in the same second, and sort.Slice is not stable, so as a
-	// case inside the loop whichever came back first would win - which is why the
-	// phase used to come out Succeeded on some reconciles and correct on others.
+	// No loop case matches the gate event, so the phase is set here.
 	if ldmPhase, held := utils.LDMHeldPhase(events.Items, pod.Labels[constants.LDMBootStatusLabel]); held {
 		scope.Migration.Status.Phase = ldmPhase
 		return nil

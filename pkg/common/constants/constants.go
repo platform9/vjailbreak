@@ -416,6 +416,12 @@ const (
 	EventMessagePromotingLDMGuest                 = "Recreating the VM on the virtio bus"
 	EventMessagePeriodicSyncWarning               = "Periodic Sync: In WARNING state - manual intervention required"
 	EventMessageMigrationSucessful                = "VM created successfully"
+	// EventMessageLDMGuestCreatedOnSATA is the LDM stand-in for the message above, and
+	// must never contain it as a substring. The SATA build is not a finished migration:
+	// the operator still has to answer the boot gate. Emitting the matching message here
+	// let a reconcile that landed before the gate event was created resolve the phase to
+	// Succeeded, and nothing woke the controller afterwards to correct it.
+	EventMessageLDMGuestCreatedOnSATA = "VM with SATA created successfully"
 	EventMessageMigrationFailed                   = "Trying to perform cleanup"
 	EventMessageCopyingDisk                       = "Copying disk"
 	EventMessageFailed                            = "Failed to"
