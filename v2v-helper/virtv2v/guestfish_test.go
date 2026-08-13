@@ -675,3 +675,74 @@ func TestGuestmountArgs(t *testing.T) {
 		assert.Equal(t, []string{"--rw", "-a", "/dev/sda", "-a", "/dev/sdb", "/mnt/guest"}, args)
 	})
 }
+
+func TestParseWindowsProductName(t *testing.T) {
+	tests := []struct {
+		name string
+		out  string
+		want string
+	}{
+		{
+			// inspect-os prints the roots before the marker; only what follows it is
+			// the answer.
+			name: "product name after the marker",
+			out:  "/dev/sda2\n" + productNameMarker + "\nWindows Server 2012 R2 Standard Evaluation\n",
+			want: "Windows Server 2012 R2 Standard Evaluation",
+		},
+		{
+			name: "multiple roots before the marker are discarded",
+			out:  "/dev/sda2\n/dev/sdb1\n" + productNameMarker + "\nWindows Server 2022 Standard\n",
+			want: "Windows Server 2022 Standard",
+		},
+		{
+			// inspect-get-product-name failed, so guestfish printed nothing after it.
+			name: "marker with no answer",
+			out:  "/dev/sda2\n" + productNameMarker + "\n",
+			want: "",
+		},
+		{
+			// The whole script failed before reaching the echo - must not be mistaken
+			// for a product name, or a 2012 guest silently gets the wrong ISO.
+			name: "no marker at all",
+			out:  "libguestfs: error: inspect_os: no operating system found\n",
+			want: "",
+		},
+		{name: "empty output", out: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, parseWindowsProductName(tt.out))
+		})
+	}
+}
+
+func TestWindowsProductNameScript(t *testing.T) {
+	script := windowsProductNameScript("/dev/sda2")
+
+	// inspect-os must come first: inspect-get-product-name reads the data it
+	// populates, and that state does not survive across guestfish processes.
+	assert.Less(t, strings.Index(script, "inspect-os"), strings.Index(script, "inspect-get-product-name"),
+		"inspect-os must run before inspect-get-product-name in the same script")
+	assert.Contains(t, script, productNameMarker)
+	assert.Contains(t, script, `inspect-get-product-name "/dev/sda2"`)
+}
+
+func TestIsWindowsServer2012(t *testing.T) {
+	for _, s := range []string{
+		"Windows Server 2012 R2 Standard Evaluation",
+		"windows server 2012 standard",
+		"Windows Server2012",
+	} {
+		assert.True(t, isWindowsServer2012(s), s)
+	}
+	// "Windows (version unknown)" is what a failed probe returns - it must not be
+	// mistaken for 2012, and must not be mistaken for a supported guest either.
+	for _, s := range []string{
+		"Windows Server 2022 Standard Evaluation",
+		"Windows (version unknown)",
+		"",
+	} {
+		assert.False(t, isWindowsServer2012(s), s)
+	}
+}

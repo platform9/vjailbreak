@@ -51,8 +51,9 @@ import (
 
 // Section markers, emitted with guestfish's `echo` builtin.
 const (
-	uuidMarker   = "---VJB-UUID---"
-	mountsMarker = "---VJB-MP---"
+	uuidMarker        = "---VJB-UUID---"
+	mountsMarker      = "---VJB-MP---"
+	productNameMarker = "---VJB-PRODUCT---"
 )
 
 type mountSpec struct {

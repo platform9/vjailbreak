@@ -416,9 +416,16 @@ func ConvertDisk(ctx context.Context, xmlFile, path, ostype, virtiowindriver str
 		filePath := "/home/fedora/virtio-win/virtio-win.iso"
 
 		// Use Windows Server 2012-specific ISO if detected
-		if strings.Contains(strings.ToLower(osRelease), "server 2012") || strings.Contains(strings.ToLower(osRelease), "server2012") {
+		if isWindowsServer2012(osRelease) {
 			filePath = "/home/fedora/virtio-win/virtio-win-server12.iso"
 			log.Printf("Detected Windows Server 2012, using virtio-win-server12.iso")
+		} else if osRelease == "" || strings.Contains(strings.ToLower(osRelease), "version unknown") {
+			// The default ISO is the rolling stable build, which does not support
+			// Server 2012. Falling back to it silently on a failed version probe is
+			// how a 2012 guest ends up with drivers it cannot boot from.
+			log.Printf("WARNING: Windows version could not be determined (%q); using %s. "+
+				"If this guest is Server 2012 or 2012 R2 it will not boot - re-run once "+
+				"version detection works.", osRelease, filePath)
 		}
 
 		found, err := CheckForVirtioDrivers()
@@ -1061,39 +1068,64 @@ func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
 	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(errors, "; "))
 }
 
-// GetWindowsVersion detects the Windows version using guestfish inspect commands
+// GetWindowsVersion detects the Windows version using guestfish inspect commands.
+//
+// inspect-get-product-name reads data that only inspect-os populates, and that
+// state does not survive across guestfish processes - so both have to run in one
+// script. Issuing them as two RunCommandInGuestAllVolumes calls always failed with
+// "no inspection data", which silently degraded to "Windows (version unknown)" and
+// then picked the wrong virtio-win ISO for Server 2012.
 func GetWindowsVersion(disks []vm.VMDisk, diskPath string) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-
-	var osPath string
-	var err error
-
-	osPath, err = RunCommandInGuestAllVolumes(disks, "inspect-os", false)
-
+	plan, err := resolveMountPlan(disks)
 	if err != nil {
-		return "", fmt.Errorf("failed to inspect OS: %v", err)
+		return "", fmt.Errorf("failed to resolve guest mount plan: %w", err)
 	}
 
-	osPath = strings.TrimSpace(osPath)
-	if osPath == "" {
-		return "", fmt.Errorf("empty OS path from inspect-os")
-	}
-
-	var productName string
-	productName, err = RunCommandInGuestAllVolumes(disks, "inspect-get-product-name", false, osPath)
-
+	out, err := runScript(disks, windowsProductNameScript(plan.Root))
 	if err != nil {
-		log.Printf("Failed to get Windows product name: %v", err)
-		return "Windows (version unknown)", nil
+		return "", fmt.Errorf("failed to inspect OS: %w", err)
 	}
 
-	productName = strings.TrimSpace(productName)
+	productName := parseWindowsProductName(out)
 	if productName == "" {
+		// Not fatal - the caller falls back to the default virtio-win ISO - but it
+		// must be visible, because that fallback is wrong for Server 2012.
+		log.Printf("WARNING: could not read the Windows product name from %s; "+
+			"version-specific behaviour will fall back to defaults", plan.Root)
 		return "Windows (version unknown)", nil
 	}
 
 	log.Printf("Detected Windows version: %s", productName)
 	return strings.ToLower(productName), nil
+}
+
+// isWindowsServer2012 reports whether the detected product name is Server 2012 or
+// 2012 R2, which need the pinned older virtio-win ISO.
+func isWindowsServer2012(osRelease string) bool {
+	lower := strings.ToLower(osRelease)
+	return strings.Contains(lower, "server 2012") || strings.Contains(lower, "server2012")
+}
+
+// windowsProductNameScript asks for the product name of one root, re-running
+// inspect-os first so the inspection data exists in this process.
+func windowsProductNameScript(root string) string {
+	var b strings.Builder
+	b.WriteString("run\n")
+	// Output lands before the marker and is discarded by parseWindowsProductName.
+	b.WriteString("inspect-os\n")
+	fmt.Fprintf(&b, "echo %s\n", productNameMarker)
+	b.WriteString(guestfishLine("inspect-get-product-name", root) + "\n")
+	return b.String()
+}
+
+// parseWindowsProductName returns the text after the marker, which is whatever
+// inspect-get-product-name printed. Empty if the marker never appeared.
+func parseWindowsProductName(out string) string {
+	_, after, found := strings.Cut(out, productNameMarker)
+	if !found {
+		return ""
+	}
+	return strings.TrimSpace(after)
 }
 
 // RunMountPersistenceScript runs the generate-mount-persistence.sh script
