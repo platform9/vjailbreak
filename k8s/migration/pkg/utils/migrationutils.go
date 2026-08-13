@@ -289,12 +289,18 @@ func SetLDMBootStatusLabel(ldmBootStatus, currentLabel string) string {
 	}
 }
 
-// LDMGateHoldsPhase reports whether a migration is at the LDM boot gate, or still
-// rebuilding after the operator answered, and so is not Succeeded yet. Decided
-// from the label, not event order: the gate event and "VM created successfully"
-// land in the same second and sort.Slice is not stable. Only the "still
-// promoting" case compares timestamps, which is safe - promotion takes minutes.
-func LDMGateHoldsPhase(events []corev1.Event, ldmBootStatus string) bool {
+// LDMHeldPhase reports which phase an LDM migration is pinned to, and whether it
+// is pinned at all: WaitingForLDMBootSuccess while the gate waits for an answer,
+// PromotingToVirtio while the VM is rebuilt after "success". They are separate
+// phases because only the first is waiting on the operator - reporting the rebuild
+// as "waiting" tells anyone reading status.phase that an action is outstanding
+// when none is.
+//
+// Decided from the label, not event order: the gate event and "VM created
+// successfully" land in the same second and sort.Slice is not stable. Only the
+// "still promoting" case compares timestamps, which is safe - promotion takes
+// minutes.
+func LDMHeldPhase(events []corev1.Event, ldmBootStatus string) (vjailbreakv1alpha1.VMMigrationPhase, bool) {
 	newest := func(marker string) (metav1.Time, bool) {
 		var found metav1.Time
 		var ok bool
@@ -310,26 +316,29 @@ func LDMGateHoldsPhase(events []corev1.Event, ldmBootStatus string) bool {
 	}
 
 	if _, gateSeen := newest(constants.EventMessageWaitingForLDMBootSuccess); !gateSeen {
-		return false
+		return "", false
 	}
 
 	// Unanswered: definitively still waiting, whatever order the events arrived in.
 	if ldmBootStatus == "" {
-		return true
+		return vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess, true
 	}
 
 	// Answered. "finish" and "failed" complete immediately and never emit this, so
 	// its absence means there is nothing left to wait for.
 	promotedAt, promoting := newest(constants.EventMessagePromotingLDMGuest)
 	if !promoting {
-		return false
+		return "", false
 	}
 
 	// The promotion is done once the rebuilt VM reports success, which is strictly
 	// newer than the promotion starting. The success event from the first, SATA
 	// build is older and must not be mistaken for it.
 	succeededAt, succeeded := newest(constants.EventMessageMigrationSucessful)
-	return !succeeded || !promotedAt.Before(&succeededAt)
+	if !succeeded || !promotedAt.Before(&succeededAt) {
+		return vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio, true
+	}
+	return "", false
 }
 
 // SplitEventStringOnComma splits a string by comma and returns a slice of substrings.

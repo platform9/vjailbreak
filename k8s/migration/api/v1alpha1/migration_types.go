@@ -25,7 +25,7 @@ import (
 // tracking the detailed progression through various stages including validation, data copying,
 // disk conversion, and cutover. Each phase provides visibility into the migration's progress,
 // enabling precise monitoring and troubleshooting of the migration workflow.
-// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;WaitingForLDMBootSuccess;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup;DataCopied
+// +kubebuilder:validation:Enum=Pending;Validating;ValidationFailed;AwaitingDataCopyStart;CopyingBlocks;CopyingChangedBlocks;ConvertingDisk;AwaitingCutOverStartTime;AwaitingAdminCutOver;WaitingForLDMBootSuccess;PromotingToVirtio;Succeeded;Failed;Unknown;ConnectingToESXi;CreatingInitiatorGroup;CreatingVolume;ImportingToCinder;MappingVolume;RescanningStorage;XCOPYInProgress;SnapshottingSourceVM;AttachingDisksToProxy;IdentifyingBlockDevices;HotAddTransferInProgress;HotAddCleanup;DataCopied
 type VMMigrationPhase string
 
 // MigrationConditionType represents the type of condition for a migration, used to track
@@ -57,6 +57,11 @@ const (
 	// migration is waiting for an admin to confirm from the booted guest whether the
 	// virtio storage driver installed. This gate is independent of the cutover gate.
 	VMMigrationPhaseWaitingForLDMBootSuccess VMMigrationPhase = "WaitingForLDMBootSuccess"
+	// VMMigrationPhasePromotingToVirtio indicates the admin answered the LDM boot gate
+	// with "success" and the VM is being rebuilt on the virtio bus: stopped, deleted
+	// and recreated from the same volumes and port. Distinct from the gate phase
+	// because nothing is waiting on the operator here - work is in progress.
+	VMMigrationPhasePromotingToVirtio VMMigrationPhase = "PromotingToVirtio"
 	// VMMigrationPhaseSucceeded indicates the migration completed successfully
 	VMMigrationPhaseSucceeded VMMigrationPhase = "Succeeded"
 	// VMMigrationPhaseFailed indicates the migration has failed

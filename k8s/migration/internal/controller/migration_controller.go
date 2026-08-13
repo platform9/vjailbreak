@@ -415,8 +415,8 @@ func (r *MigrationReconciler) SetupMigrationPhase(ctx context.Context, scope *sc
 	// successfully" land in the same second, and sort.Slice is not stable, so as a
 	// case inside the loop whichever came back first would win - which is why the
 	// phase used to come out Succeeded on some reconciles and correct on others.
-	if utils.LDMGateHoldsPhase(events.Items, pod.Labels[constants.LDMBootStatusLabel]) {
-		scope.Migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
+	if ldmPhase, held := utils.LDMHeldPhase(events.Items, pod.Labels[constants.LDMBootStatusLabel]); held {
+		scope.Migration.Status.Phase = ldmPhase
 		return nil
 	}
 

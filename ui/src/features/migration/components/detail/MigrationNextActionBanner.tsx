@@ -52,6 +52,14 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
         </Alert>
       )
 
+    case Phase.PromotingToVirtio:
+      return (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Moving the VM to the virtio bus. It is being shut down, deleted and recreated from the
+          same volumes and port — expect a short outage. No action required.
+        </Alert>
+      )
+
     case Phase.Succeeded:
       return (
         <Alert severity="success" sx={{ mb: 2 }}>

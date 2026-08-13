@@ -314,6 +314,58 @@ function AwaitingLDMBootDetail({
   )
 }
 
+// ─── Promoting to virtio ─────────────────────────────────────────────────────
+
+const PROMOTION_STEPS = [
+  'Shutting the guest down cleanly',
+  'Deleting the instance — volumes and the network port are kept',
+  'Recreating it with the root disk on virtio, same name, IP and MAC',
+  'Removing the virtio probe disk',
+]
+
+/**
+ * Shown while the rebuild runs. Deliberately not the warning-bordered card the
+ * gate uses: the operator has already answered and nothing is waiting on them.
+ */
+function PromotingToVirtioDetail() {
+  return (
+    <Box
+      sx={{
+        p: 3,
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider',
+        mb: 2,
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+        Currently · Moving to virtio
+      </Typography>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 0.5 }}>
+        Rebuilding the VM on the virtio bus
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Nova fixes the disk bus when an instance is created, so switching to virtio means
+        recreating it. Expect a short outage. No action required.
+      </Typography>
+
+      <LinearProgress sx={{ mb: 2 }} />
+
+      <List dense disablePadding>
+        {PROMOTION_STEPS.map((item) => (
+          <ListItem key={item} disableGutters sx={{ py: 0.25 }}>
+            <CheckCircleIcon sx={{ fontSize: 14, color: 'success.main', mr: 1, flexShrink: 0 }} />
+            <Typography variant="caption" color="text.secondary">
+              {item}
+            </Typography>
+          </ListItem>
+        ))}
+      </List>
+    </Box>
+  )
+}
+
 // ─── Success ──────────────────────────────────────────────────────────────────
 
 function calcMigrationElapsed(start: Date | string | undefined, endMs: number): string {
@@ -502,6 +554,9 @@ export default function MigrationPhaseDetail({
 
     case Phase.WaitingForLDMBootSuccess:
       return <AwaitingLDMBootDetail migration={migration} onSuccess={onCutoverSuccess} />
+
+    case Phase.PromotingToVirtio:
+      return <PromotingToVirtioDetail />
 
     case Phase.Succeeded:
       return <SuccessDetail migration={migration} />
