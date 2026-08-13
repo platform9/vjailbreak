@@ -1298,6 +1298,59 @@ func TestWaitForLDMBootStatusDoesNotExpire(t *testing.T) {
 	assert.Equal(t, constants.LDMBootStatusSuccess, <-done)
 }
 
+func TestDetachProbeFromServer(t *testing.T) {
+	newMigobj := func(ops *openstack.MockOpenstackOperations) *Migrate {
+		return &Migrate{Openstackclients: ops, InPod: false}
+	}
+
+	t.Run("detaches from the target server then deletes", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ops := openstack.NewMockOpenstackOperations(ctrl)
+		// DetachVolumeFromVM/WaitForVolume resolve the vJailbreak appliance, so using
+		// them here detaches nothing and then waits out the full timeout on an
+		// attachment that is not theirs to release.
+		ops.EXPECT().DetachVolumeFromVM(gomock.Any(), gomock.Any()).Times(0)
+		ops.EXPECT().WaitForVolume(gomock.Any(), gomock.Any()).Times(0)
+
+		ops.EXPECT().DetachVolumeFromServer(gomock.Any(), "server-id", "probe-id").Return(nil).Times(1)
+		ops.EXPECT().WaitForVolumeDetached(gomock.Any(), "probe-id", gomock.Any()).Return(nil).Times(1)
+		ops.EXPECT().DeleteVolume(gomock.Any(), "probe-id").Return(nil).Times(1)
+
+		newMigobj(ops).detachProbeFromServer(context.Background(), "server-id", "probe-id")
+	})
+
+	t.Run("a failed detach never deletes", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ops := openstack.NewMockOpenstackOperations(ctrl)
+		ops.EXPECT().DetachVolumeFromServer(gomock.Any(), "server-id", "probe-id").
+			Return(errors.New("volume is in-use")).Times(1)
+		// Deleting an attached volume just 400s.
+		ops.EXPECT().WaitForVolumeDetached(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+		ops.EXPECT().DeleteVolume(gomock.Any(), gomock.Any()).Times(0)
+
+		newMigobj(ops).detachProbeFromServer(context.Background(), "server-id", "probe-id")
+	})
+
+	// A guest that never loaded viostor may never acknowledge the unplug - the usual
+	// reason "keep on SATA" was chosen in the first place.
+	t.Run("a detach that never completes is tolerated", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ops := openstack.NewMockOpenstackOperations(ctrl)
+		ops.EXPECT().DetachVolumeFromServer(gomock.Any(), "server-id", "probe-id").Return(nil).Times(1)
+		ops.EXPECT().WaitForVolumeDetached(gomock.Any(), "probe-id", gomock.Any()).
+			Return(errors.New("still attached after 2m0s")).Times(1)
+		ops.EXPECT().DeleteVolume(gomock.Any(), gomock.Any()).Times(0)
+
+		newMigobj(ops).detachProbeFromServer(context.Background(), "server-id", "probe-id")
+	})
+}
+
 func TestDetectLDMGuestSkipsNonWindows(t *testing.T) {
 	// Guards the early return: a Linux guest must never reach IsLDMSystemVolume,
 	// which would boot the libguestfs appliance for nothing.

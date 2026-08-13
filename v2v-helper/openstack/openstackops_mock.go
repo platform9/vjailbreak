@@ -7,6 +7,7 @@ package openstack
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	volumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
@@ -156,6 +157,34 @@ func (m *MockOpenstackOperations) StopServer(ctx context.Context, serverID strin
 func (mr *MockOpenstackOperationsMockRecorder) StopServer(ctx, serverID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopServer", reflect.TypeOf((*MockOpenstackOperations)(nil).StopServer), ctx, serverID)
+}
+
+// DetachVolumeFromServer mocks base method.
+func (m *MockOpenstackOperations) DetachVolumeFromServer(ctx context.Context, serverID, volumeID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DetachVolumeFromServer", ctx, serverID, volumeID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DetachVolumeFromServer indicates an expected call of DetachVolumeFromServer.
+func (mr *MockOpenstackOperationsMockRecorder) DetachVolumeFromServer(ctx, serverID, volumeID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DetachVolumeFromServer", reflect.TypeOf((*MockOpenstackOperations)(nil).DetachVolumeFromServer), ctx, serverID, volumeID)
+}
+
+// WaitForVolumeDetached mocks base method.
+func (m *MockOpenstackOperations) WaitForVolumeDetached(ctx context.Context, volumeID string, timeout time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForVolumeDetached", ctx, volumeID, timeout)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitForVolumeDetached indicates an expected call of WaitForVolumeDetached.
+func (mr *MockOpenstackOperationsMockRecorder) WaitForVolumeDetached(ctx, volumeID, timeout interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForVolumeDetached", reflect.TypeOf((*MockOpenstackOperations)(nil).WaitForVolumeDetached), ctx, volumeID, timeout)
 }
 
 // DeleteVolume mocks base method.

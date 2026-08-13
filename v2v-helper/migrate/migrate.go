@@ -2538,15 +2538,8 @@ func (migobj *Migrate) waitForLDMBootAndPromote(ctx context.Context, vminfo vm.V
 		return nil
 
 	default:
-		// The probe is still attached to the running instance, so it cannot be
-		// deleted here. It carries delete_on_termination, so it is removed with
-		// the instance; deleting it would need a stop/detach cycle that is not
-		// worth an outage for 1GB.
-		migobj.logMessage(fmt.Sprintf(
-			"Leaving the VM on the emulated SATA bus and completing the migration. The virtio probe "+
-				"volume %s stays attached and will be removed with the instance; to move to virtio later, "+
-				"delete and recreate the server with hw_disk_bus=virtio once the driver is installed.",
-			migobj.ldmProbeVolumeID))
+		migobj.logMessage("Leaving the VM on the emulated SATA bus and completing the migration")
+		migobj.detachAndDeleteProbeVolume(ctx, vminfo)
 
 		// Re-emit the terminal event with a fresh timestamp, which is what moves the
 		// phase off WaitingForLDMBootSuccess. The original was emitted before the
@@ -2723,9 +2716,9 @@ func (migobj *Migrate) waitForVolumesAvailable(ctx context.Context, vminfo vm.VM
 }
 
 // deleteProbeVolume removes the scratch volume once it is detached. Best effort:
-// a leftover 1GB volume is not worth failing a successful migration over. Only
-// safe while detached - on the "finish" path the probe is still attached, so it
-// is left to delete_on_termination instead.
+// a leftover 1GB volume is not worth failing a successful migration over. Callers
+// must detach first - the promotion path by deleting the server, the "keep on SATA"
+// path via detachAndDeleteProbeVolume.
 func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
 	if volumeID == "" {
 		return
@@ -2738,6 +2731,59 @@ func (migobj *Migrate) deleteProbeVolume(ctx context.Context, volumeID string) {
 		return
 	}
 	migobj.logMessage(fmt.Sprintf("Deleted the virtio probe volume %s", volumeID))
+}
+
+// detachAndDeleteProbeVolume removes the probe from the still-running instance on
+// the "keep on SATA" path, where there is no rebuild to carry it away.
+//
+// Safe to hot-detach: the probe is a raw, unformatted disk that Windows only needed
+// in order to bind viostor once, and the driver stays in the DriverStore whether or
+// not the device is present. Best effort throughout - a working VM must not be
+// failed over a leftover 1GB volume.
+func (migobj *Migrate) detachAndDeleteProbeVolume(ctx context.Context, vminfo vm.VMInfo) {
+	probeID := migobj.ldmProbeVolumeID
+	if probeID == "" {
+		return
+	}
+	// Cleared up front so a later cleanup() cannot delete it a second time.
+	migobj.ldmProbeVolumeID = ""
+
+	// Must be the migrated VM: DetachVolumeFromVM/WaitForVolume resolve the
+	// vJailbreak appliance and would detach from the wrong server, then wait out the
+	// timeout on an attachment that is not theirs to release.
+	serverID, err := migobj.resolveTargetServerID(ctx, vminfo)
+	if err != nil {
+		migobj.logMessage(fmt.Sprintf(
+			"WARNING: could not locate the migrated VM to detach the virtio probe volume %s (%v); it stays "+
+				"attached and is removed when the instance is deleted", probeID, err))
+		return
+	}
+
+	migobj.detachProbeFromServer(ctx, serverID, probeID)
+}
+
+// detachProbeFromServer is the OpenStack half of detachAndDeleteProbeVolume, split
+// out so it can be unit tested - resolveTargetServerID goes through
+// GetCurrentInstanceUUID, which reads cluster state and cannot be mocked.
+func (migobj *Migrate) detachProbeFromServer(ctx context.Context, serverID, probeID string) {
+	migobj.logMessage(fmt.Sprintf("Detaching the virtio probe volume %s from server %s", probeID, serverID))
+	if err := migobj.Openstackclients.DetachVolumeFromServer(ctx, serverID, probeID); err != nil {
+		migobj.logMessage(fmt.Sprintf(
+			"WARNING: could not detach the virtio probe volume %s (%v); it stays attached and is removed "+
+				"when the instance is deleted", probeID, err))
+		return
+	}
+
+	// Bounded: a guest that never loaded viostor may not acknowledge the unplug, and
+	// that is usually why "keep on SATA" was chosen in the first place.
+	if err := migobj.Openstackclients.WaitForVolumeDetached(ctx, probeID, constants.LDMProbeDetachTimeout); err != nil {
+		migobj.logMessage(fmt.Sprintf(
+			"WARNING: the virtio probe volume %s did not detach (%v); it stays attached and is removed "+
+				"when the instance is deleted", probeID, err))
+		return
+	}
+
+	migobj.deleteProbeVolume(ctx, probeID)
 }
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
