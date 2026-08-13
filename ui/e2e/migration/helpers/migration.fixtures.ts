@@ -134,6 +134,131 @@ export const MOCK_MIGRATION_AWAITING_CUTOVER = {
   },
 }
 
+export const MOCK_MIGRATION_VALIDATION_FAILED = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: { ...baseMeta('test-vm-6-migration'), labels: { migrationplan: 'test-plan-5' } },
+  spec: {
+    migrationPlan: 'test-plan-5',
+    podRef: 'v2v-helper-test-6',
+    vmName: 'test-vm-6',
+  },
+  status: {
+    phase: 'ValidationFailed',
+    conditions: [
+      {
+        lastTransitionTime: '2026-05-20T10:10:00Z',
+        message: 'Pre-flight validation failed: source VM not reachable',
+        reason: 'Migration',
+        status: 'False',
+        type: 'Failed',
+      },
+    ],
+  },
+}
+
+export const MOCK_MIGRATION_CONVERTING_DISK = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: { ...baseMeta('test-vm-7-migration'), labels: { migrationplan: 'test-plan-6' } },
+  spec: {
+    migrationPlan: 'test-plan-6',
+    podRef: 'v2v-helper-test-7',
+    vmName: 'test-vm-7',
+  },
+  status: {
+    phase: 'ConvertingDisk',
+    totalDisks: 2,
+    conditions: [
+      {
+        lastTransitionTime: '2026-05-20T10:50:00Z',
+        message: 'Converting disk format with virt-v2v',
+        reason: 'Migration',
+        status: 'True',
+        type: 'Migrating',
+      },
+    ],
+  },
+}
+
+// Pairs with MOCK_VMWARE_MACHINE_FOR_DETAILS_TAB below — useMigrationDetailResourcesQuery
+// derives the VMwareMachine name by stripping a leading "migration-" prefix off
+// the Migration's own name, so the two names must line up.
+export const MOCK_MIGRATION_FOR_DETAILS_TAB = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: { ...baseMeta('migration-details-vm-1'), labels: { migrationplan: 'test-plan-1' } },
+  spec: {
+    migrationPlan: 'test-plan-1',
+    podRef: 'v2v-helper-details-1',
+    vmName: 'details-vm-1',
+  },
+  status: {
+    phase: 'CopyingBlocks',
+    conditions: [],
+    currentDisk: '0',
+    totalDisks: 1,
+  },
+}
+
+export const MOCK_MIGRATION_FAILED_RDM_NOT_RETRYABLE = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: { ...baseMeta('test-vm-8-migration'), labels: { migrationplan: 'test-plan-7' } },
+  spec: {
+    migrationPlan: 'test-plan-7',
+    podRef: 'v2v-helper-test-8',
+    vmName: 'test-vm-8',
+  },
+  status: {
+    phase: 'Failed',
+    retryable: false,
+    conditions: [
+      {
+        lastTransitionTime: '2026-05-20T10:30:00Z',
+        message: 'Disk copy failed: RDM disk attach error',
+        reason: 'Migration',
+        status: 'False',
+        type: 'Failed',
+      },
+    ],
+  },
+}
+
+// Failed condition should win over the co-present Validated condition when
+// picking the error title/timestamp — see findErrorCondition() in
+// MigrationErrorCard.tsx and the 2026-06-12 bug-fix note in
+// migration-detail-page.md.
+export const MOCK_MIGRATION_FAILED_WITH_VALIDATED_CONDITION = {
+  apiVersion: API_VERSION,
+  kind: 'Migration',
+  metadata: { ...baseMeta('test-vm-9-migration'), labels: { migrationplan: 'test-plan-8' } },
+  spec: {
+    migrationPlan: 'test-plan-8',
+    podRef: 'v2v-helper-test-9',
+    vmName: 'test-vm-9',
+  },
+  status: {
+    phase: 'Failed',
+    conditions: [
+      {
+        lastTransitionTime: '2026-05-20T10:20:00Z',
+        message: 'Validated successfully',
+        reason: 'Migration',
+        status: 'True',
+        type: 'Validated',
+      },
+      {
+        lastTransitionTime: '2026-05-20T10:35:00Z',
+        message: 'Disk copy failed: destination volume full',
+        reason: 'Migration',
+        status: 'False',
+        type: 'Failed',
+      },
+    ],
+  },
+}
+
 export const MOCK_MIGRATIONS_LIST = {
   apiVersion: API_VERSION,
   kind: 'MigrationList',
@@ -662,6 +787,32 @@ export const MOCK_VMWARE_MACHINE_1 = {
       networkInterfaces: [{ mac: '00:50:56:aa:01:01', network: 'VM Network', ipAddress: ['192.168.1.101'] }],
       tags: { env: 'production' },
       customAttributes: { Owner: 'alice@corp.com' },
+    },
+  },
+  status: { migrated: false, powerState: 'running' },
+}
+
+// Pairs with MOCK_MIGRATION_FOR_DETAILS_TAB above.
+export const MOCK_VMWARE_MACHINE_FOR_DETAILS_TAB = {
+  apiVersion: API_VERSION,
+  kind: 'VMwareMachine',
+  metadata: {
+    name: 'details-vm-1',
+    namespace: NS,
+    creationTimestamp: '2026-05-20T10:00:00Z',
+    labels: baseMachineLabels(),
+    annotations: { 'vjailbreak.k8s.pf9.io/datacenter': 'dc-1' },
+  },
+  spec: {
+    vms: {
+      name: 'details-vm-1', vmid: 'vm-901', cpu: 4, memory: 8192,
+      vmState: 'poweredOn', ipAddress: '192.168.5.10', osFamily: 'Linux',
+      networks: ['VM Network'], datastores: ['datastore1'],
+      esxiName: 'esxi-host-1', clusterName: 'vcenter-cluster-1',
+      disks: [{ name: 'disk-0', size: '40GB', datastore: 'datastore1' }],
+      networkInterfaces: [
+        { mac: '00:50:56:aa:09:01', network: 'VM Network', ipAddress: ['192.168.5.10'], preserveIP: true, preserveMAC: true },
+      ],
     },
   },
   status: { migrated: false, powerState: 'running' },

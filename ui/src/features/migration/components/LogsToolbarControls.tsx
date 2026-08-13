@@ -42,9 +42,10 @@ interface LiveToggleProps {
   onToggle: () => void
   disabled?: boolean
   disabledTooltip?: string
+  'data-testid'?: string
 }
 
-export function LiveToggle({ live, onToggle, disabled, disabledTooltip }: LiveToggleProps) {
+export function LiveToggle({ live, onToggle, disabled, disabledTooltip, 'data-testid': dataTestId }: LiveToggleProps) {
   const tooltip = disabled
     ? disabledTooltip
     : live
@@ -55,6 +56,7 @@ export function LiveToggle({ live, onToggle, disabled, disabledTooltip }: LiveTo
     <Tooltip title={tooltip}>
       <Box
         component="button"
+        data-testid={dataTestId}
         onClick={() => !disabled && onToggle()}
         sx={{
           display: 'flex',

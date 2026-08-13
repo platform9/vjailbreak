@@ -132,7 +132,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
 
   if (conditions.length === 0) {
     return (
-      <Box sx={{ py: 8, textAlign: 'center' }}>
+      <Box data-testid="events-tab-empty" sx={{ py: 8, textAlign: 'center' }}>
         <Typography variant="body2" color="text.secondary">
           No events recorded for this migration yet.
         </Typography>
@@ -141,10 +141,11 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
   }
 
   return (
-    <Box>
+    <Box data-testid="migration-events-tab">
       {/* Toolbar */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <TextField
+          data-testid="events-search-input"
           size="small"
           placeholder="Search events…"
           value={search}
@@ -162,6 +163,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
         />
 
         <ToggleButtonGroup
+          data-testid="events-status-filter"
           size="small"
           exclusive
           value={filter}
@@ -185,6 +187,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
         </ToggleButtonGroup>
 
         <ToggleButtonGroup
+          data-testid="events-sort-toggle"
           size="small"
           exclusive
           value={sort}
@@ -205,7 +208,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
       </Typography>
 
       {filtered.length === 0 ? (
-        <Box sx={{ py: 4, textAlign: 'center' }}>
+        <Box data-testid="events-tab-no-match" sx={{ py: 4, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
             No events match the current filters.
           </Typography>
@@ -225,7 +228,7 @@ export default function MigrationEventsTab({ migration }: MigrationEventsTabProp
               status === 'success' ? 'success' : status === 'error' ? 'error' : 'default'
 
             return (
-              <Box key={idx} sx={{ display: 'flex', gap: 2.5 }}>
+              <Box key={idx} data-testid="events-tab-card" sx={{ display: 'flex', gap: 2.5 }}>
                 {/* Timeline icon + connector */}
                 <Box
                   sx={{

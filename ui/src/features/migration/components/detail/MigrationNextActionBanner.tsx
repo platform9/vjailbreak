@@ -22,14 +22,14 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
     case Phase.AwaitingDataCopyStart:
     case Phase.Validating:
       return (
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="info" sx={{ mb: 2 }}>
           Migration is running. No action required.
         </Alert>
       )
 
     case Phase.Pending:
       return (
-        <Alert severity="info" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="info" sx={{ mb: 2 }}>
           Migration is queued. Waiting for an available agent.
         </Alert>
       )
@@ -37,7 +37,7 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
     case Phase.AwaitingAdminCutOver:
     case Phase.AwaitingCutOverStartTime:
       return (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="warning" sx={{ mb: 2 }}>
           <strong>Action required.</strong> Data copy is complete. A migration administrator must
           initiate the final cutover.
         </Alert>
@@ -45,7 +45,7 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
 
     case Phase.WaitingForLDMBootSuccess:
       return (
-        <Alert severity="warning" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="warning" sx={{ mb: 2 }}>
           <strong>Action required.</strong> The VM is running on an emulated SATA bus because its
           system volume is on a Windows Dynamic Disk. Log in and confirm whether the virtio storage
           driver installed, then choose whether to move it to virtio or keep it on SATA.
@@ -54,7 +54,7 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
 
     case Phase.Succeeded:
       return (
-        <Alert severity="success" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="success" sx={{ mb: 2 }}>
           <strong>Migration succeeded.</strong> The target VM is running in PCD.
         </Alert>
       )
@@ -62,7 +62,7 @@ export default function MigrationNextActionBanner({ migration }: MigrationNextAc
     case Phase.Failed:
     case Phase.ValidationFailed:
       return (
-        <Alert severity="error" sx={{ mb: 2 }}>
+        <Alert data-testid="migration-next-action-banner" severity="error" sx={{ mb: 2 }}>
           <strong>Migration halted.</strong> Review the error details below before retrying. The
           source VM has not been modified.
         </Alert>

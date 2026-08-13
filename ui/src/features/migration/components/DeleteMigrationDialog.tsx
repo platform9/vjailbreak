@@ -45,7 +45,7 @@ export default function DeleteMigrationDialog({
   const vmName = migrations[0]?.spec?.vmName || migrations[0]?.metadata?.name || ''
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="xs" fullWidth>
+    <Dialog data-testid="delete-migration-dialog" open={open} onClose={handleClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ px: 3, pt: 3, pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
         <WarningAmberIcon color="warning" fontSize="small" />
         {isBulk ? `Delete ${migrations.length} migrations?` : 'Delete migration?'}
@@ -58,7 +58,7 @@ export default function DeleteMigrationDialog({
           }
         </DialogContentText>
         {error && (
-          <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+          <Alert data-testid="delete-migration-error" severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
             {error}
           </Alert>
         )}

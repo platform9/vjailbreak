@@ -38,6 +38,7 @@ function CopyingPhaseDetail({ migration }: { migration: Migration }) {
 
   return (
     <Box
+      data-testid="phase-detail-copying"
       sx={{
         p: 3,
         bgcolor: 'background.paper',
@@ -112,6 +113,7 @@ function CopyingPhaseDetail({ migration }: { migration: Migration }) {
 function ConvertingDiskDetail() {
   return (
     <Box
+      data-testid="phase-detail-converting"
       sx={{
         p: 3,
         bgcolor: 'background.paper',
@@ -157,6 +159,7 @@ function AwaitingCutoverDetail({
 
   return (
     <Box
+      data-testid="phase-detail-awaiting-cutover"
       sx={{
         p: 3,
         bgcolor: 'background.paper',
@@ -247,6 +250,7 @@ function AwaitingLDMBootDetail({
 
   return (
     <Box
+      data-testid="phase-detail-awaiting-ldm-boot"
       sx={{
         p: 3,
         bgcolor: 'background.paper',
@@ -379,6 +383,7 @@ function SuccessDetail({ migration }: { migration: Migration }) {
 
   return (
     <Box
+      data-testid="phase-detail-success"
       sx={{
         bgcolor: 'background.paper',
         borderRadius: 2,
@@ -447,6 +452,7 @@ function GenericActiveDetail({ migration }: { migration: Migration }) {
   const phase = migration.status?.phase ?? '—'
   return (
     <Box
+      data-testid="phase-detail-generic"
       sx={{
         p: 3,
         bgcolor: 'background.paper',

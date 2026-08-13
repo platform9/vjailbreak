@@ -96,6 +96,7 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
 
   return (
     <Box
+      data-testid="migration-error-card"
       sx={{
         bgcolor: 'background.paper',
         borderRadius: 2,
@@ -146,6 +147,7 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
 
           <Tooltip title={copied ? 'Copied!' : 'Copy diagnostic bundle'}>
             <Button
+              data-testid="copy-diagnostic-bundle-button"
               size="small"
               variant="outlined"
               color="inherit"
@@ -160,6 +162,7 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
 
         {/* Error title */}
         <Typography
+          data-testid="error-card-title"
           variant="body1"
           fontWeight={700}
           color="error.main"
@@ -234,6 +237,7 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
         {conditions.length > 0 && (
           <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 1.5 }}>
             <Box
+              data-testid="error-card-logs-toggle"
               sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer', py: 0.5 }}
               onClick={() => setLogsExpanded((v) => !v)}
             >
@@ -248,6 +252,7 @@ export default function MigrationErrorCard({ migration }: MigrationErrorCardProp
             </Box>
             <Collapse in={logsExpanded}>
               <Paper
+                data-testid="error-card-raw-logs"
                 variant="outlined"
                 sx={{
                   mt: 1,

@@ -85,6 +85,7 @@ export default function MigrationPhaseStepper({ migration, cutoverTriggered }: M
 
   return (
     <Box
+      data-testid="migration-phase-stepper"
       sx={{
         p: 3,
         bgcolor: 'background.paper',
@@ -101,6 +102,8 @@ export default function MigrationPhaseStepper({ migration, cutoverTriggered }: M
           return (
             <Box
               key={phaseDef.key}
+              data-testid={`stepper-step-${phaseDef.key}`}
+              data-status={state.status}
               sx={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}
             >
               {/* Rail: circle + connector to next step */}

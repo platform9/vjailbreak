@@ -96,7 +96,7 @@ export default function MigrationDetailPage() {
 
   if (error || !migration) {
     return (
-      <Box sx={{ p: 4 }}>
+      <Box data-testid="migration-detail-error-state" sx={{ p: 4 }}>
         <Alert severity="error">Failed to load migration "{migrationName}".</Alert>
         <Button onClick={() => navigate('/dashboard/migrations')} sx={{ mt: 2 }}>
           Back to Migrations
@@ -108,7 +108,7 @@ export default function MigrationDetailPage() {
   const failed = isMigrationFailed(migration)
 
   return (
-    <Box sx={{ maxWidth: '100%', px: 3, py: 3 }}>
+    <Box data-testid="migration-detail-page" sx={{ maxWidth: '100%', px: 3, py: 3 }}>
       {/* Header: breadcrumb, title, action buttons */}
       <MigrationDetailHeader
         migration={migration}
@@ -125,13 +125,14 @@ export default function MigrationDetailPage() {
 
       {/* Tabs */}
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
-        <Tabs value={tab} onChange={(_, v) => setTab(v as TabId)}>
-          <Tab label="Overview" value="overview" />
-          <Tab label="Details" value="details" />
-          <Tab label="Events" value="events" />
-          <Tab label="Pod logs" value="logs" />
+        <Tabs data-testid="migration-detail-tabs" value={tab} onChange={(_, v) => setTab(v as TabId)}>
+          <Tab data-testid="tab-overview" label="Overview" value="overview" />
+          <Tab data-testid="tab-details" label="Details" value="details" />
+          <Tab data-testid="tab-events" label="Events" value="events" />
+          <Tab data-testid="tab-pod-logs" label="Pod logs" value="logs" />
           {failed && (
             <Tab
+              data-testid="tab-ai-analysis"
               value="ai"
               label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

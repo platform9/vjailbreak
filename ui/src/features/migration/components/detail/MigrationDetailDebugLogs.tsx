@@ -140,7 +140,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
   }
 
   return (
-    <Box sx={{ maxWidth: '100%' }}>
+    <Box data-testid="migration-debug-logs" sx={{ maxWidth: '100%' }}>
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <Box
         sx={{
@@ -158,7 +158,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           overflowX: 'auto',
         }}
       >
-        <LogsSearchField value={search} onChange={setSearch} />
+        <LogsSearchField data-testid="pod-logs-search" value={search} onChange={setSearch} />
 
         <ToolbarDivider />
 
@@ -173,6 +173,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </Typography>
           <FormControl size="small">
             <Select
+              data-testid="pod-logs-level-select"
               value={levelFilter}
               onChange={(e: SelectChangeEvent) => setLevelFilter(e.target.value as LogLevel)}
               variant="outlined"
@@ -200,6 +201,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </Typography>
           <FormControl size="small">
             <Select
+              data-testid="pod-logs-source-select"
               value={sourceFilter}
               onChange={(e: SelectChangeEvent) => setSourceFilter(e.target.value)}
               variant="outlined"
@@ -217,6 +219,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         <ToolbarDivider />
 
         <LiveToggle
+          data-testid="pod-logs-live-toggle"
           live={isLive}
           onToggle={() => setIsPaused((p) => !p)}
           disabled={isTerminal}
@@ -226,6 +229,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         {/* Follow switch */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
           <Switch
+            data-testid="pod-logs-follow-switch"
             size="small"
             checked={follow}
             onChange={(e) => setFollow(e.target.checked)}
@@ -240,13 +244,14 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
 
         {/* Actions */}
         <Tooltip title={copied ? 'Copied!' : 'Copy visible logs'}>
-          <IconButton size="small" onClick={handleCopy} sx={{ color: 'text.secondary' }}>
+          <IconButton data-testid="pod-logs-copy-button" size="small" onClick={handleCopy} sx={{ color: 'text.secondary' }}>
             <ContentCopyIcon sx={{ fontSize: 17 }} />
           </IconButton>
         </Tooltip>
         <Tooltip title={isDownloading ? 'Downloading…' : 'Download debug bundle'}>
           <span>
             <IconButton
+              data-testid="pod-logs-download-button"
               size="small"
               onClick={handleDownload}
               disabled={isDownloading}
@@ -259,7 +264,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
           </span>
         </Tooltip>
         <Tooltip title="Reconnect">
-          <IconButton size="small" onClick={handleReconnect} sx={{ color: 'text.secondary' }}>
+          <IconButton data-testid="pod-logs-reconnect-button" size="small" onClick={handleReconnect} sx={{ color: 'text.secondary' }}>
             <SyncIcon sx={{ fontSize: 17 }} />
           </IconButton>
         </Tooltip>
@@ -276,6 +281,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
       {/* Error */}
       {error && (
         <Alert
+          data-testid="pod-logs-connection-error"
           severity="error"
           sx={{ borderRadius: 0, border: '1px solid #30363d', borderTop: 'none' }}
           action={
@@ -290,6 +296,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
 
       {/* ── Log stream ────────────────────────────────────────────────────── */}
       <Box
+        data-testid="pod-logs-stream"
         sx={{
           bgcolor: LOG_BG,
           overflow: 'auto',
@@ -335,7 +342,7 @@ export default function MigrationDetailDebugLogs({ migration }: MigrationDetailD
         <div ref={bottomRef} />
       </Box>
 
-      <Snackbar open={toastOpen} autoHideDuration={6000} onClose={handleCloseToast} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
+      <Snackbar data-testid="pod-logs-download-error-toast" open={toastOpen} autoHideDuration={6000} onClose={handleCloseToast} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
         <Alert onClose={handleCloseToast} severity={toastSeverity} sx={{ width: '100%' }}>
           {toastMessage}
         </Alert>

@@ -612,9 +612,10 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   }
 
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
+    <Box data-testid="migration-details-tab" sx={{ display: 'grid', gap: 2 }}>
       {/* Migration Environment */}
       <SurfaceCard
+        data-testid="details-section-environment"
         variant="card"
         title="Migration Environment"
         subtitle="Source and destination overview"
@@ -632,7 +633,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       </SurfaceCard>
 
       {/* General Info */}
-      <SurfaceCard variant="card" title="General Info" subtitle="VM specifications">
+      <SurfaceCard data-testid="details-section-general-info" variant="card" title="General Info" subtitle="VM specifications">
         <KeyValueGrid items={generalInfoItems} />
 
         {networkDetails.length ? (
@@ -800,7 +801,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       </SurfaceCard>
 
       {/* Mappings */}
-      <SurfaceCard variant="card" title="Mappings" subtitle="Network and storage mappings">
+      <SurfaceCard data-testid="details-section-mappings" variant="card" title="Mappings" subtitle="Network and storage mappings">
         <Box sx={{ display: 'grid', gap: 2.5 }}>
           <Box sx={{ display: 'grid', gap: 1 }}>
             <FieldLabel label="Network Mapping" />
@@ -846,11 +847,12 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
 
       {/* Migration Policies */}
       <SurfaceCard
+        data-testid="details-section-policies"
         variant="card"
         title="Migration Policies"
         subtitle="Flags and post-migration actions"
         actions={
-          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
+          <Typography data-testid="policies-badge" variant="caption" color="text.secondary" sx={{ fontWeight: 500 }}>
             {configuredCount} configured · {defaultCount} default
           </Typography>
         }
@@ -910,6 +912,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
         {defaultPolicyItems.length > 0 && (
           <Box sx={{ mt: configuredCount > 0 ? 1.5 : 0 }}>
             <Box
+              data-testid="policies-defaults-toggle"
               onClick={() => setShowDefaults((v) => !v)}
               sx={{
                 display: 'flex',
@@ -996,6 +999,7 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
       {/* Image Profiles */}
       {selectedImageProfileNames.length ? (
         <SurfaceCard
+          data-testid="details-section-image-profiles"
           variant="card"
           title="Image Profiles"
           subtitle="Cinder volume image metadata applied to the boot volume"

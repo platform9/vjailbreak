@@ -4,6 +4,10 @@ import { MigrationDetailResources } from 'src/hooks/api/useMigrationDetailResour
 import { calculateTimeElapsed } from 'src/utils'
 import { OpenstackCreds } from 'src/api/openstack-creds/model'
 
+function slugify(label: string): string {
+  return label.toLowerCase().replace(/\s+/g, '-')
+}
+
 function KpiCell({
   label,
   value,
@@ -16,7 +20,7 @@ function KpiCell({
   mono?: boolean
 }) {
   return (
-    <Box sx={{ px: 2.5, py: 1.5, flex: 1, minWidth: 0 }}>
+    <Box data-testid={`kpi-cell-${slugify(label)}`} sx={{ px: 2.5, py: 1.5, flex: 1, minWidth: 0 }}>
       <Typography
         variant="caption"
         color="text.secondary"
@@ -111,6 +115,7 @@ export default function MigrationKpiStrip({ migration, resources }: MigrationKpi
 
   return (
     <Box
+      data-testid="migration-kpi-strip"
       sx={{
         display: 'flex',
         bgcolor: 'background.paper',

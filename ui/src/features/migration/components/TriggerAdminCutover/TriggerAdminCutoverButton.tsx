@@ -84,7 +84,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
           </DialogContentText>
 
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <Alert data-testid="cutover-error" severity="error" sx={{ mt: 2 }}>
               {error}
             </Alert>
           )}

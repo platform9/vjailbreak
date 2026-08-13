@@ -94,13 +94,14 @@ export default function MigrationDetailHeader({
   }
 
   return (
-    <Box sx={{ mb: 3 }}>
+    <Box data-testid="migration-detail-header" sx={{ mb: 3 }}>
       {/* Breadcrumbs */}
       <Breadcrumbs
         separator={<NavigateNextIcon fontSize="small" />}
         sx={{ mb: 1.5, fontSize: '0.8rem' }}
       >
         <Link
+          data-testid="breadcrumb-back-link"
           component="button"
           underline="hover"
           color="text.secondary"
@@ -128,7 +129,7 @@ export default function MigrationDetailHeader({
           <Typography variant="h5" fontWeight={700} noWrap sx={{ letterSpacing: '-0.015em' }}>
             {vmName}
           </Typography>
-          <Chip label={phaseLabel} color={chipColor} size="small" sx={{ flexShrink: 0 }} />
+          <Chip data-testid="migration-phase-chip" label={phaseLabel} color={chipColor} size="small" sx={{ flexShrink: 0 }} />
         </Box>
 
         {/* Action buttons */}
@@ -145,6 +146,7 @@ export default function MigrationDetailHeader({
                 >
                   <span>
                     <Button
+                      data-testid="retry-migration-button"
                       variant="contained"
                       size="small"
                       startIcon={<RefreshIcon />}
@@ -157,6 +159,7 @@ export default function MigrationDetailHeader({
                 </Tooltip>
               )}
               <Button
+                data-testid="delete-migration-button"
                 variant="outlined"
                 color="error"
                 size="small"
@@ -183,6 +186,7 @@ export default function MigrationDetailHeader({
                 />
               )}
               <Button
+                data-testid="delete-migration-button"
                 variant="outlined"
                 color="error"
                 size="small"
@@ -195,6 +199,7 @@ export default function MigrationDetailHeader({
 
           {!isFailed && !isAwaitingOperator && !isTerminal && (
             <Button
+              data-testid="delete-migration-button"
               variant="outlined"
               color="error"
               size="small"
