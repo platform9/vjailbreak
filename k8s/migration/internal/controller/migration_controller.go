@@ -261,6 +261,15 @@ func (r *MigrationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 		migration.Status.Phase = vjailbreakv1alpha1.VMMigrationPhaseDataCopied
 	}
 
+	// Same fallback for the LDM boot gate.
+	if ldmGateNeedsTerminalFallback(pod, migration.Status.Phase) {
+		ctxlog.Info("LDM pod succeeded with the phase still at the boot gate (events likely expired), advancing phase",
+			"migration", migration.Name)
+		if err := r.markMigrationSuccessful(ctx, migrationScope); err != nil {
+			return ctrl.Result{}, errors.Wrap(err, "failed to mark migration successful after the LDM gate")
+		}
+	}
+
 	// Record migration start if this is a new migration (hasn't been started in metrics yet)
 	// Check if migration was just created (within last minute) and oldStatus phase is empty or Pending
 	isNewMigration := time.Since(migration.CreationTimestamp.Time) < time.Minute &&
@@ -597,6 +606,15 @@ func isPodRunningOrTerminal(pod *corev1.Pod) bool {
 	return pod.Status.Phase == corev1.PodRunning ||
 		pod.Status.Phase == corev1.PodFailed ||
 		pod.Status.Phase == corev1.PodSucceeded
+}
+
+// ldmGateNeedsTerminalFallback reports whether a migration is still pinned at the
+// LDM boot gate even though its pod has already exited successfully - which happens
+// when the gate outlives the event TTL and no success event is left to match.
+// A succeeded pod is authoritative: "failed" errors out and never reaches it.
+func ldmGateNeedsTerminalFallback(pod *corev1.Pod, phase vjailbreakv1alpha1.VMMigrationPhase) bool {
+	return pod.Status.Phase == corev1.PodSucceeded &&
+		phase == vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
 }
 
 // isMigrationAppEvent reports whether an event was emitted by v2v-helper itself.
