@@ -5434,18 +5434,6 @@ metadata:
   namespace: migration-system
 ---
 apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: vjailbreak-ai-data
-  namespace: migration-system
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 2Gi
----
-apiVersion: v1
 kind: Service
 metadata:
   name: vjailbreak-ai

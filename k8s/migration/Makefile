@@ -142,11 +142,11 @@ build-installer: setup-hooks manifests generate kustomize ## Generate a consolid
 	printf '\n---\n' >> dist/install.yaml
 	sed 's|$${AI_IMG}|$(AI_IMG)|g' ../../vjailbreak-ai/deploy/vjailbreak-ai.yaml >> dist/install.yaml
 	cp dist/install.yaml ../../deploy/installer.yaml
-	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/' > ../../deploy/00crds.yaml
+	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} !/kind: Deployment/ && !/kind: PersistentVolumeClaim/' > ../../deploy/00crds.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-controller-manager/ {print}' > ../../deploy/05controller-deployment.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: migration-vpwned-sdk/ {print}' > ../../deploy/06vpwned-deployment.yaml
 	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ui/ {print}' > ../../deploy/07ui-deployment.yaml
-	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} /kind: Deployment/ && /name: vjailbreak-ai/ {print}' > ../../deploy/08vjailbreak-ai-deployment.yaml
+	cat dist/install.yaml | awk 'BEGIN{RS="---"; ORS="---"} (/kind: Deployment/ && /name: vjailbreak-ai/) || /kind: PersistentVolumeClaim/ {print}' > ../../deploy/08vjailbreak-ai-deployment.yaml
 
 ##@ Deployment
 
