@@ -1272,7 +1272,7 @@ func TestFinishEmitsTerminalEvent(t *testing.T) {
 		"finish must re-emit %q or the phase never leaves WaitingForLDMBootSuccess",
 		constants.EventMessageMigrationSucessful)
 
-	// It must be the newest event, otherwise LDMGateHoldsPhase's ordering logic
+	// It must be the newest event, otherwise LDMHeldPhase's ordering logic
 	// and the controller's newest-match loop would still resolve to the gate.
 	assert.Contains(t, emitted[len(emitted)-1], constants.EventMessageMigrationSucessful)
 }

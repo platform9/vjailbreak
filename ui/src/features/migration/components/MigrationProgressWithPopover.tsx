@@ -124,7 +124,9 @@ export default function MigrationProgressWithPopover({
         Phase.HotAddTransferInProgress,
         Phase.HotAddCleanup,
         Phase.ConvertingDisk,
-        Phase.AwaitingCutOverStartTime
+        Phase.AwaitingCutOverStartTime,
+        // Work in progress, not an operator gate: spinner, not the pause icon.
+        Phase.PromotingToVirtio
       ].includes(phase as Phase)
     ) {
       return <CircularProgress size={20} sx={{ mr: '3px' }} />

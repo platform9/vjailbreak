@@ -142,6 +142,7 @@ export enum Phase {
   AwaitingCutOverStartTime = 'AwaitingCutOverStartTime',
   AwaitingAdminCutOver = 'AwaitingAdminCutOver',
   WaitingForLDMBootSuccess = 'WaitingForLDMBootSuccess',
+  PromotingToVirtio = 'PromotingToVirtio',
   Succeeded = 'Succeeded',
   DataCopied = 'DataCopied',
   Failed = 'Failed',

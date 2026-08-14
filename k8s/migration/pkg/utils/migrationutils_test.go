@@ -586,7 +586,7 @@ func TestCleanFailureMessage(t *testing.T) {
 	}
 }
 
-func TestLDMGateHoldsPhase(t *testing.T) {
+func TestLDMHeldPhase(t *testing.T) {
 	at := func(message string, offset time.Duration) corev1.Event {
 		e := makeEvent(constants.MigrationReason, message)
 		e.CreationTimestamp = metav1.NewTime(time.Now().Add(offset))
@@ -595,7 +595,7 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 
 	t.Run("no gate event means this is not an LDM migration", func(t *testing.T) {
 		events := []corev1.Event{at(constants.EventMessageMigrationSucessful, 0)}
-		if LDMGateHoldsPhase(events, "") {
+		if _, held := LDMHeldPhase(events, ""); held {
 			t.Error("held the phase for a migration that never reached the gate")
 		}
 	})
@@ -608,8 +608,9 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 		gate := at(constants.EventMessageWaitingForLDMBootSuccess, 0)
 
 		for _, events := range [][]corev1.Event{{success, gate}, {gate, success}} {
-			if !LDMGateHoldsPhase(events, "") {
-				t.Error("did not hold the phase while the gate was unanswered")
+			phase, held := LDMHeldPhase(events, "")
+			if !held || phase != vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess {
+				t.Errorf("want WaitingForLDMBootSuccess held, got %q held=%v", phase, held)
 			}
 		}
 	})
@@ -619,7 +620,7 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 			at(constants.EventMessageMigrationSucessful, 0),
 			at(constants.EventMessageWaitingForLDMBootSuccess, 0),
 		}
-		if LDMGateHoldsPhase(events, constants.LDMBootStatusFinish) {
+		if _, held := LDMHeldPhase(events, constants.LDMBootStatusFinish); held {
 			t.Error("held the phase after the operator chose to stay on SATA")
 		}
 	})
@@ -630,7 +631,7 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 		// on absence rather than hold; the finish path re-emits the terminal event
 		// so the controller still has something newer to resolve against.
 		events := []corev1.Event{at(constants.EventMessageMigrationSucessful, 0)}
-		if LDMGateHoldsPhase(events, constants.LDMBootStatusFinish) {
+		if _, held := LDMHeldPhase(events, constants.LDMBootStatusFinish); held {
 			t.Error("held the phase after the gate event had expired")
 		}
 	})
@@ -643,8 +644,14 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 			at(constants.EventMessageWaitingForLDMBootSuccess, -10*time.Minute),
 			at(constants.EventMessagePromotingLDMGuest, -1*time.Minute),
 		}
-		if !LDMGateHoldsPhase(events, constants.LDMBootStatusSuccess) {
-			t.Error("released the phase while the VM was still being rebuilt")
+		phase, held := LDMHeldPhase(events, constants.LDMBootStatusSuccess)
+		if !held {
+			t.Fatal("released the phase while the VM was still being rebuilt")
+		}
+		// Must not report the gate here: nothing is waiting on the operator, and the
+		// UI would show a stale "action required" for the whole rebuild.
+		if phase != vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio {
+			t.Errorf("want PromotingToVirtio during the rebuild, got %q", phase)
 		}
 	})
 
@@ -655,7 +662,7 @@ func TestLDMGateHoldsPhase(t *testing.T) {
 			at(constants.EventMessagePromotingLDMGuest, -5*time.Minute),
 			at(constants.EventMessageMigrationSucessful, 0),
 		}
-		if LDMGateHoldsPhase(events, constants.LDMBootStatusSuccess) {
+		if _, held := LDMHeldPhase(events, constants.LDMBootStatusSuccess); held {
 			t.Error("held the phase after the rebuild completed")
 		}
 	})

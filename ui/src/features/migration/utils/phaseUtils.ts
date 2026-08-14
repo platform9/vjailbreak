@@ -48,6 +48,7 @@ function getDesignIndex(phase: Phase, conditions: Condition[]): number {
     // The VM exists and is running on SATA; only the optional promotion to virtio
     // is outstanding, so this sits on the last working step rather than "Done".
     case Phase.WaitingForLDMBootSuccess:
+    case Phase.PromotingToVirtio:
       return 4
     case Phase.Succeeded:
     case Phase.DataCopied:
@@ -393,6 +394,7 @@ export function getPhaseLabel(phase: Phase | string | undefined): string {
     // Covers both halves of this phase: waiting for the operator's answer, and
     // rebuilding the VM on the virtio bus once they have given it.
     case Phase.WaitingForLDMBootSuccess: return 'LDM Boot Verification'
+    case Phase.PromotingToVirtio:        return 'Moving to virtio'
     case Phase.AwaitingCutOverStartTime: return 'Awaiting Cutover Window'
     case Phase.Succeeded:             return 'Succeeded'
     case Phase.DataCopied:            return 'Data Copied'

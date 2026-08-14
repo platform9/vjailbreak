@@ -68,6 +68,7 @@ export default function MigrationDetailPage() {
       phase !== Phase.AwaitingAdminCutOver &&
       phase !== Phase.AwaitingCutOverStartTime &&
       phase !== Phase.WaitingForLDMBootSuccess &&
+      phase !== Phase.PromotingToVirtio &&
       phase !== Phase.CopyingChangedBlocks
     ) {
       setCutoverTriggered(false)

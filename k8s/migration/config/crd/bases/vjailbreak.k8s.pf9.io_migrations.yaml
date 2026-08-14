@@ -193,6 +193,7 @@ spec:
                 - AwaitingCutOverStartTime
                 - AwaitingAdminCutOver
                 - WaitingForLDMBootSuccess
+                - PromotingToVirtio
                 - Succeeded
                 - Failed
                 - Unknown

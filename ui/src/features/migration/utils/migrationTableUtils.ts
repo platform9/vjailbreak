@@ -16,6 +16,7 @@ export const PHASE_STEPS: Record<string, number> = {
   [Phase.AwaitingCutOverStartTime]: 7,
   [Phase.AwaitingAdminCutOver]: 8,
   [Phase.WaitingForLDMBootSuccess]: 8,
+  [Phase.PromotingToVirtio]: 8,
   [Phase.Succeeded]: 9,
   [Phase.DataCopied]: 9,
   [Phase.Failed]: 10,

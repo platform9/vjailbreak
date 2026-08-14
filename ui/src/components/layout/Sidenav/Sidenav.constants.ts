@@ -22,6 +22,7 @@ export const ACTIVE_MIGRATION_PHASES = new Set<Phase>([
   Phase.AwaitingCutOverStartTime,
   Phase.AwaitingAdminCutOver,
   Phase.WaitingForLDMBootSuccess,
+  Phase.PromotingToVirtio,
   Phase.Unknown
 ])
 

@@ -722,6 +722,7 @@ runcmd:
 		// <= target", and an equal rank lets the phase move in both directions -
 		// into the gate once the VM exists, and on to Succeeded once it is answered.
 		vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess: 17,
+		vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio:        17,
 		vjailbreakv1alpha1.VMMigrationPhaseSucceeded:                17,
 		vjailbreakv1alpha1.VMMigrationPhaseUnknown:                  18,
 	}

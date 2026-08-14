@@ -156,6 +156,7 @@ export default function MigrationsTable({
             // Either waiting for the operator, or rebuilding the VM on virtio after
             // they answered - active either way, and the row must keep refreshing.
             Phase.WaitingForLDMBootSuccess,
+            Phase.PromotingToVirtio,
             Phase.Unknown
           ])
           const isInProgress = activePhases.has(phase)
