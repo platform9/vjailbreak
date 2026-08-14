@@ -107,6 +107,72 @@ func TestIsPodRunningOrTerminal(t *testing.T) {
 	}
 }
 
+func TestLDMGateNeedsTerminalFallback(t *testing.T) {
+	tests := []struct {
+		name     string
+		podPhase corev1.PodPhase
+		phase    vjailbreakv1alpha1.VMMigrationPhase
+		want     bool
+	}{
+		{
+			// The reported bug: success events aged out while the operator decided.
+			name:     "succeeded pod still pinned at the gate needs the fallback",
+			podPhase: corev1.PodSucceeded,
+			phase:    vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess,
+			want:     true,
+		},
+		{
+			name:     "running pod at the gate must not be advanced",
+			podPhase: corev1.PodRunning,
+			phase:    vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess,
+			want:     false,
+		},
+		{
+			// "Rollback" exits non-zero and must never be reported as successful.
+			name:     "failed pod at the gate must not be advanced",
+			podPhase: corev1.PodFailed,
+			phase:    vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess,
+			want:     false,
+		},
+		{
+			// The rebuild has the same exposure: its events can age out while the VM
+			// is stopped, deleted and recreated.
+			name:     "succeeded pod still promoting to virtio needs the fallback",
+			podPhase: corev1.PodSucceeded,
+			phase:    vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio,
+			want:     true,
+		},
+		{
+			name:     "running pod promoting to virtio must not be advanced",
+			podPhase: corev1.PodRunning,
+			phase:    vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio,
+			want:     false,
+		},
+		{
+			name:     "succeeded pod in an unrelated phase is left alone",
+			podPhase: corev1.PodSucceeded,
+			phase:    vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk,
+			want:     false,
+		},
+		{
+			name:     "already succeeded is not re-advanced",
+			podPhase: corev1.PodSucceeded,
+			phase:    vjailbreakv1alpha1.VMMigrationPhaseSucceeded,
+			want:     false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			pod := &corev1.Pod{Status: corev1.PodStatus{Phase: tt.podPhase}}
+			if got := ldmGateNeedsTerminalFallback(pod, tt.phase); got != tt.want {
+				t.Errorf("ldmGateNeedsTerminalFallback(pod=%s, phase=%s) = %v, want %v",
+					tt.podPhase, tt.phase, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestIsMigrationAppEvent(t *testing.T) {
 	tests := []struct {
 		name   string

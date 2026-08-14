@@ -2096,7 +2096,13 @@ func (migobj *Migrate) CreateTargetInstance(ctx context.Context, vminfo vm.VMInf
 		time.Sleep(time.Duration(vjailbreakSettings.VMActiveWaitIntervalSeconds) * time.Second)
 	}
 
-	migobj.logMessage(fmt.Sprintf("VM created successfully: ID: %s", newVM.ID))
+	// An LDM guest is not done here - it still has to clear the boot gate - so it
+	// deliberately reports a message the controller does not treat as terminal.
+	if migobj.isLDMGuest {
+		migobj.logMessage(fmt.Sprintf("%s: ID: %s", constants.EventMessageLDMGuestCreatedOnSATA, newVM.ID))
+	} else {
+		migobj.logMessage(fmt.Sprintf("%s: ID: %s", constants.EventMessageMigrationSucessful, newVM.ID))
+	}
 
 	if migobj.PerformHealthChecks {
 		err = migobj.HealthCheck(vminfo, ipaddresses)

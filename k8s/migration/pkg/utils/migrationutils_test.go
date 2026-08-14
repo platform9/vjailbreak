@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -583,6 +584,28 @@ func TestCleanFailureMessage(t *testing.T) {
 				t.Errorf("cleanFailureMessage(%q) = %q, want %q", tc.input, got, tc.expected)
 			}
 		})
+	}
+}
+
+// The SATA build is not a finished migration - the operator still has to answer the
+// boot gate - so its event must not be readable as terminal. If these two ever
+// overlap, a reconcile landing before the gate event exists resolves the phase to
+// Succeeded and nothing wakes the controller to correct it.
+func TestLDMSATAMessageIsNotTerminal(t *testing.T) {
+	if strings.Contains(constants.EventMessageLDMGuestCreatedOnSATA, constants.EventMessageMigrationSucessful) {
+		t.Fatalf("%q must not contain %q",
+			constants.EventMessageLDMGuestCreatedOnSATA, constants.EventMessageMigrationSucessful)
+	}
+
+	// And it must not light up the Migrated condition either.
+	migration := makeMigration()
+	eventList := &corev1.EventList{Items: []corev1.Event{
+		makeEvent(constants.MigrationReason, constants.EventMessageLDMGuestCreatedOnSATA+": ID: abc-123"),
+	}}
+	for _, c := range CreateSucceededCondition(migration, eventList) {
+		if c.Type == constants.MigrationConditionTypeMigrated {
+			t.Error("the SATA build set the Migrated condition before the gate was answered")
+		}
 	}
 }
 
