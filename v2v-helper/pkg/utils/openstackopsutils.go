@@ -1288,6 +1288,54 @@ func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID strin
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
 
+// DetachVolumeFromServer detaches a volume from the given server. DetachVolumeFromVM
+// resolves the instance with GetCurrentInstanceUUID - the vJailbreak appliance - so it
+// would issue the delete against the wrong server and swallow the resulting
+// "is not attached" error as success.
+func (osclient *OpenStackClients) DetachVolumeFromServer(ctx context.Context, serverID, volumeID string) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from server %s, authurl %s, tenant %s",
+		volumeID, serverID, osclient.AuthURL, osclient.Tenant))
+
+	err := volumeattach.Delete(ctx, osclient.ComputeClient, serverID, volumeID).ExtractErr()
+	if err != nil && !strings.Contains(err.Error(), "is not attached") {
+		return fmt.Errorf("failed to detach volume %s from server %s: %s", volumeID, serverID, err)
+	}
+	return nil
+}
+
+// WaitForVolumeDetached polls until Cinder reports the volume available with no
+// attachments, or the timeout expires. Asserts only on the volume, unlike
+// WaitForVolume which also checks the appliance's own attachment list.
+func (osclient *OpenStackClients) WaitForVolumeDetached(ctx context.Context, volumeID string, timeout time.Duration) error {
+	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume %s to detach, authurl %s, tenant %s",
+		volumeID, osclient.AuthURL, osclient.Tenant))
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(constants.LDMShutdownPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline:
+			return fmt.Errorf("volume %s was still attached after %s", volumeID, timeout)
+		case <-ticker.C:
+			volume, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
+			if err != nil {
+				PrintLog(fmt.Sprintf("Transient error polling volume %s: %s", volumeID, err))
+				continue
+			}
+			if volume.Status == "error" {
+				return fmt.Errorf("volume %s is in error state", volumeID)
+			}
+			if volume.Status == "available" && len(volume.Attachments) == 0 {
+				return nil
+			}
+		}
+	}
+}
+
 // ManageExistingVolume manages an existing volume on the storage backend into Cinder
 // Uses the manageable_volumes endpoint which is the standard Cinder manage API
 func (osclient *OpenStackClients) ManageExistingVolume(name string, ref map[string]interface{}, host string, volumeType string) (*volumes.Volume, error) {

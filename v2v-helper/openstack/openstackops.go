@@ -61,6 +61,14 @@ type OpenstackOperations interface {
 	GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error)
 	DeleteServer(ctx context.Context, serverID string) error
 	StopServer(ctx context.Context, serverID string) error
+	// DetachVolumeFromServer detaches from an arbitrary server. DetachVolumeFromVM
+	// is scoped to the vJailbreak appliance (GetCurrentInstanceUUID) and so cannot
+	// touch a migrated VM's volumes.
+	DetachVolumeFromServer(ctx context.Context, serverID, volumeID string) error
+	// WaitForVolumeDetached polls the volume itself. WaitForVolume also asserts
+	// against the appliance's attachment list, which never clears for a volume
+	// attached to a migrated VM.
+	WaitForVolumeDetached(ctx context.Context, volumeID string, timeout time.Duration) error
 	GetServerStatus(ctx context.Context, serverID string) (string, error)
 }
 

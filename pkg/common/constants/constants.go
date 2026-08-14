@@ -298,6 +298,11 @@ const (
 	// waiting for the ACPI shutdown to take effect.
 	LDMShutdownPollInterval = 10 * time.Second
 
+	// LDMProbeDetachTimeout bounds the hot-detach of the probe on the "keep on SATA"
+	// path. A guest that never loaded viostor may never acknowledge the unplug, which
+	// is the usual reason for choosing this answer, so expiry is not an error.
+	LDMProbeDetachTimeout = 2 * time.Minute
+
 	// PCDClusterNameNoCluster is the name of the PCD cluster when there is no cluster
 	PCDClusterNameNoCluster = "NO CLUSTER"
 
