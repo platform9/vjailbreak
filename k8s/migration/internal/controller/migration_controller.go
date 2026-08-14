@@ -611,7 +611,8 @@ func isPodRunningOrTerminal(pod *corev1.Pod) bool {
 // A succeeded pod is authoritative: "failed" errors out and never reaches it.
 func ldmGateNeedsTerminalFallback(pod *corev1.Pod, phase vjailbreakv1alpha1.VMMigrationPhase) bool {
 	return pod.Status.Phase == corev1.PodSucceeded &&
-		phase == vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess
+		(phase == vjailbreakv1alpha1.VMMigrationPhaseWaitingForLDMBootSuccess ||
+			phase == vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio)
 }
 
 // isMigrationAppEvent reports whether an event was emitted by v2v-helper itself.

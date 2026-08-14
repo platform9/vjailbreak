@@ -135,6 +135,20 @@ func TestLDMGateNeedsTerminalFallback(t *testing.T) {
 			want:     false,
 		},
 		{
+			// The rebuild has the same exposure: its events can age out while the VM
+			// is stopped, deleted and recreated.
+			name:     "succeeded pod still promoting to virtio needs the fallback",
+			podPhase: corev1.PodSucceeded,
+			phase:    vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio,
+			want:     true,
+		},
+		{
+			name:     "running pod promoting to virtio must not be advanced",
+			podPhase: corev1.PodRunning,
+			phase:    vjailbreakv1alpha1.VMMigrationPhasePromotingToVirtio,
+			want:     false,
+		},
+		{
 			name:     "succeeded pod in an unrelated phase is left alone",
 			podPhase: corev1.PodSucceeded,
 			phase:    vjailbreakv1alpha1.VMMigrationPhaseConvertingDisk,
