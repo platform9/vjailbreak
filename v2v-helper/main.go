@@ -14,6 +14,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/migrate"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/timing"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -125,6 +126,20 @@ func main() {
 		handleError(fmt.Sprintf("Failed to get source VM: %v", err))
 		return
 	}
+	// Wrap the vCenter and PCD clients so every API call is timed. This is what
+	// makes a Hot-Add run and a non-Hot-Add run of the same VM comparable call
+	// by call — see pkg/timing and scripts/migration-timing-report.py.
+	// Wrapping happens after openstackclients.K8sClient is set, since that is a
+	// field write on the concrete type, not an interface call.
+	timingRecorder := timing.New(
+		migrationparams.SourceVMName,
+		migrationparams.StorageCopyMethod,
+		migrationparams.MigrationType,
+		func(msg string) { _ = utils.PrintLog(msg) },
+	)
+	timedVMOps := vm.NewTimedVMOperations(vmops, timingRecorder)
+	timedOpenstackClients := openstack.NewTimedOpenstackOperations(openstackclients, timingRecorder)
+
 	// Parse network overrides if present
 	var networkOverrides []migrate.NICOverride
 	if migrationparams.NetworkOverrides != "" {
@@ -147,9 +162,9 @@ func main() {
 		Thumbprint:              thumbprint,
 		Convert:                 migrationparams.OpenstackConvert,
 		DisconnectSourceNetwork: migrationparams.DisconnectSourceNetwork,
-		Openstackclients:        openstackclients,
+		Openstackclients:        timedOpenstackClients,
 		Vcclient:                vcclient,
-		VMops:                   vmops,
+		VMops:                   timedVMOps,
 		Nbdops:                  []nbd.NBDOperations{},
 		EventReporter:           eventReporterChan,
 		PodLabelWatcher:         podLabelWatcherChan,
@@ -188,6 +203,7 @@ func main() {
 		ImageMetadata:          migrationparams.ImageMetadata,
 		TargetMetadata:         utils.BuildTargetMetadata(migrationparams.SourceTagsMetadata, migrationparams.CustomMetadata),
 		DataOnly:               migrationparams.DataOnly,
+		Timing:                 timingRecorder,
 	}
 
 	if migrationobj.ServerGroup != "" {

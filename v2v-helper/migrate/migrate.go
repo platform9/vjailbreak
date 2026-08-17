@@ -27,6 +27,7 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
+	"github.com/platform9/vjailbreak/v2v-helper/pkg/timing"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils/vmutils"
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
@@ -105,6 +106,11 @@ type Migrate struct {
 	// When true, port reservation and VM creation are skipped and a DataCopied
 	// phase is reported instead of Succeeded.
 	DataOnly bool
+
+	// Timing records per-operation durations so two runs of the same VM — one
+	// with the Hot-Add proxy, one without — can be compared call by call. It is
+	// safe to leave nil: every timing.Recorder method is a no-op on nil.
+	Timing *timing.Recorder
 
 	// isLDMGuest is set once during ConvertVolumes when the Windows system volume
 	// is found on a Dynamic Disk (LDM). ConvertVolumes must know this before it
@@ -541,7 +547,7 @@ func (migobj *Migrate) EnableCBTWrapper() error {
 	if VersionErr != nil {
 		migobj.logMessage(fmt.Sprintf("Could not determine hardware version, Trying to enable CBT: %s", VersionErr))
 	}
-	migobj.logMessage(fmt.Sprintf("Hardware version detected: %s", hwVersion))
+	migobj.logMessage(fmt.Sprintf("Hardware version detected: %d", hwVersion))
 
 	if hwVersion > 0 && hwVersion < vm.MinCBTHardwareVersion {
 		return fmt.Errorf(
@@ -2307,7 +2313,17 @@ func (migobj *Migrate) gracefulTerminate(ctx context.Context, vminfo vm.VMInfo, 
 	os.Exit(0)
 }
 
+// MigrateVM runs the migration and, on every exit path, emits the aggregated
+// [TIMING-SUMMARY] line. A failed run's partial timings are still the fastest
+// way to see which step consumed the wall clock, so the summary is emitted for
+// failures too.
 func (migobj *Migrate) MigrateVM(ctx context.Context) error {
+	err := migobj.migrateVM(ctx)
+	migobj.Timing.EmitSummary(err != nil)
+	return err
+}
+
+func (migobj *Migrate) migrateVM(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -2326,6 +2342,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		cancel()
 		return errors.Wrap(err, "failed to get all info")
 	}
+	migobj.recordSourceFootprint(ctx, vminfo)
 	if (len(vminfo.VMDisks) != len(migobj.Volumetypes)) &&
 		migobj.StorageCopyMethod != constants.StorageCopyMethod &&
 		migobj.StorageCopyMethod != constants.HotAddCopyMethod {
@@ -2371,7 +2388,10 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 
 		// Perform the copy here.
-		if _, err := migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo); err != nil {
+		doneCopy := migobj.Timing.Start(StepDiskCopyTotal)
+		_, err = migobj.StorageAcceleratedCopyCopyDisks(ctx, vminfo)
+		doneCopy(err)
+		if err != nil {
 			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform StorageAcceleratedCopy copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				return errors.Wrapf(err, "failed to cleanup after StorageAcceleratedCopy failure: %s", cleanuperror)
 			}
@@ -2404,7 +2424,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			vminfo.VMDisks[idx].Path = path
 		}
-		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+		if err := migobj.Timing.Track(StepDiskCopyTotal, func() error {
+			return migobj.HotAddCopyDisks(ctx, vminfo)
+		}); err != nil {
 			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
 			}
@@ -2434,7 +2456,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 
 		// Live Replicate Disks
+		doneCopy := migobj.Timing.Start(StepDiskCopyTotal)
 		vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
+		doneCopy(err)
 		if err != nil {
 			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
 				// combine both errors
@@ -2444,7 +2468,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		}
 	}
 	// Convert the Boot Disk to raw format
+	doneConvert := migobj.Timing.Start(StepConvertTotal)
 	espDiskIndex, err := migobj.ConvertVolumes(ctx, vminfo)
+	doneConvert(err)
 	if err != nil {
 		if !vcenterSettings.CleanupVolumesAfterConvertFailure {
 			migobj.logMessage("Cleanup volumes after convert failure is disabled, detaching volumes and cleaning up snapshots")
@@ -2475,7 +2501,9 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		return nil
 	}
 
+	doneCreate := migobj.Timing.Start(StepCreateInstanceTotal)
 	err = migobj.CreateTargetInstance(ctx, vminfo, networkids, portids, ipaddresses, espDiskIndex)
+	doneCreate(err)
 	if err != nil {
 		if serverID, recoveryErr := migobj.verifyVMCreatedDespiteTimeout(ctx, vminfo); recoveryErr == nil {
 			utils.PrintLog(fmt.Sprintf("VM created despite CreateTargetInstance error (%v), skipping cleanup", err))

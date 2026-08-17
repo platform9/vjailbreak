@@ -25,3 +25,5 @@ ui/playwright-report/*
 ui/coverage/*
 graphify-out/
 review_pr*/
+__pycache__/
+*.pyc

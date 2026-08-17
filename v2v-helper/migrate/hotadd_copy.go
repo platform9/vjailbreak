@@ -62,7 +62,6 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	return getter.GetVCenterClient(), nil
 }
 
-
 // getFrozenVMDKs returns one hotAddDiskTransfer per data disk on the source VM,
 // populated with the frozen parent VMDK path and device key after the snapshot.
 func (migobj *Migrate) getFrozenVMDKs(ctx context.Context, vminfo vm.VMInfo) ([]hotAddDiskTransfer, error) {
@@ -447,7 +446,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 
 	// Load the per-proxy-VM SSH private key from the k8s secret named
 	// "{proxyVMName}-hot-add-ssh-key", created during Proxy VM onboarding.
+	doneKey := migobj.Timing.Start(StepHotAddFetchSSHKeySecret)
 	sshKeyBytes, err := k8sutils.GetHotAddPrivateKey(ctx, migobj.K8sClient, migobj.ProxyVMK8sName)
+	doneKey(err)
 	if err != nil {
 		return errors.Wrap(err, "failed to get Hot-Add SSH private key")
 	}
@@ -494,7 +495,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	}
 
 	// 3. Enumerate frozen VMDKs from the snapshot backing.
+	doneEnum := migobj.Timing.Start(StepHotAddEnumerateFrozen)
 	transfers, err := migobj.getFrozenVMDKs(ctx, vminfo)
+	doneEnum(err)
 	if err != nil {
 		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
 		return errors.Wrap(err, "failed to enumerate frozen VMDKs")
@@ -509,7 +512,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	sshClient := esxissh.NewClientWithTimeout(30 * time.Second)
 	connectCtx, cancelConnect := context.WithTimeout(ctx, 60*time.Second)
 	defer cancelConnect()
-	if err := sshClient.Connect(connectCtx, migobj.ProxyVMIP, hotAddSSHUser, sshKeyBytes); err != nil {
+	if err := migobj.Timing.Track(StepHotAddSSHConnect, func() error {
+		return sshClient.Connect(connectCtx, migobj.ProxyVMIP, hotAddSSHUser, sshKeyBytes)
+	}); err != nil {
 		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
 		return errors.Wrapf(err, "SSH to Proxy VM %s failed", migobj.ProxyVMIP)
 	}
@@ -520,7 +525,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	}()
 
 	// 5. Find the Proxy VM object in vCenter.
+	doneLocate := migobj.Timing.Start(StepHotAddLocateProxyInVC)
 	proxyVMObj, err := migobj.Vcclient.GetVMByName(ctx, migobj.ProxyVMName)
+	doneLocate(err)
 	if err != nil {
 		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
 		return errors.Wrapf(err, "failed to locate Proxy VM '%s' in vCenter", migobj.ProxyVMName)
@@ -530,14 +537,20 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 	// context.Background() ensures govmomi calls succeed even if parent ctx is cancelled.
 	defer func() {
 		migobj.logMessage(constants.EventMessageHotAddCleanup)
+		doneCleanup := migobj.Timing.Start(StepHotAddCleanupTotal)
 		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
+		doneCleanup(nil)
+		// Cleanup is the last thing Hot-Add does, and MigrateVM's summary is
+		// emitted after this defer runs, so the row lands in the report.
 	}()
 
 	// 6. Attach each frozen disk to the Proxy VM.
 	migobj.logMessage(constants.EventMessageHotAddAttachDisks)
 	for i := range transfers {
 		migobj.logMessage(fmt.Sprintf("Attaching disk %d/%d: %s", i+1, len(transfers), transfers[i].SnapshotVMDKPath))
+		doneAttach := migobj.Timing.Start(StepHotAddAttachToProxy)
 		key, err := migobj.attachDiskToProxy(ctx, proxyVMObj, transfers[i].SnapshotVMDKPath)
+		doneAttach(err)
 		if err != nil {
 			return errors.Wrapf(err, "failed to attach disk %s to Proxy VM", transfers[i].SnapshotVMDKPath)
 		}
@@ -549,13 +562,17 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 
 	// 7. Identify block devices on the Proxy VM by matching NAA WWIDs.
 	migobj.logMessage(constants.EventMessageHotAddIdentify)
-	if err := migobj.identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj); err != nil {
+	if err := migobj.Timing.Track(StepHotAddIdentifyDevices, func() error {
+		return migobj.identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj)
+	}); err != nil {
 		return errors.Wrap(err, "failed to identify block devices on Proxy VM")
 	}
 
 	// 8. Pre-allocate one NBD port per disk before launching goroutines so concurrent
 	//    workers don't race and pick the same port from /proc/net/tcp.
+	donePorts := migobj.Timing.Start(StepHotAddAllocatePorts)
 	ports, err := migobj.findFreePorts(sshClient, constants.HotAddPortRangeMin, constants.HotAddPortRangeMax, len(transfers))
+	donePorts(err)
 	if err != nil {
 		return errors.Wrap(err, "failed to allocate NBD ports")
 	}
@@ -578,7 +595,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 
 			migobj.logMessage(fmt.Sprintf("%s port %d for %s (disk %d/%d)",
 				constants.EventMessageHotAddServing, t.NBDPort, t.BlockDevice, idx+1, len(transfers)))
+			doneServe := migobj.Timing.Start(StepHotAddServeNBD)
 			pid, err := migobj.serveViaNBD(sshClient, t.BlockDevice, t.NBDPort)
+			doneServe(err)
 			if err != nil {
 				errCh <- errors.Wrapf(err, "disk %d: failed to start NBD server on port %d", idx+1, t.NBDPort)
 				return
@@ -587,7 +606,9 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 
 			migobj.logMessage(fmt.Sprintf("%s nbd://%s:%d → %s (disk %d/%d)",
 				constants.EventMessageHotAddCopying, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
-			if err := migobj.runNBDCopy(ctx, migobj.ProxyVMIP, t.NBDPort, t.DestDevice); err != nil {
+			if err := migobj.Timing.Track(StepHotAddNBDCopy, func() error {
+				return migobj.runNBDCopy(ctx, migobj.ProxyVMIP, t.NBDPort, t.DestDevice)
+			}); err != nil {
 				errCh <- errors.Wrapf(err, "disk %d: nbdcopy failed", idx+1)
 				return
 			}
