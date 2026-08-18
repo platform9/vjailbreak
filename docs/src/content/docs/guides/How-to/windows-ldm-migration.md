@@ -84,7 +84,7 @@ migration waits for you to perform the cutover.
 
 Open the console of the new VM in PCD and log in. What you should check inside the guest is that
 Windows bound a VirtIO driver to the probe disk — if it did, the root disk will work
-on virtio too.
+on virtio too. Below are the commands to check that.
 
 **Run these before performing the cutover.** The probe disk only exists while the
 migration is held at **LDM Boot Verification**; it is removed whichever option you
