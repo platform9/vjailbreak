@@ -75,7 +75,7 @@ Start the migration as usual. vJailbreak skips conversion, creates the VM with
 `hw_disk_bus: sata`, and attaches a **1 GB virtio probe disk**. Windows performs a
 real driver installation against that device on first boot, which is what gets the
 VirtIO storage driver installed and bound — offline injection cannot do this. The
-probe disk is temporary and is removed whichever option you select.
+probe disk is temporary and is removed later.
 
 The status of the migration then changes to **LDM Boot Verification**, and the
 migration waits for you to perform the cutover.
