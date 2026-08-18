@@ -1,4 +1,4 @@
-# vJailbreak Constitution (v1.3.0)
+# vJailbreak Constitution (v1.4.0)
 
 This document establishes governance principles for the vJailbreak migration orchestration project.
 
@@ -48,6 +48,25 @@ The UI pod runs as `ui-manager-sa`, which holds a deliberately narrow ClusterRol
 
 - Every new `allowedRoutes` entry requires a table-driven case in `pkg/vpwned/server/k8s_proxy_handler_test.go` covering both the allowed method and a rejected one.
 
+### X. Upgrade Flow Parity (NON-NEGOTIABLE)
+The appliance upgrades itself by replaying the target tag's manifests and images. Anything the upgrade flow does not know about keeps running the **old version forever**, silently, with no warning in the UI or logs.
+
+Trigger: a PR adds a Deployment or pod, a container image, a `deploy/*.yaml` manifest, or a component the upgrade must replace. Such a PR MUST do one of two things — never neither:
+
+1. Wire the component into **both** the upgrade and rollback paths in the same PR, per the table below; or
+2. Advise developer to open a GitHub issue naming the sites left unwired and link it in the PR description, so the gap is tracked rather than discovered by a user.
+
+| # | Site | Location | Obligation |
+|---|------|----------|------------|
+| 1 | Workload list | `pkg/vpwned/upgrade/executor.go` (`DeploymentConfigs`) | Deployment listed; this drives the post-upgrade stability check |
+| 2 | Upgrade apply + wait | `pkg/vpwned/upgrade/executor.go` (`runDeploymentPhase`) | Manifest applied for the target tag, deployment added to the readiness wait, and `TotalUpgradeSteps` in `progress.go` incremented — the phase reports one step per manifest applied |
+| 3 | Rollback apply + wait | `pkg/vpwned/upgrade/executor.go` (`ExecuteRollback`) | Manifest re-applied for the previous version and deployment added to the readiness wait |
+| 4 | Backup + restore | `pkg/vpwned/upgrade/version_validator.go` (`BackupResourcesWithID`, `RestoreResources`) | Snapshotted before the upgrade and restored during rollback — a rollback can only restore what was backed up |
+| 5 | Image pre-flight | `pkg/vpwned/upgrade/version_checker.go` (`CheckImagesExist`) | Image verified before the upgrade job starts, so a missing image fails fast instead of surfacing as a readiness timeout followed by a rollback |
+
+A new CRD needs no code change here: cleanup and re-apply discover CRDs dynamically by API group. A new manifest that is **not** part of `deploy/00crds.yaml` does need wiring.
+
+Tests in `pkg/vpwned/upgrade/` MUST iterate `DeploymentConfigs` rather than hardcode workload names, so an unwired workload fails the suite instead of shipping.
 
 ## Critical Requirements
 
@@ -56,13 +75,12 @@ The UI pod runs as `ui-manager-sa`, which holds a deliberately narrow ClusterRol
 - ESXi DNS resolution is required during VM copy phases
 - All PRs must pass tests and include new code coverage
 - PRs adding a migration form field must satisfy the four-surface table in Principle VIII
-
 - PRs adding a UI-side Kubernetes read must satisfy Principle IX (RBAC entry or proxy allowlist entry)
+- PRs adding a workload, image, or `deploy/` manifest must satisfy Principle X (wire the upgrade and rollback paths, or link a tracking issue)
 
 ## Governance
 
 Constitution supersedes all other documentation. Amendments require maintainer approval.
 
-**Version**: 1.3.0 | **Source**: branch `private/main/sarika/constitution-update`
 
-
+**Version**: 1.4.0 | **Last Amended**: 2026-08-12 | **Source**: branch `private/main/sarika/constitution-update-upgrade`
