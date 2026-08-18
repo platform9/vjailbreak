@@ -158,3 +158,12 @@ To prevent this issue in future migrations, you can:
 2. **Post-migration Automation**: Copy the contents of `disk-online-fix.bat` into the Post Migration Script field in the migration form
 3. **Document Disk States**: Maintain documentation of which disks should be online/offline for each VM
 
+:::caution[LDM system volumes]
+The automated solution above relies on firstboot scripts, which `virt-v2v` installs
+during conversion. Windows VMs whose system volume is on a dynamic disk (LDM) skip
+conversion, so the Post Migration Script does not run for them — the SAN policy
+**must** be set on the source VM beforehand. Leaving a disk offline on these guests
+breaks the LDM volume set. See
+[Windows Dynamic Disk (LDM) Migration](../../how-to/windows-ldm-migration/).
+:::
+

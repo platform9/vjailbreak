@@ -1,6 +1,8 @@
 ---
 title: Windows Dynamic Disk (LDM) migration issue
 description: Windows VMs with a dynamic disk (LDM) system volume are supported through a dedicated migration path.
+sidebar:
+  hidden: true
 ---
 
 :::note[This page has moved]
