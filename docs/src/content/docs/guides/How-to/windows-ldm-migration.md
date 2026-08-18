@@ -132,7 +132,7 @@ migration details page. A confirmation dialog appears with three options:
 | Choice | Result |
 | --- | --- |
 | **Move to virtio** | The VM is shut down, deleted and recreated with the root disk on virtio, keeping its name, IP and MAC. |
-| **Keep on SATA** | The migration completes with the VM left on SATA. |
+| **Keep on SATA** | The migration completes with the VM disk left on SATA. |
 | **Rollback Migration** | The VM is deleted from PCD and the source VM in vCenter is returned to its pre-migration state. |
 
 **Leave the VM running** — the shutdown is handled for you. Expect a short outage
