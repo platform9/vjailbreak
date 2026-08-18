@@ -22,6 +22,11 @@ tasks below are manual.
 
 ## 1. Before you start
 
+**Take a snapshot of the source VM in vCenter before making any of the changes
+below.** Both steps modify the guest, and the driver installation requires a
+reboot. The snapshot is your way back if either one leaves the VM in a state you
+did not intend.
+
 On the source VM, as Administrator:
 
 1. **Install the version-compatible VirtIO drivers.** Mount the virtio-win ISO, run
