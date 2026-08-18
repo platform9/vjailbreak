@@ -115,7 +115,7 @@ Once above is verified, you will have 3 cutover options:
 
 | Cutover option | What the checks show afterwards |
 | --- | --- |
-| **Move to virtio** | The probe disk is gone and the **root** disk now reports a VirtIO model. This is the successful end state. |
+| **Move to virtio** | The temporary disk is gone and the **root** disk now reports a VirtIO model. This is the successful end state. |
 | **Keep on SATA** | The probe disk is gone and no VirtIO disk remains, because the root disk stayed on SATA. A VirtIO controller may linger in Device Manager as a non-present device. Expected — not a failure. |
 | **Rollback Migration** | The VM no longer exists in PCD. |
 
