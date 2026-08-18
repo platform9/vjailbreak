@@ -9,7 +9,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
  
 ## Common issues
 
-- [Windows Dynamic Disk (LDM) migration issue](windows-dynamic-disk-ldm-migration-issue/)
+- [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 

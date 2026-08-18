@@ -1,0 +1,130 @@
+---
+title: "Windows Dynamic Disk (LDM) Migration"
+description: "Migrate Windows VMs whose system volume is on a dynamic disk (LDM), including the prerequisites and the LDM Boot Verification cutover."
+---
+
+Windows VMs whose **system volume sits on a dynamic disk (LDM)** follow a different
+migration path. `virt-v2v` cannot convert these guests, so vJailbreak brings the VM
+up on an emulated SATA controller first and lets you move it to virtio once you have
+confirmed it boots.
+
+vJailbreak detects this automatically — there is nothing to select in the migration
+form.
+
+:::note[Only the system volume matters]
+If just the **data disks** are dynamic, none of this applies. The VM migrates
+normally, with conversion and every post-migration step running as usual.
+:::
+
+Because conversion is skipped, these do not run for LDM guests: **VMware Tools
+removal**, **network persistence** and **user firstboot scripts**. That is why the
+tasks below are manual.
+
+## 1. Before you start
+
+On the source VM, as Administrator:
+
+1. **Install the version-compatible VirtIO drivers.** Mount the virtio-win ISO, run
+   `virtio-win-guest-tools.exe`, accept the defaults, reboot. Nothing will look
+   different afterwards — there is no virtio device in vCenter yet, so the drivers
+   sit staged until one appears at the destination.
+
+2. **Set the SAN policy.** Windows marks migrated disks offline because the
+   controller changed; skipping this leaves the LDM pool broken.
+
+   ```
+   diskpart
+   san policy=onlineall
+   exit
+   ```
+
+## 2. Trigger the migration
+
+Start the migration as usual. vJailbreak skips conversion, creates the VM with
+`hw_disk_bus: sata`, and attaches a **1 GB virtio probe disk**. Windows performs a
+real driver installation against that device on first boot, which is what loads
+`viostor` — offline injection cannot do this. The probe disk is temporary and is
+removed whichever option you select.
+
+The status of the migration then changes to **LDM Boot Verification**, and the
+migration waits for you to perform the cutover.
+
+## 3. Confirm the VM booted
+
+Open the console of the new VM in PCD, then log in and check the driver loaded:
+
+```powershell
+Get-PnpDevice -Class SCSIAdapter    # expect a Red Hat VirtIO SCSI controller, status OK
+sc.exe query viostor                # expect STATE: RUNNING
+```
+
+## 4. Perform the cutover
+
+There is no timeout. The migration remains at **LDM Boot Verification** until the
+cutover is performed, so it can be scheduled for a maintenance window.
+
+### Cutover from the UI
+
+Click the cutover button on the migration, either in the migrations table or on the
+migration details page. A confirmation dialog appears with three options:
+
+| Choice | Result |
+| --- | --- |
+| **Move to virtio** | The VM is shut down, deleted and recreated with the root disk on virtio, keeping its name, IP and MAC. |
+| **Keep on SATA** | The migration completes with the VM left on SATA. |
+| **Rollback Migration** | The VM is deleted from PCD and the source VM in vCenter is returned to its pre-migration state. |
+
+**Leave the VM running** — the shutdown is handled for you. Expect a short outage
+while it is recreated; the phase shows **Moving to virtio** during the rebuild.
+
+If the checks in step 3 did not pass, select **Keep on SATA**. The VM remains fully
+functional on the SATA controller; only the performance benefit of virtio is lost.
+Select **Rollback Migration** only if the VM did not boot at all.
+
+### Cutover using kubectl patch
+
+The cutover can also be performed by patching the migration `Pod`.
+
+```bash
+kubectl get migration <migration-name> -n migration-system -o jsonpath='{.spec.podRef}'
+
+kubectl patch pod <pod-name> -n migration-system \
+  -p '{"metadata":{"labels":{"ldmBootStatus":"success"}}}'
+```
+
+| Label value | Equivalent option |
+| --- | --- |
+| `success` | Move to virtio |
+| `finish` | Keep on SATA |
+| `failed` | Rollback Migration |
+
+## Troubleshooting
+
+### Disks show "Failed Redundancy"
+
+Seen on mirrored LDM volumes when the SAN policy was not set beforehand. Windows
+marked a disk offline, so the mirror ran on one plex; by the time the disk returned,
+the copies had diverged and LDM refuses to merge them.
+
+Confirm which disk is stale with `detail volume` or Disk Management, then:
+
+```
+diskpart> san policy=onlineall
+Set-Disk -Number 2 -IsOffline $false
+diskpart> select volume 0 ; online volume
+diskpart> select volume 0 ; break disk=2 nokeep
+diskpart> select volume 0 ; add disk=2
+```
+
+:::danger
+`break ... nokeep` deletes the named disk's plex. Confirm the disk number first —
+breaking the **live** disk destroys the copy the VM has been running from.
+:::
+
+No data is lost when the correct disk is named. There is no redundancy while the
+mirror resyncs, but the window is bounded.
+
+### The VM did not boot on SATA
+
+Perform the cutover with **Rollback Migration**, correct the prerequisites, and
+migrate again.
