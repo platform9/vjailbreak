@@ -237,10 +237,9 @@ cat > "$(dirname $RUN_DIR)/eval_metadata.json" << 'JSONEOF'
 {"prompt": "Review PR #<number>: https://github.com/platform9/vjailbreak/pull/<number>"}
 JSONEOF
 
-# Launch eval viewer (opens browser automatically)
-EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
-cd "$EVAL_VIEWER"
-python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
+# Launch eval viewer with GitHub posting support (opens browser automatically)
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$SKILL_DIR/github_server.py" "$WORKSPACE" --skill-name vjailbreak-pr-review &
 ```
 
 The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The **Post to GitHub** section shows checkboxes for the summary and each finding — check the ones you want, then click **Post Selected to GitHub**. The `send_comments.sh` is a fallback if the server is unavailable.
