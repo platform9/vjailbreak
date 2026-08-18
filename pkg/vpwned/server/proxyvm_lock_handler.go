@@ -15,21 +15,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// vpwned-sdk runs as a single-replica Deployment, so this in-memory map *is*
-// the Proxy VM attach lock -- there's no CRD, no resourceVersion, no
-// distributed compare-and-swap. One mutex in one process is genuinely
-// exclusive. See v2v-helper/pkg/utils/proxyvm_lock.go for the caller side.
+// vpwned-sdk runs as a single-replica Deployment, so this in-memory map is
+// the Proxy VM attach lock; a mutex in one process is genuinely exclusive.
+// See v2v-helper/pkg/utils/proxyvm_lock.go for the caller side.
 
-// proxyVMLockEntry records which migration currently holds a Proxy VM's
-// attach lock.
+// proxyVMLockEntry records which migration currently holds a Proxy VM's lock.
 type proxyVMLockEntry struct {
 	holder     string
 	acquiredAt time.Time
 }
 
-// proxyVMLockManager guards proxyVMLocks. Every method takes the mutex for
-// its entire check-and-set so two concurrent Acquire calls can't both read a
-// stale holder and both overwrite it.
+// proxyVMLockManager guards proxyVMLocks with a single mutex over the whole
+// check-and-set, so concurrent Acquire calls can't both read a stale holder.
 type proxyVMLockManager struct {
 	mu    sync.Mutex
 	locks map[string]proxyVMLockEntry
@@ -37,12 +34,11 @@ type proxyVMLockManager struct {
 
 var proxyVMLocks = &proxyVMLockManager{locks: make(map[string]proxyVMLockEntry)}
 
-// proxyVMLockK8sClient is used only to check whether a lock's current holder
-// is stale (see migrationHolderIsStale). Set once at startup by InitProxyVMLock.
+// proxyVMLockK8sClient is set once at startup by InitProxyVMLock and used
+// only to detect stale lock holders (see migrationHolderIsStale).
 var proxyVMLockK8sClient client.Client
 
 // InitProxyVMLock creates the k8s client used to detect stale lock holders.
-// Mirrors InitK8sProxy/InitDebugBundle's non-cluster-safe init pattern.
 func InitProxyVMLock() error {
 	k8sClient, err := CreateInClusterClient()
 	if err != nil {
@@ -52,9 +48,8 @@ func InitProxyVMLock() error {
 	return nil
 }
 
-// acquire grants the lock if it's free, already held by this same migration
-// (idempotent retry), or held by a migration whose lock is stale. Otherwise
-// it reports who's currently holding it.
+// acquire grants the lock if free, already held by migrationName, or held by
+// a stale holder; otherwise it reports who currently holds it.
 func (m *proxyVMLockManager) acquire(ctx context.Context, proxyVMName, migrationName string) (acquired bool, holder string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -68,8 +63,8 @@ func (m *proxyVMLockManager) acquire(ctx context.Context, proxyVMName, migration
 }
 
 // release drops the lock only if migrationName is the current holder, so a
-// delayed or duplicate release from a migration that already lost the lock
-// can't clear someone else's in-progress attach.
+// late release from a migration that already lost the lock can't clear
+// someone else's in-progress attach.
 func (m *proxyVMLockManager) release(proxyVMName, migrationName string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -78,15 +73,11 @@ func (m *proxyVMLockManager) release(proxyVMName, migrationName string) {
 	}
 }
 
-// migrationHolderIsStale reports whether the migration holding a lock will
-// never release it itself: either its Migration object is gone, or it has
-// already failed. Any other phase -- including one that hasn't caught up yet
-// due to the usual Event -> Reconcile lag -- is treated as still valid, so a
-// holder that's genuinely mid-attach is never mistakenly preempted.
-//
-// On any error checking this (no k8s client, API server hiccup), we default
-// to "not stale": it's safer to make a waiter poll a little longer than to
-// preempt a lock that's still legitimately held.
+// migrationHolderIsStale reports whether a lock holder will never release it
+// itself: its Migration object is gone, or it has already failed. Any other
+// phase is treated as still valid so an in-progress attach is never
+// preempted. Errors checking this (no client, API hiccup) default to "not
+// stale" -- safer to make a waiter poll longer than to steal a live lock.
 func migrationHolderIsStale(ctx context.Context, migrationName string) bool {
 	if proxyVMLockK8sClient == nil {
 		logrus.Warn("proxyvm-lock: k8s client not initialised, treating lock holder as still valid")
@@ -144,8 +135,7 @@ func HandleAcquireProxyVMLock(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleReleaseProxyVMLock is POST /vpw/v1/proxyvm-lock/release. Always
-// returns released:true -- releasing a lock you don't hold is a no-op, not
-// an error, since a caller may legitimately race a stale-lock takeover.
+// returns released:true; releasing a lock you don't hold is a no-op.
 func HandleReleaseProxyVMLock(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

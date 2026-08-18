@@ -65,21 +65,12 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 
 // attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
 //
-// Multiple migrations can share one Proxy VM (MigrationTemplate.spec.proxyVMRef
-// is a single reference reused by every VM migrated with that template, and a
-// MigrationPlan can run many VMs in parallel). attachDiskToProxy reads the
-// Proxy VM's current device list, computes a free controller/unit-number slot
-// from that snapshot, then submits a ReconfigVM_Task to add the disk. That
-// read-then-write is not atomic: if two migrations do it concurrently against
-// the same Proxy VM, they can compute the same "free" slot, and vCenter
-// accepts only one of the two ReconfigVM_Tasks — the other fails with the
-// generic "Invalid configuration for device 'N'." fault.
-//
-// utils.WaitForProxyVMLock/ReleaseProxyVMLock serialize this against vpwned-sdk,
-// which holds the lock in memory (it's a single-replica pod, so a mutex there
-// really is exclusive — no CRD or resourceVersion involved). The lock is held
-// only for this function, not the rest of the Hot-Add flow, so migrations
-// sharing a Proxy VM only block each other during the attach step itself.
+// Multiple migrations can share one Proxy VM. attachDiskToProxy computes a
+// free controller/unit-number slot from a snapshot of the VM's device list,
+// then submits a ReconfigVM_Task -- not atomic, so concurrent callers can
+// compute the same slot and one fails with "Invalid configuration for device
+// 'N'." utils.WaitForProxyVMLock/ReleaseProxyVMLock serialize this against
+// vpwned-sdk's in-memory lock, held only for this function.
 func (migobj *Migrate) attachAllDisks(ctx context.Context, migrationName string,
 	proxyVMObj *object.VirtualMachine, transfers []hotAddDiskTransfer,
 ) error {

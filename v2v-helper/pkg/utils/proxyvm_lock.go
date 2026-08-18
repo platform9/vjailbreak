@@ -14,14 +14,11 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
-// This file is v2v-helper's only network communication with vpwned-sdk today
-// (v2v-helper otherwise just imports pkg/vpwned/sdk/storage as a Go library,
-// it doesn't call the running vpwned-sdk pod). vpwned-sdk holds the Proxy VM
-// attach lock in memory, so acquiring/releasing it is a plain HTTP call, not
-// a Kubernetes read/write.
+// vpwned-sdk holds the Proxy VM attach lock in memory, so acquiring/releasing
+// it is a plain HTTP call, not a Kubernetes read/write.
 
-// proxyVMLockRequest is the JSON body both lock endpoints expect. It must
-// match proxyVMLockRequest in pkg/vpwned/server/proxyvm_lock_handler.go.
+// proxyVMLockRequest is the JSON body both lock endpoints expect; must match
+// proxyVMLockRequest in pkg/vpwned/server/proxyvm_lock_handler.go.
 type proxyVMLockRequest struct {
 	ProxyVMName   string `json:"proxyVMName"`
 	MigrationName string `json:"migrationName"`
@@ -37,15 +34,22 @@ type proxyVMLockAcquireResponse struct {
 // instead of dialing vpwned-sdk fresh every poll.
 var proxyVMLockHTTPClient = &http.Client{Timeout: 10 * time.Second}
 
+// vpwnedSDKBaseURL is overridable so tests can point it at an httptest.Server.
+var vpwnedSDKBaseURL = constants.VpwnedSDKServiceBaseURL
+
+// proxyVMAttachWaitTimeout/proxyVMAttachCheckInterval are overridable so
+// tests can shrink WaitForProxyVMLock's retry/timeout loop.
+var (
+	proxyVMAttachWaitTimeout   = constants.ProxyVMAttachWaitTimeout
+	proxyVMAttachCheckInterval = constants.ProxyVMAttachCheckInterval
+)
+
 // WaitForProxyVMLock blocks until migrationName holds the attach lock for
-// proxyVMName, polling vpwned-sdk every constants.ProxyVMAttachCheckInterval
-// and giving up after constants.ProxyVMAttachWaitTimeout.
-//
-// There is no queue on the vpwned-sdk side: every retry just re-races for the
-// lock rather than waiting in line. That's fine here -- losing a race just
-// means polling again a few seconds later, not lost work.
+// proxyVMName, polling every proxyVMAttachCheckInterval and giving up after
+// proxyVMAttachWaitTimeout. There's no queue on the vpwned-sdk side: every
+// retry just re-races for the lock.
 func WaitForProxyVMLock(ctx context.Context, proxyVMName, migrationName string) error {
-	deadline := time.Now().Add(constants.ProxyVMAttachWaitTimeout)
+	deadline := time.Now().Add(proxyVMAttachWaitTimeout)
 	loggedWaiting := false
 
 	for {
@@ -68,21 +72,20 @@ func WaitForProxyVMLock(ctx context.Context, proxyVMName, migrationName string) 
 
 		if time.Now().After(deadline) {
 			return fmt.Errorf("timed out after %s waiting for turn to attach disks to Proxy VM %s",
-				constants.ProxyVMAttachWaitTimeout, proxyVMName)
+				proxyVMAttachWaitTimeout, proxyVMName)
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(constants.ProxyVMAttachCheckInterval):
+		case <-time.After(proxyVMAttachCheckInterval):
 		}
 	}
 }
 
 // ReleaseProxyVMLock releases migrationName's attach lock on proxyVMName.
-// Safe to call even if the lock was never acquired or was already lost to
-// another migration -- vpwned-sdk only ever releases a lock for its current
-// holder, so this can't clear someone else's in-progress attach.
+// Safe to call even if the lock was never held -- vpwned-sdk only releases a
+// lock for its current holder.
 func ReleaseProxyVMLock(ctx context.Context, proxyVMName, migrationName string) error {
 	req := proxyVMLockRequest{ProxyVMName: proxyVMName, MigrationName: migrationName}
 	if err := postProxyVMLock(ctx, constants.ProxyVMLockReleasePath, req, nil); err != nil {
@@ -91,9 +94,7 @@ func ReleaseProxyVMLock(ctx context.Context, proxyVMName, migrationName string) 
 	return nil
 }
 
-// tryAcquireProxyVMLock makes a single acquire attempt against vpwned-sdk --
-// no waiting, no retries. WaitForProxyVMLock is the entry point most callers
-// want; this exists as its own function purely so that loop stays readable.
+// tryAcquireProxyVMLock makes a single acquire attempt, no waiting/retries.
 func tryAcquireProxyVMLock(ctx context.Context, proxyVMName, migrationName string) (proxyVMLockAcquireResponse, error) {
 	var resp proxyVMLockAcquireResponse
 	req := proxyVMLockRequest{ProxyVMName: proxyVMName, MigrationName: migrationName}
@@ -110,7 +111,7 @@ func postProxyVMLock(ctx context.Context, path string, req proxyVMLockRequest, o
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		constants.VpwnedSDKServiceBaseURL+path, bytes.NewReader(body))
+		vpwnedSDKBaseURL+path, bytes.NewReader(body))
 	if err != nil {
 		return errors.Wrap(err, "failed to build proxy VM lock request")
 	}
