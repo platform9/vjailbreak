@@ -8,7 +8,7 @@ migration path. `virt-v2v` cannot convert these guests, so vJailbreak brings the
 up on an emulated SATA controller first and lets you move it to virtio once you have
 confirmed it boots.
 
-vJailbreak detects this automatically — there is nothing to select in the migration
+vJailbreak detects this automatically during the migration, but you have to prepare the source VM for such VMs. There is nothing to select in the migration form.
 form.
 
 :::note[Only the system volume matters]
