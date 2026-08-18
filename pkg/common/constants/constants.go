@@ -805,6 +805,27 @@ const (
 	HotAddPortRangeMin = 10809
 	HotAddPortRangeMax = 11808
 
+	// ProxyVMAttachCheckInterval is how often a migration re-checks whether
+	// another migration is still attaching disks to the same Proxy VM.
+	ProxyVMAttachCheckInterval = 10 * time.Second
+
+	// ProxyVMAttachWaitTimeout is the max time a migration will wait for its
+	// turn to attach disks to a shared Proxy VM before giving up. Sized
+	// generously since many migrations may share one Proxy VM and queue for
+	// their turn.
+	ProxyVMAttachWaitTimeout = 30 * time.Minute
+
+	// VpwnedSDKServiceBaseURL is the in-cluster address of the vpwned-sdk pod,
+	// which holds the shared Proxy VM attach lock in memory (see
+	// v2v-helper/pkg/utils/proxyvm_lock.go and
+	// pkg/vpwned/server/proxyvm_lock_handler.go).
+	VpwnedSDKServiceBaseURL = "http://migration-vpwned-service.migration-system.svc.cluster.local:80"
+
+	// ProxyVMLockAcquirePath and ProxyVMLockReleasePath are the vpwned-sdk
+	// REST endpoints for the Proxy VM attach lock.
+	ProxyVMLockAcquirePath = "/vpw/v1/proxyvm-lock/acquire"
+	ProxyVMLockReleasePath = "/vpw/v1/proxyvm-lock/release"
+
 	// ProxyVM validation statuses
 	ProxyVMStatusDeploying          = "Deploying"
 	ProxyVMStatusDeployFailed       = "DeployFailed"

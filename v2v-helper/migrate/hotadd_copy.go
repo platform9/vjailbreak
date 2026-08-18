@@ -63,6 +63,52 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 }
 
 
+// attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
+//
+// Multiple migrations can share one Proxy VM (MigrationTemplate.spec.proxyVMRef
+// is a single reference reused by every VM migrated with that template, and a
+// MigrationPlan can run many VMs in parallel). attachDiskToProxy reads the
+// Proxy VM's current device list, computes a free controller/unit-number slot
+// from that snapshot, then submits a ReconfigVM_Task to add the disk. That
+// read-then-write is not atomic: if two migrations do it concurrently against
+// the same Proxy VM, they can compute the same "free" slot, and vCenter
+// accepts only one of the two ReconfigVM_Tasks — the other fails with the
+// generic "Invalid configuration for device 'N'." fault.
+//
+// utils.WaitForProxyVMLock/ReleaseProxyVMLock serialize this against vpwned-sdk,
+// which holds the lock in memory (it's a single-replica pod, so a mutex there
+// really is exclusive — no CRD or resourceVersion involved). The lock is held
+// only for this function, not the rest of the Hot-Add flow, so migrations
+// sharing a Proxy VM only block each other during the attach step itself.
+func (migobj *Migrate) attachAllDisks(ctx context.Context, migrationName string,
+	proxyVMObj *object.VirtualMachine, transfers []hotAddDiskTransfer,
+) error {
+	if err := utils.WaitForProxyVMLock(ctx, migobj.ProxyVMK8sName, migrationName); err != nil {
+		return errors.Wrap(err, "failed waiting for Proxy VM attach turn")
+	}
+	defer func() {
+		// A fresh, short-lived context: releasing must still happen even if
+		// ctx was cancelled or timed out while we were attaching.
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := utils.ReleaseProxyVMLock(releaseCtx, migobj.ProxyVMK8sName, migrationName); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: failed to release Proxy VM attach lock: %v", err))
+		}
+	}()
+
+	migobj.logMessage(constants.EventMessageHotAddAttachDisks)
+	for i := range transfers {
+		migobj.logMessage(fmt.Sprintf("Attaching disk %d/%d: %s", i+1, len(transfers), transfers[i].SnapshotVMDKPath))
+		key, err := migobj.attachDiskToProxy(ctx, proxyVMObj, transfers[i].SnapshotVMDKPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to attach disk %s to Proxy VM", transfers[i].SnapshotVMDKPath)
+		}
+		transfers[i].DiskKey = key
+		migobj.logMessage(fmt.Sprintf("Disk attached with vCenter key %d", key))
+	}
+	return nil
+}
+
 // getFrozenVMDKs returns one hotAddDiskTransfer per data disk on the source VM,
 // populated with the frozen parent VMDK path and device key after the snapshot.
 func (migobj *Migrate) getFrozenVMDKs(ctx context.Context, vminfo vm.VMInfo) ([]hotAddDiskTransfer, error) {
@@ -533,16 +579,15 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
 	}()
 
-	// 6. Attach each frozen disk to the Proxy VM.
-	migobj.logMessage(constants.EventMessageHotAddAttachDisks)
-	for i := range transfers {
-		migobj.logMessage(fmt.Sprintf("Attaching disk %d/%d: %s", i+1, len(transfers), transfers[i].SnapshotVMDKPath))
-		key, err := migobj.attachDiskToProxy(ctx, proxyVMObj, transfers[i].SnapshotVMDKPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to attach disk %s to Proxy VM", transfers[i].SnapshotVMDKPath)
-		}
-		transfers[i].DiskKey = key
-		migobj.logMessage(fmt.Sprintf("Disk attached with vCenter key %d", key))
+	// 6. Attach each frozen disk to the Proxy VM. Serialized across migrations
+	// sharing this Proxy VM via a short-lived lock held by vpwned-sdk — see
+	// attachAllDisks for why.
+	migrationName, err := utils.GetMigrationObjectName()
+	if err != nil {
+		return errors.Wrap(err, "failed to get migration object name")
+	}
+	if err := migobj.attachAllDisks(ctx, migrationName, proxyVMObj, transfers); err != nil {
+		return err
 	}
 
 	migobj.adjustProxyDiskCount(ctx, len(transfers))
