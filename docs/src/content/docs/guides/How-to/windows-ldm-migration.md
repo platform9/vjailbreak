@@ -22,6 +22,20 @@ tasks below are manual.
 
 ## 1. Before you start
 
+vJailbreak detects LDM on its own, but if you want to know in advance which VMs
+will take this path, run the precheck script on the source VM as Administrator. It
+is read-only, prints a plain **YES** or **NO**, and writes a transcript to
+`%TEMP%\vjb-ldm-check.log`.
+
+<a href="../../../scripts/Test-VjbLdmSystemDisk.ps1" download>Download Test-VjbLdmSystemDisk.ps1</a>
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Test-VjbLdmSystemDisk.ps1
+```
+
+It also sets an exit code — `1` for LDM, `0` for basic, `2` if inconclusive — so it
+can be run across a fleet to build the list of VMs that need the steps below.
+
 **Take a snapshot of the source VM in vCenter before making any of the changes
 below.** Both steps modify the guest, and the driver installation requires a
 reboot. The snapshot is your way back if either one leaves the VM in a state you
