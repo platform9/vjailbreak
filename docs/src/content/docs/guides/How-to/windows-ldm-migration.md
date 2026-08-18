@@ -29,10 +29,22 @@ did not intend.
 
 On the source VM, as Administrator:
 
-1. **Install the version-compatible VirtIO drivers.** Mount the virtio-win ISO, run
-   `virtio-win-guest-tools.exe`, accept the defaults, reboot. Nothing will look
-   different afterwards — there is no virtio device in vCenter yet, so the drivers
-   sit staged until one appears at the destination.
+1. **Install the version-compatible VirtIO drivers.** Mount the virtio-win ISO that
+   matches the guest, run `virtio-win-guest-tools.exe`, accept the defaults, reboot.
+
+   | Guest | virtio-win ISO |
+   | --- | --- |
+   | Windows Server 2016 and later | Current stable release |
+   | Windows Server 2012 / 2012 R2 | `virtio-win-0.1.185.iso` |
+
+   :::caution
+   Server 2012 and 2012 R2 must use the pinned **0.1.185** build. Current
+   virtio-win releases have dropped support for them, and installing one leaves the
+   guest without a usable storage driver.
+   :::
+
+   Nothing will look different afterwards — there is no virtio device in vCenter
+   yet, so the drivers sit staged until one appears at the destination.
 
 2. **Set the SAN policy.** Windows marks migrated disks offline because the
    controller changed; skipping this leaves the LDM pool broken.
@@ -47,21 +59,49 @@ On the source VM, as Administrator:
 
 Start the migration as usual. vJailbreak skips conversion, creates the VM with
 `hw_disk_bus: sata`, and attaches a **1 GB virtio probe disk**. Windows performs a
-real driver installation against that device on first boot, which is what loads
-`viostor` — offline injection cannot do this. The probe disk is temporary and is
-removed whichever option you select.
+real driver installation against that device on first boot, which is what gets the
+VirtIO storage driver installed and bound — offline injection cannot do this. The
+probe disk is temporary and is removed whichever option you select.
 
 The status of the migration then changes to **LDM Boot Verification**, and the
 migration waits for you to perform the cutover.
 
 ## 3. Confirm the VM booted
 
-Open the console of the new VM in PCD, then log in and check the driver loaded:
+Open the console of the new VM in PCD and log in. What you are checking is that
+Windows bound a VirtIO driver to the probe disk — if it did, the root disk will work
+on virtio too.
+
+**Run these before performing the cutover.** The probe disk only exists while the
+migration is held at **LDM Boot Verification**; it is removed whichever option you
+select, so the output changes afterwards.
 
 ```powershell
-Get-PnpDevice -Class SCSIAdapter    # expect a Red Hat VirtIO SCSI controller, status OK
-sc.exe query viostor                # expect STATE: RUNNING
+# The 1 GB probe disk must be present, with VirtIO in its model name.
+Get-WmiObject Win32_DiskDrive | Select-Object Model, Size
+
+# The controller must be healthy.
+Get-WmiObject Win32_PnPEntity | Where-Object { $_.Name -like '*VirtIO*' } |
+  Select-Object Name, Status
 ```
+
+Expect a disk of roughly 1 GB whose model names VirtIO, and a controller reporting
+`OK`. Device Manager shows the same thing under **Storage controllers**. Both
+commands work on every supported Windows version, including Server 2012.
+
+:::caution[Do not use `sc query viostor`]
+On a VM booted from SATA this reports `STOPPED` even when the driver is installed
+and working, so it will make a healthy VM look broken. The service state of a
+storage miniport is not a reliable signal here — check for the device, as above.
+:::
+
+If you re-run the same commands after the cutover, expect different output:
+
+| Cutover option | What the checks show afterwards |
+| --- | --- |
+| **Move to virtio** | The probe disk is gone and the **root** disk now reports a VirtIO model. This is the successful end state. |
+| **Keep on SATA** | The probe disk is gone and no VirtIO disk remains, because the root disk stayed on SATA. A VirtIO controller may linger in Device Manager as a non-present device. Expected — not a failure. |
+| **Rollback Migration** | The VM no longer exists in PCD. |
 
 ## 4. Perform the cutover
 
