@@ -109,7 +109,9 @@ and working, so it will make a healthy VM look broken. The service state of a
 storage miniport is not a reliable signal here — check for the device, as above.
 :::
 
-If you re-run the same commands after the cutover, expect different output:
+If you re-run the same commands after the cutover, expect different output.
+
+Once above is verified, you will have 3 cutover options:
 
 | Cutover option | What the checks show afterwards |
 | --- | --- |
