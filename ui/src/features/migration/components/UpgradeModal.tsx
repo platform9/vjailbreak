@@ -419,7 +419,7 @@ export const UpgradeModal = ({ show, onClose }) => {
         message={
           <>
             This deletes all custom resources in this vJailbreak appliance and{' '}
-            <strong>cannot be undone</strong>. Any migration that is still running will be lost.
+            <strong>cannot be undone</strong>.
           </>
         }
       />

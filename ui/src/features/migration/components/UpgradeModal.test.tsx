@@ -100,6 +100,10 @@ describe('UpgradeModal — cleanup warning', () => {
 
     expect(await screen.findByText('Clean up before upgrade?')).toBeInTheDocument()
     expect(screen.getByText(/cannot be undone/i)).toBeInTheDocument()
+
+    // An upgrade is only reachable once the pre-upgrade checks pass, which requires no
+    // migrations to be in flight — cleanup only ever removes succeeded and failed ones.
+    expect(screen.queryByText(/running/i)).not.toBeInTheDocument()
   })
 
   it('does not call the cleanup API until the warning is confirmed', async () => {
