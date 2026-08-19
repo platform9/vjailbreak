@@ -35,6 +35,14 @@ The migration logic checks for `/home/ubuntu/virtio-win/virtio-win.iso` on the s
 - **If both methods fail:**
   - Migration fails gracefully with a clear error message.
 
+:::note[Does not apply to LDM system volumes]
+Offline driver injection requires `virt-v2v` to write into the guest filesystem.
+Windows VMs whose system volume is on a dynamic disk (LDM) skip conversion
+entirely, so this ISO is not used for them — the VirtIO drivers must be installed
+on the **source** VM instead. See
+[Windows Dynamic Disk (LDM) Migration](../windows-ldm-migration/).
+:::
+
 
 
 

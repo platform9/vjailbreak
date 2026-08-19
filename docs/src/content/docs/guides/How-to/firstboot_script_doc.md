@@ -108,6 +108,14 @@ To configure a post-migration firstboot script:
 
 8. When the migrated VM boots for the first time, the prepared scripts execute automatically but needs multiple reboots to complete.
 
+:::caution[Not available for LDM system volumes]
+As step 5 shows, firstboot scripts are prepared **during conversion**. Windows VMs
+whose system volume is on a dynamic disk (LDM) skip conversion, so the Post
+Migration Script is not installed and will not run. Anything it would have done
+must be performed manually inside the guest. See
+[Windows Dynamic Disk (LDM) Migration](../windows-ldm-migration/).
+:::
+
 
 ## Linux Execution Model
 

@@ -7,23 +7,26 @@ This page documents known limitations, unsupported configurations, and important
 
 ## Windows Dynamic Disk (LDM)
 
-Windows VMs that use **dynamic disks** (Logical Disk Manager / LDM) cannot be migrated directly. `virt-v2v` fails during the inspection phase when the Windows boot disk uses LDM volumes.
+Windows VMs whose **system volume** sits on a **dynamic disk** (Logical Disk Manager / LDM) are supported, but they follow a dedicated migration path. `virt-v2v` cannot convert these guests, so vJailbreak skips conversion, brings the VM up on an emulated SATA controller, and waits at the **LDM Boot Verification** phase for you to move it to virtio.
 
-**Workaround**: Before migrating, boot the VM in VMware and convert dynamic disks to basic disks using `diskpart`:
-
-```cmd
-diskpart
-select disk N
-convert basic
-```
-
-If the disk contains data, back it up first. See the full troubleshooting guide: [Windows Dynamic Disk (LDM) migration issue](../../guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/).
+vJailbreak detects this automatically — there is nothing to select in the migration form.
 
 | Configuration | Result |
 |---|---|
-| Root: Basic, Data: LDM | Works — import LDM disks in Windows post-migration |
-| Root: LDM, Data: Basic | **Fails** — must convert root disk to basic |
-| Root: LDM, Data: LDM | **Fails** — must convert root disk to basic |
+| Root: Basic, Data: LDM | Migrates normally — import LDM data disks in Windows post-migration |
+| Root: LDM, Data: Basic | Supported via the SATA-first path — manual cutover required |
+| Root: LDM, Data: LDM | Supported via the SATA-first path — manual cutover required |
+
+The following limitations apply when the system volume is on LDM:
+
+| Limitation | Detail |
+|---|---|
+| Conversion-time features do not run | **VMware Tools removal**, **network persistence** and **user firstboot scripts** are all performed by `virt-v2v` during conversion. Conversion is skipped, so these must be handled manually inside the guest. |
+| VirtIO drivers must be pre-installed | Drivers cannot be injected offline into an LDM volume. Install the VirtIO guest tools on the **source** VM before migrating. |
+| The SAN policy must be set beforehand | Without `san policy=onlineall`, Windows brings the migrated disks up offline and the LDM volume set is left broken. |
+| The migration requires manual intervention | The migration pauses at **LDM Boot Verification** until you confirm the VM booted. There is no timeout, so the migration will not complete unattended. |
+
+See the full guide: [Windows Dynamic Disk (LDM) Migration](../../guides/how-to/windows-ldm-migration/).
 
 ## Active Directory-Joined VMs
 

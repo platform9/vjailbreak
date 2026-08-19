@@ -91,3 +91,10 @@ For DHCP-enabled ports, connectivity and DHCP functionality are preserved, but t
 :::note
 For cross-network migration, network persistence is currently not supported and will be blocked.
 :::
+
+:::note
+Network persistence is applied by `virt-v2v` during conversion. Windows VMs whose
+system volume is on a dynamic disk (LDM) skip conversion, so persistence does not
+run for them and the interfaces must be reconfigured inside the guest. See
+[Windows Dynamic Disk (LDM) Migration](../../guides/how-to/windows-ldm-migration/).
+:::
