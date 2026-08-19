@@ -41,41 +41,55 @@ below.** Both steps modify the guest, and the driver installation requires a
 reboot. The snapshot is your way back if either one leaves the VM in a state you
 did not intend.
 
-On the source VM, as Administrator:
+Both tasks below are performed on the source VM in vCenter, while it is still
+running on ESXi, as Administrator.
 
-1. **Install the version-compatible VirtIO drivers.** Mount the virtio-win ISO that
-   matches the guest, run `virtio-win-guest-tools.exe`, accept the defaults, reboot.
+### Install the VirtIO drivers
 
-   | Guest | virtio-win ISO |
-   | --- | --- |
-   | Windows Server 2016 and later | Current stable release |
-   | Windows Server 2012 / 2012 R2 | `virtio-win-0.1.185.iso` |
+1. **Download the ISO.** Every build is published in the
+   [virtio-win archive](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/).
+   Windows Server 2016 and later can use the current build.
 
    :::caution
-   Server 2012 and 2012 R2 must use the pinned **0.1.185** build. Current
-   virtio-win releases have dropped support for them, and installing one leaves the
-   guest without a usable storage driver.
+   **Windows Server 2012 and 2012 R2 must use `virtio-win-0.1.185.iso`**, in the
+   `virtio-win-0.1.185-1` folder. Later builds dropped support for these versions
+   and leave the guest without a usable storage driver.
    :::
 
-   Nothing will look different afterwards — there is no virtio device in vCenter
-   yet, so the drivers sit staged until one appears at the destination.
+2. **Upload the ISO** to a datastore the ESXi host can reach.
 
-2. **Set the SAN policy.** Windows marks migrated disks offline because the
-   controller changed; skipping this leaves the LDM pool broken.
+3. **Attach it to the VM.** In vCenter, right-click the VM → **Edit Settings** →
+   **CD/DVD drive 1** → **Datastore ISO File**, browse to the ISO, and tick
+   **Connected**.
 
-   ```
-   diskpart
-   san policy=onlineall
-   exit
-   ```
+4. **Run the installer in the guest.** Open File Explorer, open the mounted CD
+   drive, and run **`virtio-win-guest-tools.exe`**.
+
+5. **Click through the wizard**, accepting the defaults, and finish it.
+
+6. **Reboot the VM**, then disconnect the ISO.
+
+Nothing will look different afterwards — there is no virtio device in vCenter yet,
+so the drivers sit staged until one appears at the destination.
+
+### Set the SAN policy
+
+Windows marks migrated disks offline because the controller changed; skipping this
+leaves the LDM pool broken.
+
+```
+diskpart
+san policy=onlineall
+exit
+```
 
 ## 2. Trigger the migration
 
 Start the migration as usual. vJailbreak skips conversion, creates the VM with
-`hw_disk_bus: sata`, and attaches a **1 GB virtio probe disk**. Windows performs a
-real driver installation against that device on first boot, which is what gets the
+`hw_disk_bus: sata`, and attaches a **1 GB virtio temporary disk**. Windows performs
+a real driver installation against that device on first boot, which is what gets the
 VirtIO storage driver installed and bound — offline injection cannot do this. The
-probe disk is temporary and is removed later.
+temporary disk is removed later.
 
 The status of the migration then changes to **LDM Boot Verification**, and the
 migration waits for you to perform the cutover.
@@ -91,7 +105,7 @@ migration is held at **LDM Boot Verification**; it is removed whichever option y
 select, so the output changes afterwards.
 
 ```powershell
-# The 1 GB probe disk must be present, with VirtIO in its model name.
+# The 1 GB temporary disk must be present, with VirtIO in its model name.
 Get-WmiObject Win32_DiskDrive | Select-Object Model, Size
 
 # The controller must be healthy.
@@ -116,7 +130,7 @@ Once above is verified, you will have 3 cutover options:
 | Cutover option | What the checks show afterwards |
 | --- | --- |
 | **Move to virtio** | The temporary disk is gone and the **root** disk now reports a VirtIO model. This is the successful end state. |
-| **Keep on SATA** | The probe disk is gone and no VirtIO disk remains, because the root disk stayed on SATA. A VirtIO controller may linger in Device Manager as a non-present device. Expected — not a failure. |
+| **Keep on SATA** | The temporary disk is gone and no VirtIO disk remains, because the root disk stayed on SATA. A VirtIO controller may linger in Device Manager as a non-present device. Expected — not a failure. |
 | **Rollback Migration** | The VM no longer exists in PCD. |
 
 ## 4. Perform the cutover

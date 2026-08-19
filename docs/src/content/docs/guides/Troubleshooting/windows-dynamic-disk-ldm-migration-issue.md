@@ -28,7 +28,7 @@ before conversion can start.
 Rather than requiring the disk to be converted to basic beforehand, vJailbreak
 skips conversion for these guests and brings the VM up on an emulated SATA
 controller, which Windows can boot without VirtIO drivers. A temporary virtio
-probe disk lets Windows install the `viostor` driver itself, and the migration
+temporary disk lets Windows install the `viostor` driver itself, and the migration
 then waits at the **LDM Boot Verification** phase for you to move the root disk to
 virtio.
 
