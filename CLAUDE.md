@@ -62,10 +62,8 @@ If any principle in the constitution conflicts with a user request, flag it expl
 - Mock external dependencies (VMware, OpenStack, Kubernetes API) using interfaces — do not hit real external systems in unit tests
 
 ### Integration/Build Testing Requirements
-- v2v-helper tests require `CGO_ENABLED=1 GOOS=linux GOARCH=amd64`
-- v2v-helper tests will NOT compile on macOS without Linux cross-compilation toolchain
-- Run `make test-v2v-helper` for v2v-helper tests (requires Linux or Docker)
-- Run `cd k8s/migration && make test` for controller tests
+- v2v-helper tests require `CGO_ENABLED=1 GOOS=linux GOARCH=amd64` and will NOT compile on macOS without a Linux cross-compilation toolchain — use Docker or a Linux VM
+- Run `make test-v2v-helper` for v2v-helper tests, `cd k8s/migration && make test` for controller tests
 - ALWAYS run tests before submitting PRs
 
 ### Migration Form Field Parity (Constitution Principle VIII — NON-NEGOTIABLE)
@@ -78,28 +76,35 @@ Adding a field, block, section, or toggle to the Migration Form is NOT done unti
 | 3 | Retry Form | `ui/src/features/migration/components/RetryMigration.tsx`, `hooks/useRetryPrefill.ts`, `hooks/useRetrySubmit.ts`, `utils/retryFormState.ts` | Prefill from the failed Migration CR AND include in the retry submit payload |
 | 4 | Migration Template / Blueprint UI | `ui/src/features/migration/components/templates/SaveAsTemplateDialog.tsx`, `templates/TemplateDetailDrawer.tsx`, `ui/src/api/migration-blueprints/` | Save into the blueprint and restore when applied |
 
-- Writing the field into the CR is not enough — surface 2 needs it rendered, surface 3 needs it prefilled *and* re-submitted.
-
-- Add a unit test per surface asserting round-trip (`migrationDetailFields.test.ts`, `retryFormState.test.ts`, `migrationBlueprints.test.ts`, and the step's own `*.test.tsx`).
-
-- Before finishing, state explicitly which of the four surfaces were changed. If one genuinely does not apply, say why.
+- Writing the field into the CR is not enough — surface 2 needs it rendered, surface 3 needs it prefilled *and* re-submitted
+- Add a unit test per surface asserting round-trip (`migrationDetailFields.test.ts`, `retryFormState.test.ts`, `migrationBlueprints.test.ts`, and the step's own `*.test.tsx`)
+- Before finishing, state explicitly which of the four surfaces were changed. If one genuinely does not apply, say why
 
 ### UI Kubernetes Access (Constitution Principle IX — NON-NEGOTIABLE)
 The UI pod runs as `ui-manager-sa` with a deliberately narrow ClusterRole. Nothing is readable by default.
 
-- **New vJailbreak CRD the UI reads** → add the plural name (plus `<plural>/status` if status is read) to the `vjailbreak.k8s.pf9.io` rules of `ui-manager-role` in `ui/deploy/ui.yaml`, then run `make generate-manifests`. Never hand-edit `deploy/installer.yaml`, `deploy/00crds.yaml`, or `k8s/migration/dist/install.yaml`.
+- **New vJailbreak CRD the UI reads** → add the plural name (plus `<plural>/status` if status is read) to the `vjailbreak.k8s.pf9.io` rules of `ui-manager-role` in `ui/deploy/ui.yaml`, then run `make generate-manifests`. Never hand-edit `deploy/installer.yaml`, `deploy/00crds.yaml`, or `k8s/migration/dist/install.yaml`
+- **New core/non-CRD resource the UI reads** (pods, pod logs, configmaps, events…) → do NOT call the K8s API directly. Add a method + path-regex entry to `allowedRoutes` in `pkg/vpwned/server/k8s_proxy_handler.go` and call it from the UI under `K8S_PROXY_BASE_PATH` (`ui/src/api/constants.ts`, `/sdk/vpw/v1/k8s/...`). The proxy allowlists by method+path and verifies the caller is `system:serviceaccount:migration-system:ui-manager-sa`; an unlisted route 403s even when RBAC would permit it
+- Every new `allowedRoutes` entry needs a table-driven case in `pkg/vpwned/server/k8s_proxy_handler_test.go` — one allowed method, one rejected
 
-- **New core/non-CRD resource the UI reads** (pods, pod logs, configmaps, events…) → do NOT call the K8s API directly. Add a method + path-regex entry to `allowedRoutes` in `pkg/vpwned/server/k8s_proxy_handler.go` and call it from the UI under `K8S_PROXY_BASE_PATH` (`ui/src/api/constants.ts`, `/sdk/vpw/v1/k8s/...`). The proxy allowlists by method+path and verifies the caller is `system:serviceaccount:migration-system:ui-manager-sa`; an unlisted route 403s even when RBAC would permit it.
+### Upgrade Flow Parity (Constitution Principle X — NON-NEGOTIABLE)
+The appliance upgrades itself by replaying the target tag's manifests and images. A component the upgrade flow does not know about keeps running the OLD version forever, silently.
 
-- Every new `allowedRoutes` entry needs a table-driven case in `pkg/vpwned/server/k8s_proxy_handler_test.go` — one allowed method, one rejected.
+Adding a Deployment/pod, a container image, or a `deploy/*.yaml` manifest? Either wire all five sites in the same PR, or advice developer to raise a GitHub issue naming what is unwired and link it in the PR. Never neither.
 
+| # | Site | File | What must happen |
+|---|------|------|------------------|
+| 1 | Workload list | `pkg/vpwned/upgrade/executor.go` (`DeploymentConfigs`) | List it — this drives the post-upgrade stability check |
+| 2 | Upgrade apply + wait | `executor.go` (`runDeploymentPhase`) | Apply the manifest for the target tag, add it to the readiness wait, bump `TotalUpgradeSteps` in `progress.go` (one step per manifest applied) |
+| 3 | Rollback apply + wait | `executor.go` (`ExecuteRollback`) | Re-apply the manifest for the previous version, add it to the readiness wait |
+| 4 | Backup + restore | `pkg/vpwned/upgrade/version_validator.go` (`BackupResourcesWithID`, `RestoreResources`) | Snapshot it before upgrading and restore it on rollback |
+| 5 | Image pre-flight | `pkg/vpwned/upgrade/version_checker.go` (`CheckImagesExist`) | Verify the image before the job starts, so a missing image fails fast instead of timing out |
+
+- A new CRD needs no change here — cleanup and re-apply discover CRDs dynamically by API group. A new manifest outside `deploy/00crds.yaml` does need wiring
+- Tests in `pkg/vpwned/upgrade/` must iterate `DeploymentConfigs`, never hardcode workload names, so an unwired workload fails the suite
 
 ### Module Structure
-- Four independent Go modules — run `go` commands from the correct directory:
-  - Controller: `k8s/migration/`
-  - V2V Helper: `v2v-helper/`
-  - API Server: `pkg/vpwned/`
-  - Common: `pkg/common/`
+- Four independent Go modules — run `go` commands from the correct directory: Controller `k8s/migration/`, V2V Helper `v2v-helper/`, API Server `pkg/vpwned/`, Common `pkg/common/`
 - When adding dependencies, run `go mod tidy` in the specific module directory
 - Cross-module imports must reference the full module path
 
@@ -127,21 +132,14 @@ The UI pod runs as `ui-manager-sa` with a deliberately narrow ClusterRole. Nothi
 ## Quick Commands
 
 ```bash
-# One-time setup
-make setup-hooks
-
-# Build components
+make setup-hooks                       # One-time setup
 make ui v2v-helper vjail-controller build-vpwned
-make generate-manifests  # Requires vjail-controller and ui built first
-make build-image         # Complete appliance QCOW2
-
-# Testing
-make test-v2v-helper     # v2v-helper (requires Linux CGO)
-cd k8s/migration && make test  # Controller tests
-
-# Development
-make run-local           # Run controller locally
-cd ui && yarn dev        # UI dev server (requires VITE_API_HOST, VITE_API_TOKEN)
+make generate-manifests                # Requires vjail-controller and ui built first
+make build-image                       # Complete appliance QCOW2
+make test-v2v-helper                   # v2v-helper tests (requires Linux CGO)
+cd k8s/migration && make test          # Controller tests
+make run-local                         # Run controller locally
+cd ui && yarn dev                      # UI dev server (requires VITE_API_HOST, VITE_API_TOKEN)
 ```
 
 **Image tags**: Default `<git-parent-branch>-<short-sha>`. Override: `BUILD_VERSION=v1.2.3 REGISTRY=myregistry.io make <target>`
@@ -160,14 +158,9 @@ cd ui && yarn dev        # UI dev server (requires VITE_API_HOST, VITE_API_TOKEN
 ## Debugging
 
 ```bash
-# Controller logs
-kubectl -n vjailbreak logs -l control-plane=controller-manager -f
-
-# Migration status
-kubectl -n migration-system get migration <name> -o yaml
-
-# V2V helper logs
-kubectl -n migration-system logs <migration-name>-v2v-helper
+kubectl -n vjailbreak logs -l control-plane=controller-manager -f   # Controller logs
+kubectl -n migration-system get migration <name> -o yaml            # Migration status
+kubectl -n migration-system logs <migration-name>-v2v-helper        # V2V helper logs
 ```
 
 **Check**: Guest OS support at https://libguestfs.org/virt-v2v-support.1.html
