@@ -3,12 +3,14 @@
 package nbd
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -213,4 +215,36 @@ func TestZeroRange_ReadsBackAsZero(t *testing.T) {
 			assert.Equal(t, byte(0xFF), got[zeroStart+zeroLen], "byte after range must be untouched")
 		})
 	}
+}
+
+// TestCopyDiskProgressDrain mirrors CopyDisk's pipe/goroutine/WaitGroup
+// pattern: close the write end, then Wait() before touching the read end.
+// It proves the reader always drains every line, including the final one,
+// before the caller proceeds - the exact race that used to drop the last
+// progress update (e.g. 100%) when the read end was closed too early.
+func TestCopyDiskProgressDrain(t *testing.T) {
+	progressRead, progressWrite, err := os.Pipe()
+	require.NoError(t, err)
+	defer progressRead.Close()
+
+	var got []string
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		scanner := bufio.NewScanner(progressRead)
+		for scanner.Scan() {
+			got = append(got, scanner.Text())
+		}
+	}()
+
+	lines := []string{"25/100", "50/100", "75/100", "100/100"}
+	for _, l := range lines {
+		_, err := progressWrite.WriteString(l + "\n")
+		require.NoError(t, err)
+	}
+	require.NoError(t, progressWrite.Close())
+	wg.Wait()
+
+	assert.Equal(t, lines, got)
 }
