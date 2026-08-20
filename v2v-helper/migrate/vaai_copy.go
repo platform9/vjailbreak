@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -483,7 +484,7 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 	}
 
 	// Type assert to the concrete struct slice from utils package
-	serviceList, ok := servicesInterface.([]utils.CinderVolumeService)
+	serviceList, ok := servicesInterface.([]openstack.CinderVolumeService)
 	if !ok {
 		return "", fmt.Errorf("unexpected type from GetCinderVolumeServices: %T", servicesInterface)
 	}
