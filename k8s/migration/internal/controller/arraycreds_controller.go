@@ -32,6 +32,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
+	vantarasdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/vantara"
 
 	// Blank import registers all storage providers via their init() so
 	// storage.NewStorageProvider resolves by vendor type string.
@@ -234,6 +235,24 @@ func (r *ArrayCredsReconciler) reconcileNormal(ctx context.Context, scope *scope
 		}
 	}
 
+	// MappingMode=native hard-requires vendor-native mapping support. The
+	// check is type-based (no array call): providers that do not implement
+	// storagesdk.VendorMapper can only be served by the Cinder
+	// os-initialize_connection fallback, which native explicitly forbids.
+	// auto/cinder/empty modes pass through.
+	if phase != constants.ArrayCredsPhaseFailed && arraycreds.Spec.MappingMode == vjailbreakv1alpha1.MappingModeNative {
+		if provider, perr := storagesdk.NewStorageProvider(arraycreds.Spec.VendorType); perr != nil {
+			phase = constants.ArrayCredsPhaseFailed
+			validationStatus = constants.ArrayCredsStatusFailed
+			validationMessage = fmt.Sprintf("MappingMode=native: failed to get storage provider for vendor %s: %v", arraycreds.Spec.VendorType, perr)
+		} else if _, isMapper := provider.(storagesdk.VendorMapper); !isMapper {
+			ctxlog.Info("MappingMode=native unsupported by vendor", "vendor", arraycreds.Spec.VendorType, "arraycreds", scope.ArrayCreds.Name)
+			phase = constants.ArrayCredsPhaseFailed
+			validationStatus = constants.ArrayCredsStatusFailed
+			validationMessage = fmt.Sprintf("MappingMode=native unsupported by vendor %s", arraycreds.Spec.VendorType)
+		}
+	}
+
 	scope.ArrayCreds.Status.Phase = phase
 	scope.ArrayCreds.Status.ArrayValidationStatus = validationStatus
 	scope.ArrayCreds.Status.ArrayValidationMessage = validationMessage
@@ -335,6 +354,14 @@ func buildProviderOptionsFromSpec(spec vjailbreakv1alpha1.ArrayCredsSpec) map[st
 		}
 		if spec.NetAppConfig.FlexVol != "" {
 			opts[netappsdk.OptionFlexVol] = spec.NetAppConfig.FlexVol
+		}
+	}
+	if spec.VendorType == vantarasdk.VendorName && spec.VantaraConfig != nil {
+		if spec.VantaraConfig.PoolID != "" {
+			opts[vantarasdk.OptionPoolID] = spec.VantaraConfig.PoolID
+		}
+		if spec.VantaraConfig.RESTPort != "" {
+			opts[vantarasdk.OptionRESTPort] = spec.VantaraConfig.RESTPort
 		}
 	}
 	if len(opts) == 0 {
