@@ -21,8 +21,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
-	pkgutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
+	pkgutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -1245,6 +1245,63 @@ func (osclient *OpenStackClients) GetVolume(ctx context.Context, volumeID string
 		time.Sleep(constants.DeleteOperationRetryIntervalSeconds * time.Second)
 	}
 	return nil, fmt.Errorf("failed to get volume %s after %d attempts: %s", volumeID, constants.DeleteOperationRetryCount, err)
+}
+
+// InitializeVolumeConnection exposes a volume to the host described by the
+// connector dict via Cinder's os-initialize_connection volume action. The
+// connector is an os-brick style dict (see pkg/vpwned/sdk/storage/cinder);
+// Cinder accepts arbitrary connectors — the host does not need to be a Nova
+// compute node. Returns the backend driver's connection_info (informational:
+// the Storage-Accelerated-Copy flow discovers the device by NAA on ESXi).
+func (osclient *OpenStackClients) InitializeVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) (map[string]any, error) {
+	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: os-initialize_connection for volume %s, connector %+v", volumeID, connector))
+
+	body := map[string]any{
+		"os-initialize_connection": map[string]any{"connector": connector},
+	}
+	var result struct {
+		ConnectionInfo map[string]any `json:"connection_info"`
+	}
+	response, err := osclient.BlockStorageClient.Post(
+		ctx,
+		osclient.BlockStorageClient.ServiceURL("volumes", volumeID, "action"),
+		body,
+		&result,
+		&gophercloud.RequestOpts{OkCodes: []int{200}},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("os-initialize_connection failed for volume %s: %w", volumeID, err)
+	}
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+	return result.ConnectionInfo, nil
+}
+
+// TerminateVolumeConnection removes a volume export previously created by
+// InitializeVolumeConnection via Cinder's os-terminate_connection volume
+// action. The same connector that established the connection must be
+// supplied so the backend driver can identify the export to tear down.
+func (osclient *OpenStackClients) TerminateVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) error {
+	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: os-terminate_connection for volume %s", volumeID))
+
+	body := map[string]any{
+		"os-terminate_connection": map[string]any{"connector": connector},
+	}
+	response, err := osclient.BlockStorageClient.Post(
+		ctx,
+		osclient.BlockStorageClient.ServiceURL("volumes", volumeID, "action"),
+		body,
+		nil,
+		&gophercloud.RequestOpts{OkCodes: []int{202}},
+	)
+	if err != nil {
+		return fmt.Errorf("os-terminate_connection failed for volume %s: %w", volumeID, err)
+	}
+	if response != nil && response.Body != nil {
+		defer response.Body.Close()
+	}
+	return nil
 }
 
 func (osclient *OpenStackClients) GetServerStatus(ctx context.Context, serverID string) (string, error) {

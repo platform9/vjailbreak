@@ -16,6 +16,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
 	_ "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/providers"
+	vantarasdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/vantara"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
@@ -549,6 +550,14 @@ func (migobj *Migrate) buildProviderOptions() map[string]string {
 		}
 		if migobj.NetAppFlexVol != "" {
 			opts[netappsdk.OptionFlexVol] = migobj.NetAppFlexVol
+		}
+	}
+	if migobj.VendorType == vantarasdk.VendorName {
+		if migobj.VantaraPoolID != "" {
+			opts[vantarasdk.OptionPoolID] = migobj.VantaraPoolID
+		}
+		if migobj.VantaraRESTPort != "" {
+			opts[vantarasdk.OptionRESTPort] = migobj.VantaraRESTPort
 		}
 	}
 	if len(opts) == 0 {
