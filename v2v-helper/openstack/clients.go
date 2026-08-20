@@ -1152,7 +1152,7 @@ func (osclient *OpenStackClients) CreateVM(ctx context.Context, flavor *flavors.
 			DiskBus:             "virtio",
 			BootIndex:           -1,
 		})
-		PrintLog(fmt.Sprintf("Attaching virtio probe volume %s to LDM guest %s so Windows installs the virtio storage driver on first boot",
+		pkgutils.PrintLog(fmt.Sprintf("Attaching virtio probe volume %s to LDM guest %s so Windows installs the virtio storage driver on first boot",
 			vminfo.LDMProbeVolumeID, vminfo.Name))
 	}
 
@@ -1324,15 +1324,15 @@ func (osclient *OpenStackClients) DeleteServer(ctx context.Context, serverID str
 // already-stopped instance counts as success, since "already off" is the outcome
 // we wanted and Nova would otherwise return 409.
 func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID string) error {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
+	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: Stopping server %s, authurl %s, tenant %s", serverID, osclient.AuthURL, osclient.Tenant))
 
 	status, err := osclient.GetServerStatus(ctx, serverID)
 	if err == nil && strings.EqualFold(status, "SHUTOFF") {
-		PrintLog(fmt.Sprintf("Server %s is already SHUTOFF", serverID))
+		pkgutils.PrintLog(fmt.Sprintf("Server %s is already SHUTOFF", serverID))
 		return nil
 	}
 
-	return DoRetryWithExponentialBackoff(ctx, func() error {
+	return pkgutils.DoRetryWithExponentialBackoff(ctx, func() error {
 		return servers.Stop(ctx, osclient.ComputeClient, serverID).ExtractErr()
 	}, constants.MaxPowerOffRetryLimit, constants.PowerOffRetryCap)
 }
@@ -1342,7 +1342,7 @@ func (osclient *OpenStackClients) StopServer(ctx context.Context, serverID strin
 // would issue the delete against the wrong server and swallow the resulting
 // "is not attached" error as success.
 func (osclient *OpenStackClients) DetachVolumeFromServer(ctx context.Context, serverID, volumeID string) error {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from server %s, authurl %s, tenant %s",
+	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: Detaching volume %s from server %s, authurl %s, tenant %s",
 		volumeID, serverID, osclient.AuthURL, osclient.Tenant))
 
 	err := volumeattach.Delete(ctx, osclient.ComputeClient, serverID, volumeID).ExtractErr()
@@ -1356,7 +1356,7 @@ func (osclient *OpenStackClients) DetachVolumeFromServer(ctx context.Context, se
 // attachments, or the timeout expires. Asserts only on the volume, unlike
 // WaitForVolume which also checks the appliance's own attachment list.
 func (osclient *OpenStackClients) WaitForVolumeDetached(ctx context.Context, volumeID string, timeout time.Duration) error {
-	PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume %s to detach, authurl %s, tenant %s",
+	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: Waiting for volume %s to detach, authurl %s, tenant %s",
 		volumeID, osclient.AuthURL, osclient.Tenant))
 
 	deadline := time.After(timeout)
@@ -1372,7 +1372,7 @@ func (osclient *OpenStackClients) WaitForVolumeDetached(ctx context.Context, vol
 		case <-ticker.C:
 			volume, err := volumes.Get(ctx, osclient.BlockStorageClient, volumeID).Extract()
 			if err != nil {
-				PrintLog(fmt.Sprintf("Transient error polling volume %s: %s", volumeID, err))
+				pkgutils.PrintLog(fmt.Sprintf("Transient error polling volume %s: %s", volumeID, err))
 				continue
 			}
 			if volume.Status == "error" {
