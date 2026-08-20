@@ -315,6 +315,8 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 		return errors.Wrapf(err, "failed to create pipe")
 	}
 	defer progressRead.Close()
+	var progressDone sync.WaitGroup
+	defer progressDone.Wait()
 	defer progressWrite.Close()
 
 	if destEncrypted {
@@ -328,7 +330,9 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 
 	cmdString := cmd.String()
 	utils.PrintLog(fmt.Sprintf("Executing %s\n", cmdString))
+	progressDone.Add(1)
 	go func() {
+		defer progressDone.Done()
 		scanner := bufio.NewScanner(progressRead)
 
 		lastLoggedProgress := -1
