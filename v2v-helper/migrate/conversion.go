@@ -225,6 +225,83 @@ func (migobj *Migrate) handleWindowsBootDetection(vminfo vm.VMInfo, bootVolumeIn
 	return finalBootIndex, osRelease, nil
 }
 
+// ldmImageMetadata is the boot volume image metadata vJailbreak derives for a
+// guest whose system volume sits on a Dynamic Disk. virt-v2v cannot convert such
+// a guest, so no virtio storage driver is made boot-critical and the disks have
+// to arrive on a bus Windows already has an in-box driver for.
+func ldmImageMetadata(isLDMGuest bool) map[string]string {
+	if !isLDMGuest {
+		return nil
+	}
+	return map[string]string{imagePropDiskBus: diskBusSATA}
+}
+
+// mergeBootVolumeImageMetadata layers a user-supplied VolumeImageProfile over
+// whatever vJailbreak derived, so an explicitly chosen value always wins. Returns
+// nil when there is nothing to apply, so callers can skip the API call.
+func mergeBootVolumeImageMetadata(derived, profile map[string]string) map[string]string {
+	if len(derived) == 0 && len(profile) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(derived)+len(profile))
+	for key, value := range derived {
+		merged[key] = value
+	}
+	for key, value := range profile {
+		merged[key] = value
+	}
+	return merged
+}
+
+// detectLDMGuest records whether the Windows system volume is on a Dynamic Disk
+// (LDM). Never fatal: on an inspection failure the guest is treated as non-LDM,
+// which is exactly how every Windows guest behaved before this existed.
+func (migobj *Migrate) detectLDMGuest(vminfo vm.VMInfo) {
+	if !strings.EqualFold(vminfo.OSType, constants.OSFamilyWindows) {
+		return
+	}
+
+	isLDM, root, err := virtv2v.IsLDMSystemVolume(vminfo.VMDisks)
+	if err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: could not determine whether the system volume is on a Dynamic Disk (LDM): %v", err))
+		return
+	}
+	if !isLDM {
+		return
+	}
+
+	migobj.isLDMGuest = true
+	migobj.logMessage(fmt.Sprintf(
+		"System volume %s is on a Windows Dynamic Disk (LDM), which virt-v2v cannot convert. "+
+			"Conversion will be skipped and the VM will be created on an emulated SATA bus.", root))
+}
+
+// createLDMProbeVolume creates the smallest scratch volume Cinder will make, to be
+// attached on the virtio bus at server create. It deliberately carries no image
+// metadata of its own - Nova reads that from the root volume only - and is
+// created with an empty OS type so SetVolumeImageMetadata does not stamp
+// hw_disk_bus=virtio onto it.
+func (migobj *Migrate) createLDMProbeVolume(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int) error {
+	volumeType := ""
+	if bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol; bootVol != nil {
+		volumeType = bootVol.VolumeType
+	}
+
+	// Size 0: CreateVolume rounds up to whole GiB and adds one, so this asks for
+	// the smallest volume it is capable of creating.
+	name := vminfo.Name + ldmProbeVolumeSuffix
+	probe, err := migobj.Openstackclients.CreateVolume(ctx, name, 0, "", false, volumeType, false)
+	if err != nil {
+		return errors.Wrap(err, "failed to create virtio probe volume for LDM guest")
+	}
+
+	migobj.ldmProbeVolumeID = probe.ID
+	migobj.logMessage(fmt.Sprintf(
+		"Created virtio probe volume %s (%s) for LDM guest; it will be attached on the virtio bus "+
+			"so Windows installs the virtio storage driver on first boot.", name, probe.ID))
+	return nil
+}
+
 // performDiskConversion runs virt-v2v conversion on the boot disk
 func (migobj *Migrate) performDiskConversion(ctx context.Context, vminfo vm.VMInfo, bootVolumeIndex int, osPath, osRelease string, espDiskIndex int) error {
 
@@ -445,16 +522,34 @@ func (migobj *Migrate) ConvertVolumes(ctx context.Context, vminfo vm.VMInfo) (in
 	utils.PrintLog(fmt.Sprintf("Boot disk selected: Disk %d (%s)", bootVolumeIndex, vminfo.VMDisks[bootVolumeIndex].Name))
 	vminfo.VMDisks[bootVolumeIndex].Boot = true
 
-	// Step 8: Apply merged VolumeImageProfile metadata to the boot volume. Nova/libvirt
-	// only read volume_image_metadata from the root disk, so we scope this to the boot volume.
-	if len(migobj.ImageMetadata) > 0 {
+	// Step 7.5: Resolve whether this is an LDM guest before step 8, because that
+	// decides the disk bus. The mount plan is memoised, so probing here costs no
+	// extra appliance boot and performDiskConversion reuses the answer.
+	migobj.detectLDMGuest(vminfo)
+
+	// Step 8: Apply image metadata to the boot volume. Nova/libvirt only read
+	// volume_image_metadata from the root disk, so scope this to the boot volume.
+	// Anything vJailbreak derives goes underneath the user's VolumeImageProfile,
+	// so an explicitly chosen bus still wins.
+	imageMetadata := mergeBootVolumeImageMetadata(ldmImageMetadata(migobj.isLDMGuest), migobj.ImageMetadata)
+	if len(imageMetadata) > 0 {
 		bootVol := vminfo.VMDisks[bootVolumeIndex].OpenstackVol
 		if bootVol != nil {
-			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, migobj.ImageMetadata); err != nil {
-				return -1, errors.Wrap(err, "failed to apply VolumeImageProfile metadata to boot volume")
+			if err := migobj.Openstackclients.ApplyBootVolumeImageMetadata(ctx, bootVol, imageMetadata); err != nil {
+				return -1, errors.Wrap(err, "failed to apply image metadata to boot volume")
 			}
-			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) from VolumeImageProfiles to boot volume %s: %v",
-				len(migobj.ImageMetadata), bootVol.ID, migobj.ImageMetadata))
+			migobj.logMessage(fmt.Sprintf("Applied %d image metadata key(s) to boot volume %s: %v",
+				len(imageMetadata), bootVol.ID, imageMetadata))
+		}
+	}
+
+	// Step 8.5: An LDM guest boots on SATA and therefore never loads a virtio
+	// storage driver. Attaching one scratch volume on the virtio bus makes Windows
+	// perform a real PnP install of viostor on first boot, which is what allows a
+	// later move to virtio. Offline registry injection does not achieve this.
+	if migobj.isLDMGuest {
+		if err := migobj.createLDMProbeVolume(ctx, vminfo, bootVolumeIndex); err != nil {
+			return -1, err
 		}
 	}
 
