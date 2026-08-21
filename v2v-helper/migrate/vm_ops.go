@@ -213,7 +213,11 @@ func (migobj *Migrate) DetachAllVolumesWithCleanup(ctx context.Context, vminfo v
 	return nil
 }
 
-func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+// resolveTargetServerID returns the ID of the server the boot volume is attached
+// to, in whatever state it is. Kept separate from verifyVMCreatedDespiteTimeout,
+// which also insists on ACTIVE - wrong for the LDM promotion, where the guest is
+// deliberately stopped first and an ACTIVE check would reject every promotion.
+func (migobj *Migrate) resolveTargetServerID(ctx context.Context, vminfo vm.VMInfo) (string, error) {
 	vjailbreakUUID, err := openstack.GetCurrentInstanceUUID()
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get vJailbreak instance UUID")
@@ -242,6 +246,14 @@ func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo
 	attachedServerID := volume.Attachments[0].ServerID
 	if attachedServerID == vjailbreakUUID {
 		return "", fmt.Errorf("boot volume is still attached to vJailbreak VM")
+	}
+	return attachedServerID, nil
+}
+
+func (migobj *Migrate) verifyVMCreatedDespiteTimeout(ctx context.Context, vminfo vm.VMInfo) (string, error) {
+	attachedServerID, err := migobj.resolveTargetServerID(ctx, vminfo)
+	if err != nil {
+		return "", err
 	}
 
 	status, err := migobj.Openstackclients.GetServerStatus(ctx, attachedServerID)
