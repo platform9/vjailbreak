@@ -6,6 +6,7 @@ require (
 	github.com/bougou/go-ipmi v0.7.6
 	github.com/canonical/gomaasclient v0.12.0
 	github.com/devans10/pugo/flasharray v0.0.0-20241116160615-6bb8c469c9a0
+	github.com/go-logr/logr v1.4.3
 	github.com/google/go-github/v63 v63.0.0
 	github.com/gophercloud/gophercloud/v2 v2.9.0
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3
@@ -43,7 +44,6 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.0 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
