@@ -63,6 +63,43 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 }
 
 
+// attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
+//
+// Multiple migrations can share one Proxy VM. attachDiskToProxy computes a
+// free controller/unit-number slot from a snapshot of the VM's device list,
+// then submits a ReconfigVM_Task -- not atomic, so concurrent callers can
+// compute the same slot and one fails with "Invalid configuration for device
+// 'N'." utils.WaitForProxyVMLock/ReleaseProxyVMLock serialize this against
+// vpwned-sdk's in-memory lock, held only for this function.
+func (migobj *Migrate) attachAllDisks(ctx context.Context, migrationName string,
+	proxyVMObj *object.VirtualMachine, transfers []hotAddDiskTransfer,
+) error {
+	if err := utils.WaitForProxyVMLock(ctx, migobj.ProxyVMK8sName, migrationName); err != nil {
+		return errors.Wrap(err, "failed waiting for Proxy VM attach turn")
+	}
+	defer func() {
+		// A fresh, short-lived context: releasing must still happen even if
+		// ctx was cancelled or timed out while we were attaching.
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := utils.ReleaseProxyVMLock(releaseCtx, migobj.ProxyVMK8sName, migrationName); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: failed to release Proxy VM attach lock: %v", err))
+		}
+	}()
+
+	migobj.logMessage(constants.EventMessageHotAddAttachDisks)
+	for i := range transfers {
+		migobj.logMessage(fmt.Sprintf("Attaching disk %d/%d: %s", i+1, len(transfers), transfers[i].SnapshotVMDKPath))
+		key, err := migobj.attachDiskToProxy(ctx, proxyVMObj, transfers[i].SnapshotVMDKPath)
+		if err != nil {
+			return errors.Wrapf(err, "failed to attach disk %s to Proxy VM", transfers[i].SnapshotVMDKPath)
+		}
+		transfers[i].DiskKey = key
+		migobj.logMessage(fmt.Sprintf("Disk attached with vCenter key %d", key))
+	}
+	return nil
+}
+
 // getFrozenVMDKs returns one hotAddDiskTransfer per data disk on the source VM,
 // populated with the frozen parent VMDK path and device key after the snapshot.
 func (migobj *Migrate) getFrozenVMDKs(ctx context.Context, vminfo vm.VMInfo) ([]hotAddDiskTransfer, error) {
@@ -533,16 +570,15 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
 	}()
 
-	// 6. Attach each frozen disk to the Proxy VM.
-	migobj.logMessage(constants.EventMessageHotAddAttachDisks)
-	for i := range transfers {
-		migobj.logMessage(fmt.Sprintf("Attaching disk %d/%d: %s", i+1, len(transfers), transfers[i].SnapshotVMDKPath))
-		key, err := migobj.attachDiskToProxy(ctx, proxyVMObj, transfers[i].SnapshotVMDKPath)
-		if err != nil {
-			return errors.Wrapf(err, "failed to attach disk %s to Proxy VM", transfers[i].SnapshotVMDKPath)
-		}
-		transfers[i].DiskKey = key
-		migobj.logMessage(fmt.Sprintf("Disk attached with vCenter key %d", key))
+	// 6. Attach each frozen disk to the Proxy VM. Serialized across migrations
+	// sharing this Proxy VM via a short-lived lock held by vpwned-sdk — see
+	// attachAllDisks for why.
+	migrationName, err := utils.GetMigrationObjectName()
+	if err != nil {
+		return errors.Wrap(err, "failed to get migration object name")
+	}
+	if err := migobj.attachAllDisks(ctx, migrationName, proxyVMObj, transfers); err != nil {
+		return err
 	}
 
 	migobj.adjustProxyDiskCount(ctx, len(transfers))

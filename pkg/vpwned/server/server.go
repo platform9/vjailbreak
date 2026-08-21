@@ -164,6 +164,14 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	// SSH key pair generation — generates RSA-4096, stores in k8s Secret, returns public key only.
 	mux.HandleFunc("/vpw/v1/generate-ssh-keypair", HandleGenerateSSHKeyPair)
 
+	// Proxy VM attach lock — in-memory mutex so only one migration at a time
+	// attaches disks to a shared Proxy VM (see proxyvm_lock_handler.go).
+	if err := InitProxyVMLock(); err != nil {
+		logrus.Warnf("proxyvm lock init skipped (non-cluster env): %v", err)
+	}
+	mux.HandleFunc("/vpw/v1/proxyvm-lock/acquire", HandleAcquireProxyVMLock)
+	mux.HandleFunc("/vpw/v1/proxyvm-lock/release", HandleReleaseProxyVMLock)
+
 	// Proxy VM creation from OVA — accepts deploy config, runs full creation routine async.
 	mux.HandleFunc("/vpw/v1/create-proxy-vm", HandleCreateProxyVM)
 
