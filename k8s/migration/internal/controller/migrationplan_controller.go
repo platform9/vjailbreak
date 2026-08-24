@@ -605,16 +605,9 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
-	// One Nova round-trip for the whole plan, fetched here alongside the creds
-	// checks above rather than inside validation. That placement matters: a
-	// failure here means "we couldn't ask" (expired token, network blip, Nova
-	// degraded) — the same class of problem as the creds checks above — not a
-	// verdict on any VM's content. Handling it identically to those checks means
-	// it just requeues; it never marks a Migration or touches the plan's status,
-	// so it can never brick a plan the way a genuine content failure correctly
-	// does. This costs one Nova call even for plans where every VM pins its own
-	// flavor and never needed the answer — accepted as the price of never
-	// confusing "couldn't check" with "checked, and it's bad".
+	// One Nova call for the whole plan, fetched here alongside the creds checks
+	// above. A failure here means we couldn't ask, not that the answer was bad,
+	// so it's handled the same way: just requeue, no Migration or status touched.
 	var candidateFlavors []flavors.Flavor
 	if len(vmsToValidate) > 0 {
 		var err error
@@ -633,10 +626,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	}
 	var validationErr error
 	if len(vmsToValidate) > 0 {
-		// Validate VM OS types and resolve target flavors before proceeding. Flavor
-		// listing already happened above; this only ever fails now for genuine
-		// content reasons (bad OS, or literally no VM in the plan has a schedulable
-		// shape).
+		// Validate VM OS types and resolve target flavors before proceeding.
 		validation, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds, vmsToValidate, candidateFlavors)
 	}
 
@@ -2788,14 +2778,8 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 			continue
 		}
 
-		// Pre-flight flavor resolution against the plan's already-fetched candidate
-		// set — listing itself happened once in ReconcileMigrationPlanJob, and its
-		// failure never reaches here (see the comment there). So any error at this
-		// point is about this VM alone: either its own CPU/memory/GPU shape doesn't
-		// match anything (ErrNoSuitableFlavor), or the AZ/cluster filter left no
-		// candidates to check against at all. Both are skipped the same way — the
-		// VM is not schedulable today, but that says nothing about its siblings, so
-		// validation keeps going instead of aborting the whole batch.
+		// Any error here is this VM's problem alone (bad shape, or no candidates
+		// after AZ filtering) — skip it and keep validating the rest of the batch.
 		flavorID, err := resolveTargetFlavorID(vmMachine, migrationtemplate, openstackcreds, candidateFlavors)
 		if err != nil {
 			r.ctxlog.Info("VM has no schedulable target flavor and will be skipped",

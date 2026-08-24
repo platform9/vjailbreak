@@ -1205,15 +1205,8 @@ func TestVMDisplayNames(t *testing.T) {
 	}
 }
 
-// TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup guards a regression
-// risk from pre-flight validation: an operator-pinned VM must never depend on
-// the plan's candidate flavor list at all. Flavor listing itself now happens
-// once in ReconcileMigrationPlanJob, before validateMigrationPlanVMs is even
-// called, so this test passes a nil candidate set — standing in for "the
-// listing call failed, or was never made" — and confirms a pinned VM still
-// resolves cleanly. If a future change made the pinned path consult the
-// candidate list anyway, this would fail with a nil-slice panic or a spurious
-// skip instead of resolving to the pinned ID.
+// TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup confirms a pinned VM
+// resolves cleanly even with a nil candidate list — it must never consult it.
 func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := vjailbreakv1alpha1.AddToScheme(scheme); err != nil {
