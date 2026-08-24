@@ -1689,15 +1689,11 @@ func (r *MigrationPlanReconciler) planNeedsFlavorLookup(
 	return false
 }
 
-// candidateFlavorsForPlan returns the flavors that are eligible for a plan's
-// target, applying the PCD availability-zone restriction. This is the single
-// Nova round-trip for a whole MigrationPlan: pre-flight validation calls it once
-// and caches the per-VM result, so the previous behaviour of one ListAllFlavors
-// call per VM is gone.
+// candidateFlavorsForPlan returns the plan's eligible flavors, filtered to its
+// target availability zone. Called once per plan and reused across VMs.
 //
-// In PCD the cluster name is the availability zone, and a flavor is bound to a
-// cluster via its `availability_zone` extra_spec property. Flavors without that
-// property are global and remain eligible.
+// In PCD, a flavor's `availability_zone` extra_spec binds it to one cluster;
+// flavors without it are global.
 func (r *MigrationPlanReconciler) candidateFlavorsForPlan(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
