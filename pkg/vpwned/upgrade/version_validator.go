@@ -80,17 +80,23 @@ func DiscoverCurrentCRs(ctx context.Context, kubeClient client.Client) ([]CRInfo
 	return currentCRs, nil
 }
 
+// existenceProbe lists at most two items. These checks only ask "is anything here?", so
+// paging the whole inventory - thousands of VMwareMachines on a large vCenter - would cost
+// megabytes of response for a yes/no answer. Two rather than one because the agent check
+// has to see past the always-present vjailbreak-master node.
+var existenceProbe = metav1.ListOptions{Limit: 2}
+
 func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, dynamicClient dynamic.Interface, targetVersion string) (*ValidationResult, error) {
 	result := &ValidationResult{}
 
 	gvr := schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "migrationplans"}
-	unstructuredList, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	unstructuredList, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, existenceProbe)
 	if err == nil && len(unstructuredList.Items) == 0 {
 		result.NoMigrationPlans = true
 	}
 
 	gvr = schema.GroupVersionResource{Group: "vjailbreak.k8s.pf9.io", Version: "v1alpha1", Resource: "rollingmigrationplans"}
-	unstructuredList, err = dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	unstructuredList, err = dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, existenceProbe)
 	if err == nil && len(unstructuredList.Items) == 0 {
 		result.NoRollingMigrationPlans = true
 	}
@@ -123,7 +129,9 @@ func RunPreUpgradeChecks(ctx context.Context, kubeClient client.Client, dynamicC
 		Version:  "v1alpha1",
 		Resource: "vjailbreaknodes",
 	}
-	list, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+	// Limit 2 is enough: one page of two either contains a node other than the master, or
+	// proves there is at most the master.
+	list, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, existenceProbe)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +170,7 @@ func checkForAnyCustomResources(ctx context.Context, kubeClient client.Client, d
 			Resource: crInfo.Plural,
 		}
 
-		unstructuredList, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
+		unstructuredList, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, existenceProbe)
 		if err != nil {
 			log.Printf("Warning: Could not list %s CRs: %v", crInfo.Kind, err)
 			continue
@@ -657,6 +665,41 @@ func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig 
 	return nil
 }
 
+// Deleting the credentials hands the rest of the work to the controllers: the VMwareCreds
+// finalizer removes the machines, hosts and clusters it owns, and the OpenstackCreds
+// finalizer removes PCD clusters and non-master agent nodes, refusing to complete until
+// those nodes are gone. Both run asynchronously, so cleanup has to wait for them to settle
+// before the pre-upgrade checks are re-run - otherwise the checks see resources that are
+// already on their way out and abort the upgrade.
+// WaitForCustomResourcesDrained blocks until no vJailbreak custom resources remain, or the
+// timeout expires. A timeout is not fatal on its own: the caller re-runs the pre-upgrade
+// checks, which report exactly what is still present.
+func WaitForCustomResourcesDrained(ctx context.Context, kubeClient client.Client, dynamicClient dynamic.Interface) error {
+	deadline := time.Now().Add(cleanupDrainTimeout)
+
+	for {
+		drained, err := checkForAnyCustomResources(ctx, kubeClient, dynamicClient)
+		if err != nil {
+			return fmt.Errorf("failed to check whether custom resources are drained: %w", err)
+		}
+		if drained {
+			log.Println("All custom resources are gone.")
+			return nil
+		}
+
+		if time.Now().After(deadline) {
+			return fmt.Errorf("custom resources still present after %s", cleanupDrainTimeout)
+		}
+
+		log.Println("Waiting for custom resources to finish deleting...")
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(cleanupDrainPollInterval):
+		}
+	}
+}
+
 func deleteAllCustomResources(ctx context.Context, kubeClient client.Client, restConfig *rest.Config) error {
 	currentCRs, err := DiscoverCurrentCRs(ctx, kubeClient)
 	if err != nil {
@@ -684,24 +727,15 @@ func deleteCRInstances(ctx context.Context, restConfig *rest.Config, crInfo CRIn
 		return fmt.Errorf("failed to create dynamic client for %s: %w", crInfo.Kind, err)
 	}
 
-	unstructuredList, err := dynamicClient.Resource(gvr).Namespace(Namespace).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to list %s CRs: %w", crInfo.Kind, err)
-	}
-
-	for _, item := range unstructuredList.Items {
-		err := dynamicClient.Resource(gvr).Namespace(Namespace).Delete(ctx, item.GetName(), metav1.DeleteOptions{})
-		if err != nil {
-			log.Printf("Failed to delete %s %s: %v", crInfo.Kind, item.GetName(), err)
-		} else {
-			log.Printf("Deleted %s: %s", crInfo.Kind, item.GetName())
+	if err := dynamicClient.Resource(gvr).Namespace(Namespace).
+		DeleteCollection(ctx, metav1.DeleteOptions{}, metav1.ListOptions{}); err != nil {
+		if kerrors.IsNotFound(err) {
+			return nil
 		}
+		return fmt.Errorf("failed to delete %s CRs: %w", crInfo.Kind, err)
 	}
 
-	if len(unstructuredList.Items) > 0 {
-		log.Printf("Deleted %d %s CRs", len(unstructuredList.Items), crInfo.Kind)
-	}
-
+	log.Printf("Requested deletion of all %s CRs", crInfo.Kind)
 	return nil
 }
 

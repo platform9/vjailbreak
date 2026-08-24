@@ -64,11 +64,6 @@ var DeploymentConfigs = []DeploymentConfig{
 	},
 }
 
-var (
-	deploymentWaitTimeout  = 5 * time.Minute
-	deploymentPollInterval = 10 * time.Second
-)
-
 // UpgradeExecutor handles the upgrade process as a standalone job
 type UpgradeExecutor struct {
 	kubeClient    client.Client
@@ -208,6 +203,15 @@ func (e *UpgradeExecutor) runPreUpgradePhase(ctx context.Context, targetVersion 
 			if err := CleanupResources(ctx, e.kubeClient, e.config); err != nil {
 				return fmt.Errorf("auto-cleanup failed: %w", err)
 			}
+
+			// Deletion is asynchronous: the credential finalizers remove the resources they
+			// own after cleanup returns. Re-checking immediately would see resources that
+			// are already terminating and abort the upgrade.
+			e.updateProgress("Waiting for resources to be deleted", StatusInProgress, "")
+			if err := WaitForCustomResourcesDrained(ctx, e.kubeClient, e.dynamicClient); err != nil {
+				log.Printf("Warning: %v", err)
+			}
+
 			result, err = RunPreUpgradeChecks(ctx, e.kubeClient, e.dynamicClient, targetVersion)
 			if err != nil {
 				return fmt.Errorf("pre-upgrade checks failed after cleanup: %w", err)

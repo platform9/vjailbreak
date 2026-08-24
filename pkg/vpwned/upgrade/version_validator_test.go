@@ -522,7 +522,70 @@ func newCR(resourceKind, name string) *unstructured.Unstructured {
 
 func newFakeDynamic(t *testing.T, objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	t.Helper()
-	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds(), objs...)
+
+	dyn := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), listKinds(), objs...)
+
+	// The fake client records a delete-collection action but its default reaction deletes
+	// nothing, so emulate it against the tracker directly. Going through the client would
+	// re-enter Invokes and deadlock.
+	dyn.PrependReactor("delete-collection", "*", func(action k8stesting.Action) (bool, runtime.Object, error) {
+		gvr := action.GetResource()
+		listKind, ok := listKinds()[gvr]
+		if !ok {
+			return true, nil, fmt.Errorf("no list kind registered for %s", gvr.Resource)
+		}
+
+		// The tracker appends "List" to the kind it is given, so hand it the item kind.
+		itemKind := strings.TrimSuffix(listKind, "List")
+
+		tracker := dyn.Tracker()
+		list, err := tracker.List(gvr, gvr.GroupVersion().WithKind(itemKind), action.GetNamespace())
+		if err != nil {
+			return true, nil, err
+		}
+		items, err := meta.ExtractList(list)
+		if err != nil {
+			return true, nil, err
+		}
+		for _, item := range items {
+			accessor, err := meta.Accessor(item)
+			if err != nil {
+				return true, nil, err
+			}
+			if err := tracker.Delete(gvr, action.GetNamespace(), accessor.GetName()); err != nil {
+				return true, nil, err
+			}
+		}
+		return true, nil, nil
+	})
+
+	return dyn
+}
+
+// fastDrain shrinks the drain wait so tests do not sleep through production intervals.
+func fastDrain(t *testing.T) {
+	t.Helper()
+
+	originalTimeout, originalInterval := cleanupDrainTimeout, cleanupDrainPollInterval
+	cleanupDrainTimeout = 200 * time.Millisecond
+	cleanupDrainPollInterval = time.Millisecond
+	t.Cleanup(func() {
+		cleanupDrainTimeout, cleanupDrainPollInterval = originalTimeout, originalInterval
+	})
+}
+
+// deleteCallsByVerb counts the delete verbs the flow issued, so a regression back to
+// one-request-per-object is visible rather than merely slow.
+func deleteCallsByVerb(dyn *dynamicfake.FakeDynamicClient) (collections, items int) {
+	for _, action := range dyn.Actions() {
+		switch action.GetVerb() {
+		case "delete-collection":
+			collections++
+		case "delete":
+			items++
+		}
+	}
+	return collections, items
 }
 
 // withFakeDynamic makes CleanupResources and deleteCRInstances use the supplied fake
@@ -1930,4 +1993,219 @@ func TestRestoreResourcesSkipsDeploymentWithoutBackup(t *testing.T) {
 			t.Errorf("%s replicas = %v, want 2 from its snapshot", cfg.Name, dep.Spec.Replicas)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------------
+// #2280: one request per kind, existence probes, and waiting for the cascade
+// ---------------------------------------------------------------------------
+
+// The sweep must delete each kind with a single request. One VMwareMachine exists per VM
+// in the vCenter inventory, so a per-object loop cost thousands of sequential round trips
+// and raced the VMwareCreds cascade, which is what produced the "already removed" errors.
+func TestDeleteAllCustomResourcesUsesOneRequestPerKind(t *testing.T) {
+	dyn := newFakeDynamic(t,
+		newCR("Migration", "migration-1"),
+		newCR("Migration", "migration-2"),
+		newCR("Migration", "migration-3"),
+		newCR("VMwareMachine", "vm-1"),
+		newCR("VMwareMachine", "vm-2"),
+	)
+	withFakeDynamic(t, dyn)
+
+	kubeClient := newFakeClient(t,
+		vjailbreakCRD("migrations.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "migrations", "Migration"),
+		vjailbreakCRD("vmwaremachines.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "vmwaremachines", "VMwareMachine"),
+	)
+
+	if err := deleteAllCustomResources(context.Background(), kubeClient, &rest.Config{}); err != nil {
+		t.Fatalf("deleteAllCustomResources() error = %v, want nil", err)
+	}
+
+	collections, items := deleteCallsByVerb(dyn)
+	if collections != 2 {
+		t.Errorf("delete-collection calls = %d, want 2 (one per kind)", collections)
+	}
+	if items != 0 {
+		t.Errorf("per-object delete calls = %d, want 0; the sweep must not scale with inventory size", items)
+	}
+
+	for _, resource := range []string{"migrations", "vmwaremachines"} {
+		list, err := dyn.Resource(vjailbreakGVR(resource)).Namespace(Namespace).
+			List(context.Background(), metav1.ListOptions{})
+		if err != nil {
+			t.Fatalf("failed to list %s: %v", resource, err)
+		}
+		if len(list.Items) != 0 {
+			t.Errorf("%s left = %d, want 0", resource, len(list.Items))
+		}
+	}
+}
+
+// Deleting a kind the credential cascade already emptied must be a no-op, not an error:
+// this is the "already removed" noise from #2280.
+func TestDeleteAllCustomResourcesOnAlreadyEmptyKind(t *testing.T) {
+	dyn := newFakeDynamic(t)
+	withFakeDynamic(t, dyn)
+
+	kubeClient := newFakeClient(t,
+		vjailbreakCRD("vmwaremachines.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "vmwaremachines", "VMwareMachine"),
+	)
+
+	if err := deleteAllCustomResources(context.Background(), kubeClient, &rest.Config{}); err != nil {
+		t.Fatalf("deleteAllCustomResources() error = %v, want nil for an already-empty kind", err)
+	}
+
+	if collections, items := deleteCallsByVerb(dyn); collections != 1 || items != 0 {
+		t.Errorf("calls = %d collection / %d item, want 1 / 0", collections, items)
+	}
+}
+
+// existenceProbe keeps the checks from paging a whole vCenter inventory to answer a
+// yes/no question. Two is the minimum that still sees past the master node.
+func TestExistenceProbeIsBounded(t *testing.T) {
+	if existenceProbe.Limit < 2 {
+		t.Errorf("existenceProbe.Limit = %d, want at least 2 so the agent check can see past vjailbreak-master",
+			existenceProbe.Limit)
+	}
+}
+
+// truncateListTo makes a resource return only the first n items, standing in for the
+// bounded page the existence probe asks for. The fake client drops ListOptions.Limit, so
+// this is how a partial page is exercised.
+func truncateListTo(t *testing.T, dyn *dynamicfake.FakeDynamicClient, resource string, n int) {
+	t.Helper()
+
+	gvr := vjailbreakGVR(resource)
+	listKind := listKinds()[gvr]
+
+	dyn.PrependReactor("list", resource, func(action k8stesting.Action) (bool, runtime.Object, error) {
+		list, err := dyn.Tracker().List(gvr, gvr.GroupVersion().WithKind(strings.TrimSuffix(listKind, "List")),
+			action.GetNamespace())
+		if err != nil {
+			return true, nil, err
+		}
+		unstructuredList, ok := list.(*unstructured.UnstructuredList)
+		if !ok {
+			return true, nil, fmt.Errorf("unexpected list type %T", list)
+		}
+		if len(unstructuredList.Items) > n {
+			unstructuredList.Items = unstructuredList.Items[:n]
+		}
+		return true, unstructuredList, nil
+	})
+}
+
+// A bounded page must not turn "many agents" into "scaled down". The master is skipped by
+// name, so a page of two always carries a non-master when one exists.
+func TestBoundedPageStillDetectsAgents(t *testing.T) {
+	crds := []client.Object{
+		vjailbreakCRD("vjailbreaknodes.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "vjailbreaknodes", "VjailbreakNode"),
+	}
+
+	tests := []struct {
+		name            string
+		nodes           []runtime.Object
+		wantScaledDown  bool
+		wantNoCustomRes bool
+	}{
+		{
+			name:            "master only",
+			nodes:           []runtime.Object{newCR("VjailbreakNode", "vjailbreak-master")},
+			wantScaledDown:  true,
+			wantNoCustomRes: true,
+		},
+		{
+			name: "master plus workers, page truncated to two",
+			nodes: []runtime.Object{
+				newCR("VjailbreakNode", "vjailbreak-master"),
+				newCR("VjailbreakNode", "vjailbreak-worker-1"),
+				newCR("VjailbreakNode", "vjailbreak-worker-2"),
+				newCR("VjailbreakNode", "vjailbreak-worker-3"),
+			},
+			wantScaledDown:  false,
+			wantNoCustomRes: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dyn := newFakeDynamic(t, tt.nodes...)
+			truncateListTo(t, dyn, "vjailbreaknodes", 2)
+
+			result, err := RunPreUpgradeChecks(context.Background(), newFakeClient(t, crds...), dyn, "v0.4.9")
+			if err != nil {
+				t.Fatalf("RunPreUpgradeChecks() error = %v, want nil", err)
+			}
+			if result.AgentsScaledDown != tt.wantScaledDown {
+				t.Errorf("AgentsScaledDown = %t, want %t", result.AgentsScaledDown, tt.wantScaledDown)
+			}
+			if result.NoCustomResources != tt.wantNoCustomRes {
+				t.Errorf("NoCustomResources = %t, want %t", result.NoCustomResources, tt.wantNoCustomRes)
+			}
+		})
+	}
+}
+
+func TestWaitForCustomResourcesDrained(t *testing.T) {
+	fastDrain(t)
+
+	crds := []client.Object{
+		vjailbreakCRD("migrations.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "migrations", "Migration"),
+	}
+
+	t.Run("returns immediately when nothing is left", func(t *testing.T) {
+		err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), newFakeDynamic(t))
+		if err != nil {
+			t.Fatalf("WaitForCustomResourcesDrained() error = %v, want nil", err)
+		}
+	})
+
+	t.Run("waits for a resource that is still terminating", func(t *testing.T) {
+		dyn := newFakeDynamic(t, newCR("Migration", "migration-1"))
+
+		// Stand in for a finalizer completing: the resource disappears on a later poll.
+		polls := 0
+		dyn.PrependReactor("list", "migrations", func(action k8stesting.Action) (bool, runtime.Object, error) {
+			polls++
+			if polls < 3 {
+				list := &unstructured.UnstructuredList{}
+				list.SetGroupVersionKind(vjailbreakGVR("migrations").GroupVersion().WithKind("MigrationList"))
+				list.Items = []unstructured.Unstructured{*newCR("Migration", "migration-1")}
+				return true, list, nil
+			}
+			list := &unstructured.UnstructuredList{}
+			list.SetGroupVersionKind(vjailbreakGVR("migrations").GroupVersion().WithKind("MigrationList"))
+			return true, list, nil
+		})
+
+		if err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), dyn); err != nil {
+			t.Fatalf("WaitForCustomResourcesDrained() error = %v, want nil once the resource is gone", err)
+		}
+		if polls < 3 {
+			t.Errorf("polls = %d, want it to keep polling until the resource disappeared", polls)
+		}
+	})
+
+	t.Run("reports what is still present when the timeout expires", func(t *testing.T) {
+		dyn := newFakeDynamic(t, newCR("Migration", "migration-1"))
+
+		err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), dyn)
+		if err == nil {
+			t.Fatal("WaitForCustomResourcesDrained() error = nil, want a timeout")
+		}
+		if !strings.Contains(err.Error(), "still present") {
+			t.Errorf("error = %q, want it to say resources are still present", err)
+		}
+	})
+
+	t.Run("a cancelled context aborts the wait", func(t *testing.T) {
+		dyn := newFakeDynamic(t, newCR("Migration", "migration-1"))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		if err := WaitForCustomResourcesDrained(ctx, newFakeClient(t, crds...), dyn); err == nil {
+			t.Fatal("WaitForCustomResourcesDrained() error = nil, want the cancelled context surfaced")
+		}
+	})
 }

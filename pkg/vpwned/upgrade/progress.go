@@ -38,3 +38,18 @@ const (
 const TotalUpgradeSteps = 12
 
 const TotalRollbackSteps = 5
+
+// Timing knobs for the upgrade flow. Declared as vars rather than consts only so tests can
+// shorten them; treat them as constants everywhere else.
+var (
+	// How long to wait for a deployment to become ready or to scale to zero, and how often
+	// to re-check.
+	deploymentWaitTimeout  = 5 * time.Minute
+	deploymentPollInterval = 10 * time.Second
+
+	// How long to wait for the credential finalizers to finish removing the resources they
+	// own after cleanup, and how often to re-check. The OpenstackCreds finalizer will not
+	// complete until its non-master agent nodes are gone, so this is not instant.
+	cleanupDrainTimeout      = 3 * time.Minute
+	cleanupDrainPollInterval = 5 * time.Second
+)
