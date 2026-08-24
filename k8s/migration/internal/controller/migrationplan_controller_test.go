@@ -1270,7 +1270,7 @@ func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 	}
 
 	validation, err := r.validateMigrationPlanVMs(context.Background(), migrationplan,
-		migrationtemplate, vmwcreds, openstackcreds, []string{vmKey}, nil)
+		migrationtemplate, vmwcreds, openstackcreds, []string{vmKey}, nil, nil)
 	if err != nil {
 		t.Fatalf("validation must not require a candidate flavor for a pinned flavor, got: %v", err)
 	}
@@ -1286,11 +1286,11 @@ func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 	}
 }
 
-// TestPlanNeedsFlavorLookup locks in the ReconcileMigrationPlanJob-level half
-// of the "operator-pinned plans never call Nova" guarantee: a fully-pinned
-// plan must report no lookup needed, so the caller skips the Nova call
-// entirely, while a plan with even one unpinned VM must still ask.
-func TestPlanNeedsFlavorLookup(t *testing.T) {
+// TestFetchVMsToValidate covers the ReconcileMigrationPlanJob-level half of
+// the "operator-pinned plans never call Nova" guarantee (a fully-pinned plan
+// must report no lookup needed), and that every successfully-fetched VM is
+// returned for validateMigrationPlanVMs to reuse instead of re-fetching.
+func TestFetchVMsToValidate(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := vjailbreakv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add scheme: %v", err)
@@ -1323,28 +1323,32 @@ func TestPlanNeedsFlavorLookup(t *testing.T) {
 	unpinned, unpinnedKey := newVMMachine("unpinned", "vm-203", "")
 
 	tests := []struct {
-		name    string
-		objects []client.Object
-		vmKeys  []string
-		want    bool
+		name            string
+		objects         []client.Object
+		vmKeys          []string
+		wantNeedsFetch  bool
+		wantFetchedKeys []string
 	}{
 		{
-			name:    "every VM pinned: no lookup needed",
-			objects: []client.Object{pinnedA, pinnedB},
-			vmKeys:  []string{pinnedAKey, pinnedBKey},
-			want:    false,
+			name:            "every VM pinned: no lookup needed, both fetched",
+			objects:         []client.Object{pinnedA, pinnedB},
+			vmKeys:          []string{pinnedAKey, pinnedBKey},
+			wantNeedsFetch:  false,
+			wantFetchedKeys: []string{pinnedAKey, pinnedBKey},
 		},
 		{
-			name:    "one VM unpinned: lookup still needed",
-			objects: []client.Object{pinnedA, unpinned},
-			vmKeys:  []string{pinnedAKey, unpinnedKey},
-			want:    true,
+			name:            "one VM unpinned: lookup still needed, both fetched",
+			objects:         []client.Object{pinnedA, unpinned},
+			vmKeys:          []string{pinnedAKey, unpinnedKey},
+			wantNeedsFetch:  true,
+			wantFetchedKeys: []string{pinnedAKey, unpinnedKey},
 		},
 		{
-			name:    "VM can't be fetched: defaults to needing a lookup",
-			objects: []client.Object{pinnedA},
-			vmKeys:  []string{pinnedAKey, "missing-vm"},
-			want:    true,
+			name:            "VM can't be fetched: defaults to needing a lookup, only found VM returned",
+			objects:         []client.Object{pinnedA},
+			vmKeys:          []string{pinnedAKey, "missing-vm"},
+			wantNeedsFetch:  true,
+			wantFetchedKeys: []string{pinnedAKey},
 		},
 	}
 
@@ -1363,9 +1367,17 @@ func TestPlanNeedsFlavorLookup(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: credsName, Namespace: ns},
 			}
 
-			got := r.planNeedsFlavorLookup(context.Background(), migrationtemplate, vmwcreds, tt.vmKeys)
-			if got != tt.want {
-				t.Errorf("planNeedsFlavorLookup() = %v, want %v", got, tt.want)
+			fetched, needsLookup := r.fetchVMsToValidate(context.Background(), migrationtemplate, vmwcreds, tt.vmKeys)
+			if needsLookup != tt.wantNeedsFetch {
+				t.Errorf("needsLookup = %v, want %v", needsLookup, tt.wantNeedsFetch)
+			}
+			if len(fetched) != len(tt.wantFetchedKeys) {
+				t.Errorf("fetched has %d entries, want %d", len(fetched), len(tt.wantFetchedKeys))
+			}
+			for _, key := range tt.wantFetchedKeys {
+				if _, ok := fetched[key]; !ok {
+					t.Errorf("fetched[%q] missing, want present", key)
+				}
 			}
 		})
 	}

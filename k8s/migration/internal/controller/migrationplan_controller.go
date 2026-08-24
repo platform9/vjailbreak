@@ -601,10 +601,14 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
+	// Fetched once here and reused by validateMigrationPlanVMs below, so each VM
+	// is looked up at most once per reconcile instead of twice.
+	fetchedVMs, needsFlavorLookup := r.fetchVMsToValidate(ctx, migrationtemplate, vmwcreds, vmsToValidate)
+
 	// One Nova call for the whole plan; skipped if every VM is pinned. A
 	// failure here is just requeued, same as the creds checks above.
 	var candidateFlavors []flavors.Flavor
-	if len(vmsToValidate) > 0 && r.planNeedsFlavorLookup(ctx, migrationtemplate, vmwcreds, vmsToValidate) {
+	if needsFlavorLookup {
 		var err error
 		candidateFlavors, err = r.candidateFlavorsForPlan(ctx, migrationtemplate, openstackcreds)
 		if err != nil {
@@ -621,7 +625,7 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 	var validationErr error
 	if len(vmsToValidate) > 0 {
 		// Validate VM OS types and resolve target flavors before proceeding.
-		validation, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds, vmsToValidate, candidateFlavors)
+		validation, validationErr = r.validateMigrationPlanVMs(ctx, migrationplan, migrationtemplate, vmwcreds, openstackcreds, vmsToValidate, fetchedVMs, candidateFlavors)
 	}
 
 	if validationErr != nil {
@@ -1671,22 +1675,31 @@ func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[s
 	configMapData["DATA_ONLY"] = strconv.FormatBool(migrationobj.Spec.DataOnly)
 }
 
-// planNeedsFlavorLookup reports whether any VM in vmsToValidate lacks a
-// pinned TargetFlavorID. Defaults to true on a fetch error; the real error
-// surfaces later inside validateMigrationPlanVMs.
-func (r *MigrationPlanReconciler) planNeedsFlavorLookup(
+// fetchVMsToValidate fetches each VM in vmsToValidate once, so
+// validateMigrationPlanVMs can reuse the result instead of fetching again. It
+// also reports whether any VM lacks a pinned TargetFlavorID (or couldn't be
+// fetched — a safe default; the real fetch error surfaces when
+// validateMigrationPlanVMs re-fetches that one VM itself).
+func (r *MigrationPlanReconciler) fetchVMsToValidate(
 	ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	vmsToValidate []string,
-) bool {
+) (map[string]*vjailbreakv1alpha1.VMwareMachine, bool) {
+	fetched := make(map[string]*vjailbreakv1alpha1.VMwareMachine, len(vmsToValidate))
+	needsLookup := false
 	for _, vm := range vmsToValidate {
 		vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-		if err != nil || vmMachine.Spec.TargetFlavorID == "" {
-			return true
+		if err != nil {
+			needsLookup = true
+			continue
+		}
+		fetched[vm] = vmMachine
+		if vmMachine.Spec.TargetFlavorID == "" {
+			needsLookup = true
 		}
 	}
-	return false
+	return fetched, needsLookup
 }
 
 // candidateFlavorsForPlan returns the plan's eligible flavors, filtered to its
@@ -2752,6 +2765,7 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
 	vmsToValidate []string,
+	fetchedVMs map[string]*vjailbreakv1alpha1.VMwareMachine,
 	candidateFlavors []flavors.Flavor,
 ) (*migrationPlanValidation, error) {
 	result := &migrationPlanValidation{
@@ -2769,9 +2783,13 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 	result.FlavorSkippedVMs = make([]*vjailbreakv1alpha1.VMwareMachine, 0, len(vmsToValidate))
 
 	for _, vm := range vmsToValidate {
-		vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
+		vmMachine, ok := fetchedVMs[vm]
+		if !ok {
+			var err error
+			vmMachine, err = GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get VMwareMachine for VM %s: %w", vm, err)
+			}
 		}
 
 		_, skipped, err := r.validateVMOS(vmMachine)
