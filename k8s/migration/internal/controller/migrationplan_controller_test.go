@@ -1206,13 +1206,14 @@ func TestVMDisplayNames(t *testing.T) {
 }
 
 // TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup guards a regression
-// risk introduced by pre-flight validation: resolving flavors up front must stay
-// LAZY. A plan whose VMs all pin Spec.TargetFlavorID never contacted Nova before,
-// and must not start depending on it — otherwise an unrelated Nova/Keystone
-// outage would fail plans that need no flavor lookup at all.
-//
-// The fake client has no OpenStack credential secret, so any attempt to list
-// flavors returns an error. A clean pass therefore proves no lookup happened.
+// risk from pre-flight validation: an operator-pinned VM must never depend on
+// the plan's candidate flavor list at all. Flavor listing itself now happens
+// once in ReconcileMigrationPlanJob, before validateMigrationPlanVMs is even
+// called, so this test passes a nil candidate set — standing in for "the
+// listing call failed, or was never made" — and confirms a pinned VM still
+// resolves cleanly. If a future change made the pinned path consult the
+// candidate list anyway, this would fail with a nil-slice panic or a spurious
+// skip instead of resolving to the pinned ID.
 func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := vjailbreakv1alpha1.AddToScheme(scheme); err != nil {
@@ -1276,9 +1277,9 @@ func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 	}
 
 	validation, err := r.validateMigrationPlanVMs(context.Background(), migrationplan,
-		migrationtemplate, vmwcreds, openstackcreds, []string{vmKey})
+		migrationtemplate, vmwcreds, openstackcreds, []string{vmKey}, nil)
 	if err != nil {
-		t.Fatalf("validation must not require a Nova lookup for a pinned flavor, got: %v", err)
+		t.Fatalf("validation must not require a candidate flavor for a pinned flavor, got: %v", err)
 	}
 
 	if len(validation.ValidVMs) != 1 {
