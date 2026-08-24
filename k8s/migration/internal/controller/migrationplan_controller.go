@@ -72,10 +72,6 @@ const VDDKDirectory = "/home/ubuntu/vmware-vix-disklib-distrib"
 // StorageCopyMethod is the storage copy method value for Storage Accelerated copy
 const StorageCopyMethod = "StorageAcceleratedCopy"
 
-// targetFlavorIDKey is the migration ConfigMap key holding the OpenStack flavor ID
-// the VM will be created with. Read back by v2v-helper as TARGET_FLAVOR_ID.
-const targetFlavorIDKey = "TARGET_FLAVOR_ID"
-
 // MigrationPlanReconciler reconciles a MigrationPlan object
 type MigrationPlanReconciler struct {
 	client.Client
@@ -1796,7 +1792,7 @@ func (r *MigrationPlanReconciler) determineAndSetTargetFlavor(ctx context.Contex
 		return err
 	}
 
-	configMapData[targetFlavorIDKey] = flavorID
+	configMapData[constants.TargetFlavorIDKey] = flavorID
 	return nil
 }
 

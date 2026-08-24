@@ -387,6 +387,10 @@ const (
 	HotplugCPUMaxKey    = "HOTPLUG_CPU_MAX"
 	HotplugMemoryMaxKey = "HOTPLUG_MEMORY_MAX"
 
+	// TargetFlavorIDKey is the migration ConfigMap key holding the OpenStack
+	// flavor ID the VM will be created with. Read back by v2v-helper.
+	TargetFlavorIDKey = "TARGET_FLAVOR_ID"
+
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
 
