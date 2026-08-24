@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
@@ -191,6 +192,96 @@ func TestReconcileDelete_DeletesNonMasterVjailbreakNodes(t *testing.T) {
 	// Node referencing different creds must survive.
 	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "vjailbreak-agent-other", Namespace: ns}, remaining); err != nil {
 		t.Errorf("node for other creds should not be deleted: %v", err)
+	}
+}
+
+// TestUpdateVMwareMachineWithFlavor_ErrorClassification checks that an
+// unschedulable VM shape is a per-VM skip ("NOT_FOUND" label), while an
+// empty candidate list still fails the sync.
+func TestUpdateVMwareMachineWithFlavor_ErrorClassification(t *testing.T) {
+	scheme := runtime.NewScheme()
+	_ = vjailbreakv1alpha1.AddToScheme(scheme)
+
+	const ns = "default"
+	const credName = "test-oscreds"
+
+	smallFlavor := flavors.Flavor{ID: "small", VCPUs: 2, RAM: 4096}
+
+	tests := []struct {
+		name         string
+		vmCPU        int
+		vmMemory     int
+		flavorList   []flavors.Flavor
+		wantErr      bool
+		wantFlavorID string
+	}{
+		{
+			name:         "no candidate flavor fits the VM's shape: sentinel error, VM skipped not failed",
+			vmCPU:        64,
+			vmMemory:     262144,
+			flavorList:   []flavors.Flavor{smallFlavor},
+			wantErr:      false,
+			wantFlavorID: "NOT_FOUND",
+		},
+		{
+			name:       "empty candidate list: generic error, sync must fail",
+			vmCPU:      2,
+			vmMemory:   4096,
+			flavorList: nil,
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oscreds := &vjailbreakv1alpha1.OpenstackCreds{
+				ObjectMeta: metav1.ObjectMeta{Name: credName, Namespace: ns},
+			}
+			vmwaremachine := &vjailbreakv1alpha1.VMwareMachine{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-vm", Namespace: ns},
+				Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+					VMInfo: vjailbreakv1alpha1.VMInfo{
+						Name:   "test-vm",
+						CPU:    tt.vmCPU,
+						Memory: tt.vmMemory,
+					},
+				},
+			}
+
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(oscreds, vmwaremachine).
+				Build()
+
+			credScope, err := scope.NewOpenstackCredsScope(scope.OpenstackCredsScopeParams{
+				Client:         fakeClient,
+				OpenstackCreds: oscreds,
+			})
+			if err != nil {
+				t.Fatalf("failed to create scope: %v", err)
+			}
+
+			r := &OpenstackCredsReconciler{Client: fakeClient, Scheme: scheme}
+
+			err = updateVMwareMachineWithFlavor(context.Background(), r, credScope, vmwaremachine, tt.flavorList)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected an empty candidate list to fail the sync, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("expected an unschedulable VM shape to be classified as a per-VM skip (no error), got: %v", err)
+			}
+
+			updated := &vjailbreakv1alpha1.VMwareMachine{}
+			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "test-vm", Namespace: ns}, updated); err != nil {
+				t.Fatalf("failed to get updated VMwareMachine: %v", err)
+			}
+			if got := updated.Labels[credName]; got != tt.wantFlavorID {
+				t.Errorf("flavor label = %q, want %q", got, tt.wantFlavorID)
+			}
+		})
 	}
 }
 

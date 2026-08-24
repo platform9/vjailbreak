@@ -617,9 +617,8 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		}
 	}
 
-	// Non-nil maps so the no-VMs-to-validate path below can be read and written
-	// safely. On error validateMigrationPlanVMs returns a nil result, but every use
-	// of `validation` is downstream of the `validationErr != nil` early return.
+	// Non-nil maps for the no-VMs-to-validate path; nil-checked below since some
+	// error paths still return a nil result.
 	validation := &migrationPlanValidation{
 		ResolvedFlavors: map[string]string{},
 		SkipReasons:     map[string]string{},
@@ -651,7 +650,14 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 				continue
 			}
 
-			r.markMigrationValidationFailed(ctx, migrationObj, vmName, "VM failed migration plan validation")
+			// Prefer the specific skip reason over the generic message.
+			reason := "VM failed migration plan validation"
+			if validation != nil {
+				if specific := validation.SkipReasons[vmName]; specific != "" {
+					reason = specific
+				}
+			}
+			r.markMigrationValidationFailed(ctx, migrationObj, vmName, reason)
 		}
 
 		if err := r.UpdateMigrationPlanStatus(ctx, migrationplan, corev1.PodFailed, fmt.Sprintf("Migration plan validation failed: %v", validationErr)); err != nil {
@@ -2818,15 +2824,16 @@ func (r *MigrationPlanReconciler) validateMigrationPlanVMs(
 		for _, msg := range skipMsgs {
 			r.ctxlog.Info(msg)
 		}
-		// Name every reason that applies, so a plan that mixes unsupported guest
-		// OSes with unschedulable shapes does not report only one of them.
+		// result still carries per-VM SkipReasons for the caller to use.
+		// Name every reason that applies, so a plan mixing unsupported OSes
+		// with unschedulable shapes doesn't report only one of them.
 		switch {
 		case len(result.OSSkippedVMs) > 0 && len(result.FlavorSkippedVMs) > 0:
-			return nil, fmt.Errorf("no migrations to run: every VM was skipped for an unsupported OS or for having no schedulable target flavor")
+			return result, fmt.Errorf("no migrations to run: every VM was skipped for an unsupported OS or for having no schedulable target flavor")
 		case len(result.FlavorSkippedVMs) > 0:
-			return nil, fmt.Errorf("no VM in the plan has a schedulable target flavor; no migrations to run")
+			return result, fmt.Errorf("no VM in the plan has a schedulable target flavor; no migrations to run")
 		default:
-			return nil, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
+			return result, fmt.Errorf("all VMs have unknown or unsupported OS types; no migrations to run")
 		}
 	}
 
@@ -2873,8 +2880,9 @@ func (r *MigrationPlanReconciler) updateMigrationPhaseWithRetry(
 		return pollErr
 	}
 
+	latest := &vjailbreakv1alpha1.Migration{}
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		latest := &vjailbreakv1alpha1.Migration{}
+		latest = &vjailbreakv1alpha1.Migration{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationObj.Name, Namespace: migrationObj.Namespace}, latest); err != nil {
 			return err
 		}
@@ -2889,11 +2897,10 @@ func (r *MigrationPlanReconciler) updateMigrationPhaseWithRetry(
 		return retryErr
 	}
 
-	// Reflect the new phase back onto the caller's copy. Callers that collect these
-	// objects into a MigrationList would otherwise hold a stale phase and could
-	// mistake a terminal migration for one still in progress.
-	migrationObj.Status.Phase = phase
-	migrationObj.Status.Conditions = append(migrationObj.Status.Conditions, condition)
+	// Reflect the persisted state back onto the caller's copy, from `latest`
+	// rather than re-appending onto migrationObj's own (possibly stale) slice.
+	migrationObj.Status.Phase = latest.Status.Phase
+	migrationObj.Status.Conditions = latest.Status.Conditions
 
 	return nil
 }
