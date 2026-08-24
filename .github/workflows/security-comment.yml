@@ -13,8 +13,8 @@ jobs:
   comment:
     name: Post Vulnerability Summary Comment
     runs-on: ubuntu-latest
-    # Only run for PRs (not pushes to main or releases)
-    if: github.event.workflow_run.event == 'pull_request'
+    # Only run for PRs (not pushes to main or releases), and only when the scan actually completed
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Download Gosec PR Summary
         uses: actions/download-artifact@v4

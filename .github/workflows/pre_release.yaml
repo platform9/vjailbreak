@@ -33,6 +33,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: k8s/migration/go.mod
+          cache-dependency-path: k8s/migration/go.sum
 
       - name: Install controller-gen
         run: |
