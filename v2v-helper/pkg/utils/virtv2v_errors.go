@@ -76,6 +76,13 @@ var virtV2VErrorPatterns = []*regexp.Regexp{
 	// Disk looks like an installer/live-CD image rather than an installed OS
 	// (convert/mount_filesystems.ml:178-181).
 	regexp.MustCompile(`(?i)error:\s*libguestfs thinks this is not an installed operating system.*`),
+	// Guest-side: a tool was cut off mid-write into /var/tmp/mkinitramfs-* on
+	// the guest (e.g. Debian/Ubuntu's iucode_tool writing microcode there)
+	// while virt-v2v rebuilds the initrd. virt-v2v's own free-space preflight
+	// above only samples once before the rebuild starts, so it can pass and
+	// still run out mid-rebuild - seen on guests down to a few MB free
+	// (issue #2322).
+	regexp.MustCompile(`(?i)error:.*writing.*to:\s*/var/tmp/mkinitramfs-\S*`),
 	// Catch-all: virt-v2v wraps any otherwise-unhandled libguestfs/guestfsd
 	// exception (corrupt disk image, appliance launch failure, protocol
 	// error, etc.) as "libguestfs error: <msg>" (common/mltools/tools_utils.ml,
@@ -125,6 +132,14 @@ func ExtractVirtV2VFailureReason(logPath string) string {
 		}
 		for _, re := range virtV2VErrorPatterns {
 			if re.MatchString(line) {
+				// This raw line is guestfsd/virt-v2v-in-place's truncated,
+				// hard-to-read text for a tool getting cut off mid-write into
+				// its initrd-rebuild scratch dir on the guest - in practice
+				// always caused by the guest root filesystem running out of
+				// free space (issue #2322). Surface the actual cause instead.
+				if strings.Contains(line, "/var/tmp/mkinitramfs-") {
+					return "guest root filesystem ran out of space while conversion; please increase space in /"
+				}
 				return line
 			}
 		}

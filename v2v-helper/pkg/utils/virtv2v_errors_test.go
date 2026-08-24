@@ -85,6 +85,13 @@ virt-v2v-in-place: error: unable to rebuild initrd (/boot/initrd.img-5.10.0) bec
 			expected: "virt-v2v-in-place: error: unable to rebuild initrd (/boot/initrd.img-5.10.0) because update-initramfs was not found in the guest",
 		},
 		{
+			name: "guest root filesystem out of space during initrd rebuild (issue #2322)",
+			content: `[  90.0] Converting Debian
+guestfsd: error: /sbin/iucode_tool: Writing selected microcodes to: /var/tmp/mkinitramfs-EFW_ChFQE
+virt-v2v-in-place: error: libguestfs error: command: /sbin/iucode_tool: Writing selected microcodes to: /var/tmp/mkinitramfs-EFW_ChFQEtFTlR.`,
+			expected: "guest root filesystem ran out of space while conversion; please increase space in /",
+		},
+		{
 			name:     "no error lines",
 			content:  "everything is fine\nconversion succeeded\n",
 			expected: "",
