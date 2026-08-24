@@ -14,8 +14,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -530,8 +530,8 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 		return "", errors.Wrap(err, "failed to get Cinder volume services")
 	}
 
-	// Type assert to the concrete struct slice from utils package
-	serviceList, ok := servicesInterface.([]utils.CinderVolumeService)
+	// Type assert to the concrete struct slice from openstack package
+	serviceList, ok := servicesInterface.([]openstack.CinderVolumeService)
 	if !ok {
 		return "", fmt.Errorf("unexpected type from GetCinderVolumeServices: %T", servicesInterface)
 	}
