@@ -605,11 +605,10 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		return ctrl.Result{}, errors.Wrapf(err, "failed to check openstackcreds status '%s'", migrationtemplate.Spec.Destination.OpenstackRef)
 	}
 
-	// One Nova call for the whole plan, fetched here alongside the creds checks
-	// above. A failure here means we couldn't ask, not that the answer was bad,
-	// so it's handled the same way: just requeue, no Migration or status touched.
+	// One Nova call for the whole plan; skipped if every VM is pinned. A
+	// failure here is just requeued, same as the creds checks above.
 	var candidateFlavors []flavors.Flavor
-	if len(vmsToValidate) > 0 {
+	if len(vmsToValidate) > 0 && r.planNeedsFlavorLookup(ctx, migrationtemplate, vmwcreds, vmsToValidate) {
 		var err error
 		candidateFlavors, err = r.candidateFlavorsForPlan(ctx, migrationtemplate, openstackcreds)
 		if err != nil {
@@ -1674,6 +1673,24 @@ func (r *MigrationPlanReconciler) setMigrationSpecificFields(configMapData map[s
 		configMapData["NETWORK_OVERRIDES"] = migrationobj.Spec.NetworkOverrides
 	}
 	configMapData["DATA_ONLY"] = strconv.FormatBool(migrationobj.Spec.DataOnly)
+}
+
+// planNeedsFlavorLookup reports whether any VM in vmsToValidate lacks a
+// pinned TargetFlavorID. Defaults to true on a fetch error; the real error
+// surfaces later inside validateMigrationPlanVMs.
+func (r *MigrationPlanReconciler) planNeedsFlavorLookup(
+	ctx context.Context,
+	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
+	vmwcreds *vjailbreakv1alpha1.VMwareCreds,
+	vmsToValidate []string,
+) bool {
+	for _, vm := range vmsToValidate {
+		vmMachine, err := GetVMwareMachineForVM(ctx, r, vm, migrationtemplate, vmwcreds)
+		if err != nil || vmMachine.Spec.TargetFlavorID == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // candidateFlavorsForPlan returns the flavors that are eligible for a plan's

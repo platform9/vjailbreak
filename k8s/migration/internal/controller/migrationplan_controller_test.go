@@ -1285,3 +1285,88 @@ func TestValidateMigrationPlanVMs_PinnedFlavorSkipsNovaLookup(t *testing.T) {
 		t.Errorf("ResolvedFlavors[%s] = %q, want %q", vmk8sName, got, "operator-pinned")
 	}
 }
+
+// TestPlanNeedsFlavorLookup locks in the ReconcileMigrationPlanJob-level half
+// of the "operator-pinned plans never call Nova" guarantee: a fully-pinned
+// plan must report no lookup needed, so the caller skips the Nova call
+// entirely, while a plan with even one unpinned VM must still ask.
+func TestPlanNeedsFlavorLookup(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := vjailbreakv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
+	}
+
+	const ns = "migration-system"
+	const credsName = "vmwcreds-a"
+
+	newVMMachine := func(name, vmID, targetFlavorID string) (*vjailbreakv1alpha1.VMwareMachine, string) {
+		vmKey := commonutils.GetVMUniqueKey(name, vmID)
+		vmk8sName, err := commonutils.GetK8sCompatibleVMWareObjectName(vmKey, credsName)
+		if err != nil {
+			t.Fatalf("failed to compute k8s name: %v", err)
+		}
+		return &vjailbreakv1alpha1.VMwareMachine{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      vmk8sName,
+				Namespace: ns,
+				Labels:    map[string]string{constants.VMwareCredsLabel: credsName},
+			},
+			Spec: vjailbreakv1alpha1.VMwareMachineSpec{
+				TargetFlavorID: targetFlavorID,
+				VMInfo:         vjailbreakv1alpha1.VMInfo{Name: name, VMID: vmID},
+			},
+		}, vmKey
+	}
+
+	pinnedA, pinnedAKey := newVMMachine("pinned-a", "vm-201", "flavor-a")
+	pinnedB, pinnedBKey := newVMMachine("pinned-b", "vm-202", "flavor-b")
+	unpinned, unpinnedKey := newVMMachine("unpinned", "vm-203", "")
+
+	tests := []struct {
+		name    string
+		objects []client.Object
+		vmKeys  []string
+		want    bool
+	}{
+		{
+			name:    "every VM pinned: no lookup needed",
+			objects: []client.Object{pinnedA, pinnedB},
+			vmKeys:  []string{pinnedAKey, pinnedBKey},
+			want:    false,
+		},
+		{
+			name:    "one VM unpinned: lookup still needed",
+			objects: []client.Object{pinnedA, unpinned},
+			vmKeys:  []string{pinnedAKey, unpinnedKey},
+			want:    true,
+		},
+		{
+			name:    "VM can't be fetched: defaults to needing a lookup",
+			objects: []client.Object{pinnedA},
+			vmKeys:  []string{pinnedAKey, "missing-vm"},
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(scheme).
+				WithObjects(tt.objects...).
+				Build()
+			r := &MigrationPlanReconciler{Client: fakeClient, Scheme: scheme, ctxlog: logr.Discard()}
+
+			migrationtemplate := &vjailbreakv1alpha1.MigrationTemplate{
+				ObjectMeta: metav1.ObjectMeta{Name: "tmpl-a", Namespace: ns},
+			}
+			vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
+				ObjectMeta: metav1.ObjectMeta{Name: credsName, Namespace: ns},
+			}
+
+			got := r.planNeedsFlavorLookup(context.Background(), migrationtemplate, vmwcreds, tt.vmKeys)
+			if got != tt.want {
+				t.Errorf("planNeedsFlavorLookup() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
