@@ -45,6 +45,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -55,6 +56,26 @@ const (
 	mountsMarker      = "---VJB-MP---"
 	productNameMarker = "---VJB-PRODUCT---"
 )
+
+// guestfishBootCount counts every guestfish/guestmount appliance boot this
+// process has started. It exists purely for observability: comparing this
+// number before and after a call-site consolidation is what turns "fewer
+// appliance boots" from an assumption into something a log line proves.
+// Every place that actually launches a guestfish or guestmount process -
+// runScript here, RunCommandInGuest, RunCommandInGuestAllVolumes (via
+// prepareGuestfishCommand), RunGetBootablePartitionScript, GetOsRelease's
+// per-file guestfish invocation, runGuestfishScript (below), and the
+// guestmount call in RunNetworkPersistence - increments this via countBoot.
+var guestfishBootCount int64
+
+// countBoot logs one appliance boot against the shared counter. reason
+// should say why the boot is happening (which caller asked for it, and
+// against how many disks) so the log stays useful for tracing where boots
+// are still being spent, not just how many there were.
+func countBoot(reason string, args ...interface{}) {
+	n := atomic.AddInt64(&guestfishBootCount, 1)
+	log.Printf("guestfish appliance boot #%d: %s", n, fmt.Sprintf(reason, args...))
+}
 
 type mountSpec struct {
 	// Device is a libguestfs mountable: "/dev/sda6", or "btrfsvol:/dev/sda6/@/home".
@@ -171,6 +192,7 @@ func runScript(disks []vm.VMDisk, script string) (string, error) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	countBoot("mount-plan/inspection script (%d disk(s))", len(disks))
 	log.Printf("Executing %s with script:\n%s", cmd.String(), script)
 	err := cmd.Run()
 	if stderrBuf.Len() > 0 {
@@ -529,4 +551,197 @@ func quoteArg(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
+}
+
+// Multi-step guestfish scripts.
+//
+// Every function above this point speaks one command at a time - the
+// original shape everything in this file had. Everything below lets a
+// caller batch several commands into one guestfish invocation, so several
+// previously-separate appliance boots (each a full qemu-kvm launch, the
+// expensive part of any guestfish call) collapse into one.
+//
+//	guestfishStep             one command: fail-fast (no Marker) or
+//	                          tolerant-and-marked (Marker set)
+//	buildScriptLines          renders steps into a script body
+//	describeSteps             renders steps for a log line
+//	prepareGuestfishScript    prepareGuestfishCommand's multi-step sibling
+//	runGuestfishScript        prepare, boot, run, return raw stdout
+//	  RunGuestfishScript        ...lowercased, for a fail-fast chain
+//	  RunGuestfishScriptRaw     ...raw case, for a tolerant batch
+//	splitByMarker             recovers a tolerant batch's per-step output
+
+// guestfishStep is one command in a multi-step guestfish script built by
+// prepareGuestfishScript. This is the building block that lets several
+// previously-separate appliance boots collapse into one: a caller that used
+// to make N single-command calls in a row now builds one []guestfishStep
+// and makes one call instead.
+//
+// Two shapes, chosen by whether Marker is set:
+//
+//   - Marker == "" (fail-fast chain): the step runs with no tolerance
+//     prefix, so a failure aborts every step after it in the same script -
+//     exactly how a sequence of separate RunCommandInGuestAllVolumes calls
+//     already behaves today, since Go already stops calling the next one on
+//     error. Use this for a strictly sequential write chain (e.g. upload,
+//     then chmod, then run).
+//   - Marker != "" (tolerant batch): the step is wrapped in "echo <marker>"
+//     and run with guestfish's "-" prefix (guestfish(1), EXIT ON ERROR
+//     BEHAVIOUR), so it cannot abort the script. Use this for several
+//     independent queries where each one's success or failure needs to be
+//     read separately afterward - splitByMarker recovers each step's output
+//     by marker. This is the same idiom rootDetailsScript/parseRootDetails
+//     already use for the mount-plan resolver, generalized here for reuse.
+type guestfishStep struct {
+	Command string
+	Args    []string
+	Marker  string
+}
+
+// buildScriptLines renders steps into the body of a guestfish script - the
+// part appended after mountScript's mount preamble.
+func buildScriptLines(steps []guestfishStep) string {
+	var b strings.Builder
+	for _, step := range steps {
+		if step.Marker != "" {
+			fmt.Fprintf(&b, "echo %s\n", step.Marker)
+			b.WriteString("- ")
+		}
+		b.WriteString(guestfishLine(step.Command, step.Args...))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// describeSteps renders steps for a log line, the multi-step equivalent of
+// the single guestfishLine(command, args...) callers already log today.
+func describeSteps(steps []guestfishStep) string {
+	parts := make([]string, 0, len(steps))
+	for _, step := range steps {
+		parts = append(parts, guestfishLine(step.Command, step.Args...))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// prepareGuestfishScript is prepareGuestfishCommand's multi-step sibling: it
+// resolves the same mount plan and builds one guestfish invocation that
+// mounts it and then runs every step in steps, instead of a single command.
+func prepareGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (*exec.Cmd, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return nil, err
+	}
+
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
+	cmd := exec.Command("guestfish", option)
+	for _, disk := range disks {
+		cmd.Args = append(cmd.Args, "-a", disk.Path)
+	}
+	// Commands go on stdin rather than after "--", same reason as
+	// prepareGuestfishCommand: the mount preamble has to be prepended, and a
+	// failed non-root mount has to be tolerated with guestfish's "-" prefix.
+	cmd.Stdin = strings.NewReader(mountScript(plan, write) + buildScriptLines(steps))
+	return cmd, nil
+}
+
+// runGuestfishScript is the shared implementation behind RunGuestfishScript
+// and RunGuestfishScriptRaw: prepare, boot, run, and return the raw
+// (non-lowercased) combined stdout. It is one appliance boot regardless of
+// how many steps are passed in - that collapsing is the entire point of
+// this section.
+func runGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+	cmd, err := prepareGuestfishScript(disks, write, steps...)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare guestfish script: %w", err)
+	}
+
+	countBoot("script of %d step(s) (%d disk(s))", len(steps), len(disks))
+	log.Printf("Executing %s -- %s", cmd.String(), describeSteps(steps))
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err = cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("guestfish stderr (script): %s", strings.TrimSpace(stderrBuf.String()))
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to run guestfish script: %v: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+	return stdoutBuf.String(), nil
+}
+
+// RunGuestfishScript runs a fail-fast multi-step script (steps with no
+// Marker - see guestfishStep) against every disk in one appliance boot, and
+// returns the combined, lowercased stdout. This is the same contract
+// RunCommandInGuestAllVolumes has for a single command, so a caller merging
+// several of its own calls into one RunGuestfishScript call needs no other
+// change to how it reads the result.
+func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	out, err := runGuestfishScript(disks, write, steps...)
+	if err != nil {
+		return "", err
+	}
+	return strings.ToLower(out), nil
+}
+
+// RunGuestfishScriptRaw is RunGuestfishScript without the lowercasing, for
+// tolerant-batch callers that parse the output by marker with
+// splitByMarker: lowercasing first would still match the markers themselves
+// fine (they're caller-chosen constants, matched exactly either way), but
+// would corrupt any case-sensitive guest content a step's output needs to
+// preserve (e.g. a mixed-case device path or file content).
+func RunGuestfishScriptRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	return runGuestfishScript(disks, write, steps...)
+}
+
+// splitByMarker splits combined guestfish script output into per-step text
+// blocks, for a tolerant-batch script (see guestfishStep). markers is the
+// exact set of marker strings the caller wrapped its steps in; splitByMarker
+// only ever treats a line as a marker if it exactly matches one of these, so
+// it can't be confused by guest content that happens to look like a marker
+// from a different script. A marker with no output before the next marker
+// (or end of input) still gets an entry, mapped to "" - callers can tell
+// "this step ran tolerantly and printed nothing" (present, empty) apart from
+// "this marker never appeared at all", e.g. because the appliance never
+// booted.
+func splitByMarker(out string, markers []string) map[string]string {
+	known := make(map[string]bool, len(markers))
+	for _, m := range markers {
+		known[m] = true
+	}
+
+	sections := make(map[string]string)
+	var current string
+	var buf []string
+
+	flush := func() {
+		if current != "" {
+			sections[current] = strings.TrimSpace(strings.Join(buf, "\n"))
+		}
+		buf = nil
+	}
+
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if known[trimmed] {
+			flush()
+			current = trimmed
+			continue
+		}
+		if current != "" {
+			buf = append(buf, trimmed)
+		}
+	}
+	flush()
+
+	return sections
 }
