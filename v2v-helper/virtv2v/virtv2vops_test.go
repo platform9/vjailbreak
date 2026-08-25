@@ -537,3 +537,97 @@ func TestBuildRHELNetworkManagerKeyfiles_EmptyEntriesSkipped(t *testing.T) {
 
 	assert.Empty(t, files, "a MAC with zero entries must get no NetworkManager keyfile")
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 guestfish consolidation: getBootablePartitionSteps,
+// mountPersistenceSteps, wildcardNetplanSteps
+//
+// These functions only build the []guestfishStep a single RunGuestfishScript/
+// RunGuestfishScriptRaw call now runs in one appliance boot, where each of
+// them used to be 3 separate RunCommandInGuestAllVolumes calls (3 boots).
+// Since none of this is reachable without a real guestfish binary, what's
+// unit-testable - and what actually matters for "did the merge preserve the
+// exact command sequence" - is the step list itself: right commands, right
+// args, right order, right fail-fast/tolerant shape.
+// ---------------------------------------------------------------------------
+
+func TestGetBootablePartitionSteps(t *testing.T) {
+	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh")
+
+	require.Len(t, steps, 3, "must be exactly upload, chmod, sh - no more, no fewer boots collapsed")
+
+	assert.Equal(t, guestfishStep{
+		Command: "upload",
+		Args:    []string{"/home/fedora/get-bootable-partition.sh", "/tmp/get-bootable-partition.sh"},
+	}, steps[0], "upload must run first, or chmod/sh would operate on nothing")
+
+	assert.Equal(t, guestfishStep{
+		Command: "chmod",
+		Args:    []string{"0755", "/tmp/get-bootable-partition.sh"},
+	}, steps[1], "chmod must run second, or sh would fail on a non-executable script")
+
+	assert.Equal(t, guestfishStep{
+		Command: "sh",
+		Args:    []string{"/tmp/get-bootable-partition.sh"},
+	}, steps[2], "sh must run last, after the script is uploaded and executable")
+
+	for i, step := range steps {
+		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed upload or chmod must abort the rest, matching the three separate calls this replaces", i)
+	}
+}
+
+func TestMountPersistenceSteps(t *testing.T) {
+	steps := mountPersistenceSteps("/home/fedora/generate-mount-persistence.sh", "--force-uuid")
+
+	require.Len(t, steps, 3)
+
+	assert.Equal(t, guestfishStep{
+		Command: "upload",
+		Args:    []string{"/home/fedora/generate-mount-persistence.sh", "/tmp/generate-mount-persistence.sh"},
+	}, steps[0])
+
+	assert.Equal(t, guestfishStep{
+		Command: "chmod",
+		Args:    []string{"0755", "/tmp/generate-mount-persistence.sh"},
+	}, steps[1])
+
+	assert.Equal(t, guestfishStep{
+		Command: "sh",
+		Args:    []string{"/tmp/generate-mount-persistence.sh --force-uuid"},
+	}, steps[2], "the script path and its flag must stay one combined argument - guestfish's sh takes one shell command-line string, not separate argv entries")
+}
+
+func TestMountPersistenceSteps_SUSEArgs(t *testing.T) {
+	// MountPersistenceScriptArgs picks --replace-fstab --os-family=suse for
+	// SUSE; confirm whatever string it returns lands verbatim in the sh step,
+	// since that's the whole point of resolving args before building steps.
+	steps := mountPersistenceSteps("/home/fedora/generate-mount-persistence.sh", "--replace-fstab --os-family=suse")
+
+	require.Len(t, steps, 3)
+	assert.Equal(t, []string{"/tmp/generate-mount-persistence.sh --replace-fstab --os-family=suse"}, steps[2].Args)
+}
+
+func TestWildcardNetplanSteps(t *testing.T) {
+	steps := wildcardNetplanSteps()
+
+	require.Len(t, steps, 3, "must be exactly mv, mkdir, upload - no more, no fewer boots collapsed")
+
+	assert.Equal(t, guestfishStep{
+		Command: "mv",
+		Args:    []string{"/etc/netplan", "/etc/netplan-bkp"},
+	}, steps[0], "the existing netplan dir must be backed up first, before anything recreates it")
+
+	assert.Equal(t, guestfishStep{
+		Command: "mkdir",
+		Args:    []string{"/etc/netplan"},
+	}, steps[1], "mkdir must run second, or the upload would have nowhere to land")
+
+	assert.Equal(t, guestfishStep{
+		Command: "upload",
+		Args:    []string{"/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml"},
+	}, steps[2])
+
+	for i, step := range steps {
+		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed mv/mkdir/upload must abort the rest, matching the three separate calls this replaces", i)
+	}
+}
