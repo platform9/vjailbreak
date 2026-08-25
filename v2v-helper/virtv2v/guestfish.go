@@ -45,7 +45,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
@@ -56,18 +55,6 @@ const (
 	mountsMarker      = "---VJB-MP---"
 	productNameMarker = "---VJB-PRODUCT---"
 )
-
-// guestfishBootCount counts every guestfish/guestmount appliance boot, for
-// observability when comparing call-site consolidations. Every launch
-// point increments it via countBoot.
-var guestfishBootCount int64
-
-// countBoot logs one appliance boot against the shared counter; reason
-// should say why, for tracing where boots are still being spent.
-func countBoot(reason string, args ...interface{}) {
-	n := atomic.AddInt64(&guestfishBootCount, 1)
-	log.Printf("guestfish appliance boot #%d: %s", n, fmt.Sprintf(reason, args...))
-}
 
 type mountSpec struct {
 	// Device is a libguestfs mountable: "/dev/sda6", or "btrfsvol:/dev/sda6/@/home".
@@ -184,7 +171,6 @@ func runScript(disks []vm.VMDisk, script string) (string, error) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
-	countBoot("mount-plan/inspection script (%d disk(s))", len(disks))
 	log.Printf("Executing %s with script:\n%s", cmd.String(), script)
 	err := cmd.Run()
 	if stderrBuf.Len() > 0 {
@@ -616,7 +602,6 @@ func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestf
 		return "", fmt.Errorf("failed to prepare guestfish script: %w", err)
 	}
 
-	countBoot("script of %d step(s) (%d disk(s))", len(steps), len(disks))
 	log.Printf("Executing %s -- %s", cmd.String(), describeSteps(steps))
 
 	if combined {

@@ -3,7 +3,6 @@
 package virtv2v
 
 import (
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -143,18 +142,4 @@ func TestSplitByMarker(t *testing.T) {
 			assert.Equal(t, tt.want, splitByMarker(tt.out, tt.markers))
 		})
 	}
-}
-
-// ---------------------------------------------------------------------------
-// countBoot
-// ---------------------------------------------------------------------------
-
-func TestCountBoot(t *testing.T) {
-	before := atomic.LoadInt64(&guestfishBootCount)
-
-	countBoot("test boot %d", 1)
-	countBoot("test boot %d", 2)
-
-	after := atomic.LoadInt64(&guestfishBootCount)
-	assert.Equal(t, before+2, after)
 }
