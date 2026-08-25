@@ -150,14 +150,20 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 // copyDiskViaStorageAcceleratedCopy copies a single disk using StorageAcceleratedCopy XCOPY
 func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, esxiClient *esxissh.Client,
 	idx int, vminfo *vm.VMInfo, hostIP string,
-) (storage.Volume, error) {
+) (_ storage.Volume, retErr error) {
 	startTime := time.Now()
 
 	vmDisk := vminfo.VMDisks[idx]
 
 	defer func() {
-		migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY completed in %s (total: %s) for disk %s",
-			time.Since(startTime).Round(time.Second), time.Since(startTime).Round(time.Second), vmDisk.Name))
+		elapsed := time.Since(startTime).Round(time.Second)
+		if retErr != nil {
+			migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY failed after %s for disk %s: %v",
+				elapsed, vmDisk.Name, retErr))
+		} else {
+			migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY completed in %s for disk %s",
+				elapsed, vmDisk.Name))
+		}
 		migobj.StorageProvider.Disconnect()
 	}()
 	// Step 1: Initialize storage provider
