@@ -139,7 +139,9 @@ test.describe('MIG-028 — empty cluster shows graceful empty state', () => {
     // VM grid visible but empty — shows empty state
     const grid = page.getByTestId('vms-datagrid')
     await expect(grid).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByText(/no vm|no virtual machine|0 vm|empty/i)).toBeVisible()
+    // Scope the empty-state text to the grid overlay: a loose page-wide regex also matches
+    // option labels such as "Data only (no VM creation)".
+    await expect(grid.getByText(/no vms discovered/i)).toBeVisible()
 
     // Submit disabled — nothing to migrate
     await expect(page.getByTestId('migration-form-submit')).toBeDisabled()
@@ -869,12 +871,12 @@ test.describe('MIG-042 — persist IP mutually exclusive with different-subnet m
     await expect(checkbox).toBeDisabled({ timeout: 10_000 })
     await expect(checkbox).not.toBeChecked()
 
-    await expect(page.getByTestId('network-persistence-subnet-alert')).toBeVisible()
-
-    // Helper text switches from the default description to the disabled reason
-    await expect(
-      page.getByText(/disabled because some ip addresses of the selected vms do not lie within the subnet/i)
-    ).toBeVisible()
+    // The alert carries the reason the option is unavailable
+    const subnetAlert = page.getByTestId('network-persistence-subnet-alert')
+    await expect(subnetAlert).toBeVisible()
+    await expect(subnetAlert).toContainText(
+      /not available because some ip addresses of the selected vms do not lie within the subnet/i
+    )
   })
 
   test('compatible subnet keeps persist source network interfaces available', async ({ page }) => {

@@ -25,11 +25,18 @@ export const API = {
   networkMappingByName: (name: string) => `**${V1A1}/networkmappings/${name}`,
   storageMappings: `**${V1A1}/storagemappings`,
   storageMappingByName: (name: string) => `**${V1A1}/storagemappings/${name}`,
-  vmwareMachines: `**${V1A1}/vmwaremachines**`,
+  // List endpoints carry query strings (?labelSelector=, ?limit=). A trailing `**`
+  // glob would also match `/vmwaremachines/<name>`, and Playwright resolves routes
+  // most-recently-registered first — so the list stub would swallow the by-name
+  // fetch and hand the caller a `{items: []}` body. Anchor with a regex instead.
+  vmwareMachines: new RegExp(`${escapeRegExp(V1A1)}/vmwaremachines(\\?.*)?$`),
   vmwareMachineByName: (name: string) => `**${V1A1}/vmwaremachines/${name}`,
-  vmwareClusters: `**${V1A1}/vmwareclusters**`,
-  vmwareHosts: `**${V1A1}/vmwarehosts**`,
-  pcdClusters: `**${V1A1}/pcdclusters**`,
+  vmwareClusters: new RegExp(`${escapeRegExp(V1A1)}/vmwareclusters(\\?.*)?$`),
+  vmwareHosts: new RegExp(`${escapeRegExp(V1A1)}/vmwarehosts(\\?.*)?$`),
+  // Rolling submit writes the chosen host config back onto each ESXi host.
+  vmwareHostByName: (name: string) => `**${V1A1}/vmwarehosts/${name}`,
+  esxiMigrations: new RegExp(`${escapeRegExp(V1A1)}/esximigrations(\\?.*)?$`),
+  pcdClusters: new RegExp(`${escapeRegExp(V1A1)}/pcdclusters(\\?.*)?$`),
   bmConfigs: `**${V1A1}/bmconfigs`,
   bmConfigByName: (name: string) => `**${V1A1}/bmconfigs/${name}`,
   rdmDisks: `**${V1A1}/rdmdisks`,
@@ -53,6 +60,20 @@ export async function goToMigrations(page: Page): Promise<void> {
   await page.goto(ROUTES.migrations)
   await page.waitForURL(/\/dashboard\/migrations/)
   await expect(page.getByTestId('migrations-table')).toBeVisible({ timeout: 10_000 })
+}
+
+// Pod logs live on the Migration Detail page's "Pod logs" tab. The per-row logs
+// button that used to open a drawer was removed with the new migrations UI (#2040).
+export async function goToMigrationPodLogs(page: Page, migrationName: string): Promise<void> {
+  await page.goto(`${ROUTES.migrations}/${migrationName}`)
+  const logsTab = page.getByRole('tab', { name: /pod logs/i })
+  await expect(logsTab).toBeVisible({ timeout: 10_000 })
+  await logsTab.click()
+}
+
+// The logs toolbar renders its search box without a testid — locate it by placeholder.
+export function podLogsSearchInput(page: Page) {
+  return page.getByPlaceholder('Search logs…')
 }
 
 export async function goToGlobalSettings(page: Page): Promise<void> {
@@ -94,6 +115,10 @@ export async function selectPcdCluster(page: Page, clusterValue: string): Promis
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 type JsonBody = Record<string, unknown>
 
+// Method mismatches must fall back, not continue: tests stack one mock per method on
+// the same URL (GET + PATCH + DELETE on a plan, say), and Playwright runs handlers
+// most-recently-registered first. route.continue() would send the request to the dev
+// server — skipping the earlier handler for that method — and the app would see a 500.
 export async function mockRoute(
   page: Page,
   url: string | RegExp,
@@ -109,14 +134,14 @@ export async function mockRoute(
         body: JSON.stringify(body),
       })
     } else {
-      route.continue()
+      route.fallback()
     }
   })
 }
 
 export async function mockRouteError(
   page: Page,
-  url: string,
+  url: string | RegExp,
   method: HttpMethod,
   status: 400 | 403 | 404 | 422 | 500,
   message = `Simulated ${status} error`,
@@ -129,7 +154,7 @@ export async function mockRouteError(
         body: JSON.stringify({ message }),
       })
     } else {
-      route.continue()
+      route.fallback()
     }
   })
 }
@@ -144,8 +169,20 @@ export async function expectDrawerOpen(page: Page): Promise<void> {
   await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
 }
 
-export async function expectDrawerClosed(page: Page): Promise<void> {
-  await expect(page.getByTestId('migration-form-drawer')).not.toBeVisible()
+// Submitting closes the drawer only after the whole create chain (mappings → template →
+// plan) resolves, which is slower than the default expect timeout on a cold dev server.
+export async function expectDrawerClosed(page: Page, timeout = 15_000): Promise<void> {
+  await expect(page.getByTestId('migration-form-drawer')).not.toBeVisible({ timeout })
+}
+
+// Resolves once the MigrationPlan POST comes back — the last write of a standard submit.
+export function waitForMigrationPlanCreated(page: Page) {
+  return page.waitForResponse(
+    (res) =>
+      res.request().method() === 'POST' &&
+      new URL(res.url()).pathname.endsWith('/migrationplans'),
+    { timeout: 20_000 }
+  )
 }
 
 export async function expectSectionNavError(page: Page, sectionId: string): Promise<void> {
@@ -158,6 +195,18 @@ export async function expectSectionNavClear(page: Page, sectionId: string): Prom
   await expect(
     page.getByTestId(`section-nav-item-${sectionId}`).getByTestId('section-nav-error-badge'),
   ).not.toBeVisible()
+}
+
+// A section with work still to do renders neither the attention badge nor the
+// completion check — just its step number. Unmapped networks/datastores land here:
+// they block submit without being flagged as an error (the mapping fieldErrors are
+// only set when the mapping POST itself fails).
+export async function expectSectionNavIncomplete(page: Page, sectionId: string): Promise<void> {
+  const item = page.getByTestId(`section-nav-item-${sectionId}`)
+  await expect(item).toBeVisible()
+  await expect(item.getByTestId('section-nav-error-badge')).toHaveCount(0)
+  // The completion check is the only svg rendered inside the step chip.
+  await expect(item.locator('svg')).toHaveCount(0)
 }
 
 export async function expectSubmitDisabled(page: Page): Promise<void> {

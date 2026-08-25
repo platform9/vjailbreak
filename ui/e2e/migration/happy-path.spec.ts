@@ -2,6 +2,8 @@ import { test, expect, Page } from '@playwright/test'
 
 import {
   goToMigrations,
+  goToMigrationPodLogs,
+  podLogsSearchInput,
   openMigrationDrawer,
   submitMigrationForm,
   selectVmwareCluster,
@@ -10,6 +12,7 @@ import {
   expectToast,
   expectDrawerOpen,
   expectDrawerClosed,
+  waitForMigrationPlanCreated,
   API,
   ROUTES,
 } from './helpers/migration.helpers'
@@ -21,6 +24,7 @@ import {
   MOCK_MIGRATION_PLAN_3,
   MOCK_MIGRATION_PLAN_5,
   MOCK_MIGRATION_AWAITING_CUTOVER,
+  MOCK_MIGRATION_SUCCEEDED,
   MOCK_VMWARE_CREDS_LIST,
   MOCK_VMWARE_CRED_1,
   MOCK_OPENSTACK_CRED_1,
@@ -34,6 +38,8 @@ import {
   MOCK_VMWARE_CLUSTERS_LIST,
   MOCK_PCD_CLUSTERS_LIST,
   MOCK_VMWARE_HOSTS_LIST,
+  MOCK_VMWARE_HOST_1,
+  MOCK_VMWARE_HOST_2,
   MOCK_BM_CONFIG_1,
   MOCK_BM_CONFIGS_LIST,
   MOCK_ROLLING_MIGRATION_PLAN_CREATED,
@@ -205,11 +211,13 @@ test.describe('MIG-004 — complete standard migration', () => {
     await mapAllStorage(page)
 
     // Submit
+    const planCreated = waitForMigrationPlanCreated(page)
     await submitMigrationForm(page)
     // Submit button should enter loading state (disabled during submission)
     await expect(page.getByTestId('migration-form-submit')).toBeDisabled()
 
     // After success: drawer closes, toast shown
+    await planCreated
     await expectDrawerClosed(page)
     await expectToast(page, /migration.*created|created.*migration|success/i)
   })
@@ -227,8 +235,10 @@ test.describe('MIG-004 — complete standard migration', () => {
     await page.getByTestId('section-nav-item-map-resources').click()
     await mapAllNetworks(page)
     await mapAllStorage(page)
+    const planCreated = waitForMigrationPlanCreated(page)
     await submitMigrationForm(page)
 
+    await planCreated
     await expectDrawerClosed(page)
 
     // Table shows migrations (including newly created plan's migrations)
@@ -263,6 +273,10 @@ test.describe('MIG-005 — complete rolling migration', () => {
       items: [MOCK_OPENSTACK_CRED_WITH_HOST_CONFIG],
     })
     await mockRoute(page, API.vmwareHosts, 'GET', MOCK_VMWARE_HOSTS_LIST)
+    // Submit writes the assigned host config onto each ESXi host before creating the plan.
+    await mockRoute(page, API.vmwareHostByName('esxi-host-1'), 'PATCH', MOCK_VMWARE_HOST_1)
+    await mockRoute(page, API.vmwareHostByName('esxi-host-2'), 'PATCH', MOCK_VMWARE_HOST_2)
+    await mockRoute(page, API.esxiMigrations, 'GET', { items: [] })
     await mockRoute(page, API.bmConfigs, 'GET', MOCK_BM_CONFIGS_LIST)
     await mockRoute(page, API.bmConfigByName('maas-config-1'), 'GET', MOCK_BM_CONFIG_1)
     await mockRoute(page, API.networkMappings, 'POST', MOCK_NETWORK_MAPPING_CREATED)
@@ -479,7 +493,8 @@ test.describe('MIG-007 — bulk delete migrations', () => {
 
 // ─── MIG-008: View pod logs for a migration ───────────────────────────────────
 
-test.describe('MIG-008 — pod logs drawer', () => {
+test.describe('MIG-008 — pod logs tab', () => {
+  const MIGRATION_NAME = 'test-vm-3-migration'
   const POD_NAME = 'v2v-helper-test-3'
   const SAMPLE_LOGS = [
     'INFO 2026-05-20T10:00:00Z Starting migration for test-vm-3',
@@ -491,72 +506,61 @@ test.describe('MIG-008 — pod logs drawer', () => {
   test.beforeEach(async ({ page }) => {
     await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST)
     await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST)
-    // Mock pod log stream
+    await mockRoute(page, API.migrationByName(MIGRATION_NAME), 'GET', MOCK_MIGRATION_SUCCEEDED)
+    // useDirectPodLogs streams through the vpwned k8s proxy.
     await page.route(API.podLogs(NS, POD_NAME), (route) => {
       route.fulfill({ status: 200, contentType: 'text/plain', body: SAMPLE_LOGS })
     })
-    await goToMigrations(page)
   })
 
-  test('PodLogsDrawer opens and renders log lines', async ({ page }) => {
-    const table = page.getByTestId('migrations-table')
-    const row = table.locator('[role="row"]').filter({ hasText: 'test-vm-3' })
-    await expect(row).toBeVisible()
+  test('pod logs tab renders log lines', async ({ page }) => {
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
 
-    // Open logs drawer
-    await row.getByRole('button', { name: /log/i }).click()
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
-
-    // Log lines appear
-    await expect(drawer.getByText(/Starting migration/i)).toBeVisible({ timeout: 5000 })
-    await expect(drawer.getByText(/Copying disk/i)).toBeVisible()
+    await expect(page.getByText(/Starting migration/i)).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByText(/Copying disk/i)).toBeVisible()
   })
 
   test('log search filters visible lines', async ({ page }) => {
-    const table = page.getByTestId('migrations-table')
-    await table.locator('[role="row"]').filter({ hasText: 'test-vm-3' }).getByRole('button', { name: /log/i }).click()
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
-    await expect(drawer.getByText(/Starting migration/i)).toBeVisible({ timeout: 5000 })
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
+    await expect(page.getByText(/Starting migration/i)).toBeVisible({ timeout: 10_000 })
 
-    // logs-search-input testid is on the MUI TextField wrapper div — target the actual input inside
-    await drawer.getByTestId('logs-search-input').locator('input').fill('ERROR')
-    await expect(drawer.getByText(/Connection timeout/i)).toBeVisible()
-    // Non-matching lines hidden
-    await expect(drawer.getByText(/Starting migration/i)).not.toBeVisible()
+    await podLogsSearchInput(page).fill('ERROR')
+    await expect(page.getByText(/Connection timeout/i)).toBeVisible()
+    // Non-matching lines are filtered out of the stream.
+    await expect(page.getByText(/Starting migration/i)).not.toBeVisible()
   })
 
-  test('download button triggers file download', async ({ page }) => {
-    const table = page.getByTestId('migrations-table')
-    await table.locator('[role="row"]').filter({ hasText: 'test-vm-3' }).getByRole('button', { name: /log/i }).click()
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
-    await expect(drawer.getByText(/Starting migration/i)).toBeVisible({ timeout: 5000 })
+  test('download button fetches the debug bundle', async ({ page }) => {
+    await page.route('**/sdk/vpw/v1/debug-bundle*', (route) => {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/gzip',
+        headers: {
+          'content-disposition': `attachment; filename="${MIGRATION_NAME}-debug-bundle.tar.gz"`,
+        },
+        body: 'bundle-bytes',
+      })
+    })
 
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
+    await expect(page.getByText(/Starting migration/i)).toBeVisible({ timeout: 10_000 })
+
+    // The icon button is unlabelled — MUI hangs the tooltip title on the wrapping span,
+    // because a disabled button cannot own the tooltip. Reach the button through it.
     const [download] = await Promise.all([
       page.waitForEvent('download'),
-      drawer.getByTestId('logs-download-button').click(),
+      page.getByLabel('Download debug bundle').getByRole('button').click(),
     ])
-    expect(download.suggestedFilename()).toMatch(/\.txt$/)
+    expect(download.suggestedFilename()).toMatch(/\.tar\.gz$/)
   })
 
-  test('drawer header shows the migration VM name, consistent with Migration Details', async ({
+  test('detail header shows the migration VM name, not the migration object name', async ({
     page,
   }) => {
-    const table = page.getByTestId('migrations-table')
-    await table
-      .locator('[role="row"]')
-      .filter({ hasText: 'test-vm-3' })
-      .getByRole('button', { name: /log/i })
-      .click()
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
 
-    // Header subtitle is the migration's spec.vmName ("test-vm-3") — the same name shown in the
-    // Migration Details drawer — not the derived migration object name ("test-vm-3-migration").
-    await expect(drawer.getByText('test-vm-3', { exact: true })).toBeVisible()
-    await expect(drawer.getByText('test-vm-3-migration', { exact: true })).toHaveCount(0)
+    // The header title is spec.vmName ("test-vm-3"), not metadata.name ("test-vm-3-migration").
+    await expect(page.getByRole('heading', { name: 'test-vm-3', exact: true })).toBeVisible()
   })
 })
 
@@ -697,6 +701,19 @@ test.describe('MIG-010 — status and date filtering', () => {
   })
 
   test('combined status + date filter applies intersection', async ({ page }) => {
+    // The shared fixtures carry a fixed creationTimestamp (2026-05-20), which ages out of
+    // every date window as the calendar moves. Re-stamp the list to "now" so this asserts
+    // the filter intersection rather than how old the fixtures happen to be.
+    const now = new Date().toISOString()
+    await mockRoute(page, API.migrations, 'GET', {
+      ...MOCK_MIGRATIONS_LIST,
+      items: MOCK_MIGRATIONS_LIST.items.map((m) => ({
+        ...m,
+        metadata: { ...m.metadata, creationTimestamp: now },
+      })),
+    })
+    await goToMigrations(page)
+
     const table = page.getByTestId('migrations-table')
 
     // Apply status filter first

@@ -2,6 +2,7 @@ import { test, expect, Page } from '@playwright/test'
 
 import {
   goToMigrations,
+  goToMigrationPodLogs,
   openMigrationDrawer,
   submitMigrationForm,
   selectVmwareCluster,
@@ -21,6 +22,7 @@ import {
   MOCK_MIGRATION_PLANS_LIST_EMPTY,
   MOCK_MIGRATION_PLAN_2,
   MOCK_MIGRATION_AWAITING_CUTOVER,
+  MOCK_MIGRATION_RUNNING,
   MOCK_VMWARE_CREDS_LIST,
   MOCK_OPENSTACK_CRED_1,
   MOCK_OPENSTACK_CREDS_LIST,
@@ -209,7 +211,9 @@ test.describe('MIG-021 — 422 error on network mapping creation', () => {
 // ─── MIG-022: Credential fetch failure in Step 1 ─────────────────────────────
 
 test.describe('MIG-022 — credential fetch failure in step 1', () => {
-  test('500 on vmwarecreds GET redirects to credentials page', async ({ page }) => {
+  test('500 on vmwarecreds GET leaves the migrations page usable with migration start blocked', async ({
+    page,
+  }) => {
     // VMware creds endpoint returns 500
     await mockRouteError(page, API.vmwareCreds, 'GET', 500, 'Failed to fetch VMware credentials')
     await mockRoute(page, API.vmwareClusters, 'GET', MOCK_VMWARE_CLUSTERS_LIST)
@@ -219,8 +223,13 @@ test.describe('MIG-022 — credential fetch failure in step 1', () => {
     await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST_EMPTY)
 
     await page.goto(ROUTES.migrations)
-    // vmwareCreds list GET → 500 → app detects no credentials on page load → auto-redirects
-    await page.waitForURL(/\/credentials/, { timeout: 15_000 })
+
+    // Only the root route gates on credentials (App.tsx). Landing directly on the
+    // migrations page keeps the user there; the failed creds fetch shows up as a
+    // disabled Start Migration button rather than a redirect.
+    await expect(page.getByTestId('migrations-table')).toBeVisible({ timeout: 10_000 })
+    expect(new URL(page.url()).pathname).toBe(ROUTES.migrations)
+    await expect(page.getByTestId('start-migration-button')).toBeDisabled()
   })
 
   test('500 on vmwareclusters GET shows error in step 1', async ({ page }) => {
@@ -358,12 +367,13 @@ test.describe('MIG-024 — IP validation API error', () => {
 // ─── MIG-025: Pod logs — connection error and reconnect ──────────────────────
 
 test.describe('MIG-025 — pod logs connection error and reconnect', () => {
+  const MIGRATION_NAME = 'test-vm-2-migration'
   const POD_NAME = 'v2v-helper-test-2'
 
   test.beforeEach(async ({ page }) => {
     await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST)
     await mockRoute(page, API.migrationPlans, 'GET', MOCK_MIGRATION_PLANS_LIST)
-    await goToMigrations(page)
+    await mockRoute(page, API.migrationByName(MIGRATION_NAME), 'GET', MOCK_MIGRATION_RUNNING)
   })
 
   test('log fetch failure shows error and Reconnect button', async ({ page }) => {
@@ -372,53 +382,41 @@ test.describe('MIG-025 — pod logs connection error and reconnect', () => {
       route.fulfill({ status: 500, contentType: 'text/plain', body: 'log stream unavailable' })
     })
 
-    const table = page.getByTestId('migrations-table')
-    const row = table.locator('[role="row"]').filter({ hasText: 'test-vm-2' })
-    await expect(row).toBeVisible()
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
 
-    await row.getByRole('button', { name: /log/i }).click()
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
+    // Error surfaces in an alert — not a silent failure. The tab also carries an
+    // informational "Migration is running" alert, so scope to the error one.
+    const errorAlert = page.getByRole('alert').filter({ hasText: /failed to stream logs/i })
+    await expect(errorAlert).toBeVisible({ timeout: 10_000 })
 
-    // Error message shown — not silent failure
-    await expect(
-      drawer.getByText(/failed|error|connect|unavailable/i),
-    ).toBeVisible({ timeout: 5000 })
-
-    // Reconnect button visible
-    await expect(
-      drawer.getByRole('button', { name: /reconnect|retry/i }),
-    ).toBeVisible()
+    // The alert offers a Reconnect action.
+    await expect(errorAlert.getByRole('button', { name: /reconnect/i })).toBeVisible()
   })
 
   test('clicking Reconnect restarts log stream', async ({ page }) => {
-    let callCount = 0
+    // useDirectPodLogs reconnects on its own with backoff, so "first call fails, rest
+    // succeed" would heal before the operator ever sees the alert. Keep failing until the
+    // test flips the flag, so the recovery under test is the Reconnect click.
+    let allowSuccess = false
     const SAMPLE_LOGS = 'INFO 2026-05-20T10:00:00Z Migration started\nINFO 2026-05-20T10:01:00Z Copying disk'
 
     await page.route(API.podLogs(NS, POD_NAME), (route) => {
-      callCount++
-      if (callCount === 1) {
-        // First call fails
-        route.fulfill({ status: 500, contentType: 'text/plain', body: 'error' })
-      } else {
-        // Subsequent calls succeed
+      if (allowSuccess) {
         route.fulfill({ status: 200, contentType: 'text/plain', body: SAMPLE_LOGS })
+      } else {
+        route.fulfill({ status: 500, contentType: 'text/plain', body: 'error' })
       }
     })
 
-    const table = page.getByTestId('migrations-table')
-    const row = table.locator('[role="row"]').filter({ hasText: 'test-vm-2' })
-    await row.getByRole('button', { name: /log/i }).click()
+    await goToMigrationPodLogs(page, MIGRATION_NAME)
+    const errorAlert = page.getByRole('alert').filter({ hasText: /failed to stream logs/i })
+    await expect(errorAlert).toBeVisible({ timeout: 10_000 })
 
-    const drawer = page.getByTestId('pod-logs-drawer')
-    await expect(drawer).toBeVisible()
-    await expect(drawer.getByText(/failed|error/i)).toBeVisible({ timeout: 5000 })
+    allowSuccess = true
+    await errorAlert.getByRole('button', { name: /reconnect/i }).click()
 
-    // Click reconnect
-    await drawer.getByRole('button', { name: /reconnect|retry/i }).click()
-
-    // Logs should appear after reconnect
-    await expect(drawer.getByText(/Migration started/i)).toBeVisible({ timeout: 5000 })
+    // Logs appear after the stream is re-established.
+    await expect(page.getByText(/Migration started/i)).toBeVisible({ timeout: 10_000 })
   })
 })
 
@@ -437,7 +435,9 @@ test.describe('MIG-026 — delete migration API error', () => {
     await goToMigrations(page)
   })
 
-  test('500 on DELETE closes dialog; migration row stays visible', async ({ page }) => {
+  test('500 on DELETE keeps dialog open with an error; migration row stays visible', async ({
+    page,
+  }) => {
     await mockRouteError(page, API.migrationByName(TARGET_MIGRATION), 'DELETE', 500, 'Delete failed')
 
     const table = page.getByTestId('migrations-table')
@@ -447,14 +447,18 @@ test.describe('MIG-026 — delete migration API error', () => {
     await row.getByRole('button', { name: /delete/i }).click()
     await page.getByTestId('confirm-delete-button').click()
 
-    // handleDeleteMigration catches error internally (no re-throw) →
-    // ConfirmationDialog.onConfirm resolves → onClose() called → dialog closes
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 })
+    // deleteMigrations() returns false on failure, so DeleteMigrationDialog keeps
+    // itself open and renders the error instead of closing silently.
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 5000 })
     // Row still visible — migration not deleted on error
     await expect(row).toBeVisible()
   })
 
-  test('403 on DELETE closes dialog; migration row stays visible', async ({ page }) => {
+  test('403 on DELETE keeps dialog open with an error; migration row stays visible', async ({
+    page,
+  }) => {
     await mockRouteError(page, API.migrationByName(TARGET_MIGRATION), 'DELETE', 403, 'Forbidden')
 
     const table = page.getByTestId('migrations-table')
@@ -464,7 +468,9 @@ test.describe('MIG-026 — delete migration API error', () => {
     await row.getByRole('button', { name: /delete/i }).click()
     await page.getByTestId('confirm-delete-button').click()
 
-    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 5000 })
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('alert')).toBeVisible({ timeout: 5000 })
     await expect(row).toBeVisible()
   })
 })
@@ -515,7 +521,8 @@ test.describe('MIG-027 — admin cutover error handling', () => {
 
     // Dialog stays open — setOpen(false) NOT called in catch block
     await expect(page.getByRole('dialog')).toBeVisible()
-    // Migration phase must NOT be incorrectly updated to Succeeded on error
-    await expect(row.getByText('AwaitingAdminCutOver', { exact: true })).toBeVisible()
+    // Migration phase must NOT be incorrectly updated to Succeeded on error.
+    // The status chip renders the humanised label from getPhaseLabel(), not the raw phase.
+    await expect(row.getByText('Awaiting Admin Cutover', { exact: true })).toBeVisible()
   })
 })
