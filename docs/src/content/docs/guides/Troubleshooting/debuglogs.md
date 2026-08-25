@@ -9,15 +9,17 @@ This guide outlines how vJailbreak handles debug log collection for VM migration
 ## How It Works
 
 - For every migration executed via vJailbreak, debug logs are written to the host system under `/var/log/pf9`.
-- A single combined log file is written for the migration at:
+- A high-level milestone log is written for the migration at:
 
   `/var/log/pf9/<migration-name>.log`
+
+  This mirrors the same key milestone messages (e.g. "Snapshot created", "Starting NBD server", "VM active") that also appear in `kubectl logs` for the pod — it is not a full copy of the pod's stdout/stderr.
 
 - In addition, logs are now **split by category** into a dedicated directory for the migration:
 
   `/var/log/pf9/<migration-name>/<category>.<timestamp>.log`
 
-  Each category captures the output of a specific part of the migration, so an issue can be traced straight to the relevant subsystem instead of scanning one combined file:
+  Each category captures the output of a specific part of the migration, so an issue can be traced straight to the relevant subsystem instead of scanning one milestone log:
 
   | Category  | Contents                                             |
   |-----------|-------------------------------------------------------|
@@ -31,18 +33,18 @@ This guide outlines how vJailbreak handles debug log collection for VM migration
 
 | Node Type          | Path                                              | Description                                          |
 |--------------------|----------------------------------------------------|-------------------------------------------------------|
-| vjailbreak-master   | `/var/log/pf9/<migration>.log`                     | Combined log for the migration                        |
+| vjailbreak-master   | `/var/log/pf9/<migration>.log`                     | High-level milestone log for the migration             |
 | vjailbreak-master   | `/var/log/pf9/<migration>/<category>.<timestamp>.log` | Per-category split logs (`nbd`, `virtv2v`, `general`) |
 
 ## Example
 
 If a migration is named `vm-migrate-001`, its logs will be available at:
 
-- `/var/log/pf9/vm-migrate-001.log` — combined log
+- `/var/log/pf9/vm-migrate-001.log` — milestone log
 - `/var/log/pf9/vm-migrate-001/nbd.2026-08-25-10:15:00.log` — disk-copy log
 - `/var/log/pf9/vm-migrate-001/virtv2v.2026-08-25-10:20:00.log` — conversion log
 
-in the vjailbreak node.
+on the vjailbreak node.
 
 ## Downloading a Debug Bundle from the UI
 
