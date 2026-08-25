@@ -72,6 +72,15 @@ const (
 	sessionMaxAge = 25 * time.Minute
 )
 
+// naaPollAttempts/naaPollInterval bound how long getLdevWithNAA waits for a
+// newly created LDEV's naaId to appear. Observed in the field: naaId can
+// take well over 10s to populate on busy arrays, so this is generous rather
+// than tight. Declared as vars (not consts) so tests can shrink them.
+var (
+	naaPollAttempts = 30
+	naaPollInterval = 2 * time.Second
+)
+
 // ldevInfo is the subset of the LDEV object the provider consumes.
 type ldevInfo struct {
 	LdevID        int    `json:"ldevId"`
@@ -572,10 +581,10 @@ func (p *VantaraStorageProvider) invokeJob(ctx context.Context, method, url stri
 	return nil, fmt.Errorf("vantara: timed out waiting for job %s", jobURL)
 }
 
-// getLdevWithNAA fetches an LDEV, retrying briefly until naaId is populated.
+// getLdevWithNAA fetches an LDEV, retrying until naaId is populated.
 func (p *VantaraStorageProvider) getLdevWithNAA(ctx context.Context, ldevID int) (*ldevInfo, error) {
 	var info *ldevInfo
-	for attempt := 0; attempt < 5; attempt++ {
+	for attempt := 0; attempt < naaPollAttempts; attempt++ {
 		resp, _, err := p.doJSON(ctx, http.MethodGet, fmt.Sprintf("%s/ldevs/%d", p.baseURL, ldevID), nil, p.sessionHeaders())
 		if err != nil {
 			return nil, fmt.Errorf("vantara: failed to get LDEV %d: %w", ldevID, err)
@@ -587,10 +596,11 @@ func (p *VantaraStorageProvider) getLdevWithNAA(ctx context.Context, ldevID int)
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(2 * time.Second):
+		case <-time.After(naaPollInterval):
 		}
 	}
-	return nil, fmt.Errorf("vantara: LDEV %d has no naaId after creation; cannot derive ESXi device path", ldevID)
+	return nil, fmt.Errorf("vantara: LDEV %d has no naaId after %s (status=%q); cannot derive ESXi device path",
+		ldevID, naaPollInterval*time.Duration(naaPollAttempts), info.Status)
 }
 
 // listLdevs pages through all defined LDEVs.

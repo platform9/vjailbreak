@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 )
@@ -32,7 +33,17 @@ type fakeGUM struct {
 		createBodies []map[string]any
 		labelBodies  map[int]string
 		deleted      []int
+
+		// naaDelayRemaining, when > 0 for an LDEV id, makes the next that many
+		// GETs on that LDEV report an empty naaId before returning the real one.
+		naaDelayRemaining map[int]int
 	}
+}
+
+// delayNAA makes the next n GETs on ldevID report an empty naaId, simulating
+// an array that takes a while to populate it after LDEV creation.
+func (f *fakeGUM) delayNAA(ldevID, n int) {
+	f.mu.naaDelayRemaining[ldevID] = n
 }
 
 func newFakeGUM(t *testing.T) *fakeGUM {
@@ -42,6 +53,7 @@ func newFakeGUM(t *testing.T) *fakeGUM {
 	f.mu.ldevs = map[int]*ldevInfo{}
 	f.mu.jobs = map[int]map[string]any{}
 	f.mu.labelBodies = map[int]string{}
+	f.mu.naaDelayRemaining = map[int]int{}
 	f.mu.pools = []poolInfo{{PoolID: 5, PoolName: "dp-pool-1", PoolType: "DP"}}
 	return f
 }
@@ -160,8 +172,13 @@ func (f *fakeGUM) handler() http.Handler {
 		}
 		switch r.Method {
 		case http.MethodGet:
+			naaID := l.NaaID
+			if remaining := f.mu.naaDelayRemaining[id]; remaining > 0 {
+				f.mu.naaDelayRemaining[id] = remaining - 1
+				naaID = ""
+			}
 			writeJSON(w, 200, map[string]any{
-				"ldevId": float64(l.LdevID), "label": l.Label, "naaId": l.NaaID,
+				"ldevId": float64(l.LdevID), "label": l.Label, "naaId": naaID,
 				"blockCapacity": float64(l.BlockCapacity), "poolId": float64(l.PoolID), "status": l.Status,
 			})
 		case http.MethodPut:
@@ -258,6 +275,59 @@ func TestCreateVolume(t *testing.T) {
 	}
 	if vol.Size != wantBlocks*512 {
 		t.Fatalf("size mismatch: %d", vol.Size)
+	}
+}
+
+// withFastNAAPoll shrinks the naaId poll interval/attempts for the duration
+// of a test, restoring the originals afterwards. Keeps tests fast without
+// weakening the production retry budget.
+func withFastNAAPoll(t *testing.T, attempts int) {
+	t.Helper()
+	origAttempts, origInterval := naaPollAttempts, naaPollInterval
+	naaPollAttempts, naaPollInterval = attempts, time.Millisecond
+	t.Cleanup(func() {
+		naaPollAttempts, naaPollInterval = origAttempts, origInterval
+	})
+}
+
+func TestCreateVolumeSucceedsAfterNAADelay(t *testing.T) {
+	withFastNAAPoll(t, 30)
+
+	f := newFakeGUM(t)
+	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
+
+	// naaId only appears on the LDEV's 4th GET (as it does on some arrays
+	// under load), well within the retry budget.
+	f.delayNAA(f.mu.nextLdevID, 3)
+
+	vol, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
+	if err != nil {
+		t.Fatalf("CreateVolume should succeed once naaId eventually appears: %v", err)
+	}
+	if vol.NAA == "" {
+		t.Fatal("expected a populated NAA once naaId appears")
+	}
+}
+
+func TestCreateVolumeFailsWhenNAANeverAppears(t *testing.T) {
+	withFastNAAPoll(t, 3)
+
+	f := newFakeGUM(t)
+	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
+
+	// Delay well beyond the (shrunk) retry budget so it never resolves.
+	f.delayNAA(f.mu.nextLdevID, 1000)
+
+	_, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
+	if err == nil {
+		t.Fatal("expected an error when naaId never appears")
+	}
+	if !strings.Contains(err.Error(), "no naaId after") || !strings.Contains(err.Error(), "cannot derive ESXi device path") {
+		t.Fatalf("unexpected error message: %v", err)
+	}
+	// The LDEV created for the timed-out attempt should have been cleaned up.
+	if len(f.mu.deleted) != 1 {
+		t.Fatalf("expected LDEV to be cleaned up on NAA timeout, deleted=%v", f.mu.deleted)
 	}
 }
 
