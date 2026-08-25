@@ -87,6 +87,19 @@ type CinderBackendPoolAware interface {
 	ApplyCinderPoolHint(ctx context.Context, poolHint string) error
 }
 
+// PostMappingNAAResolver is an optional interface for providers whose NAA/WWN
+// identifier is not known at CreateVolume time and only becomes available
+// after the volume is mapped to a host (e.g. some Hitachi Vantara arrays
+// don't populate an LDEV's naaId until it has an assigned server). This is
+// the exception, not the rule: providers like Pure and NetApp derive NAA
+// deterministically from a volume attribute (e.g. serial number) at creation
+// time, independent of host mapping, and do not need this interface.
+// Callers must invoke ResolveVolumeNAA after LUN mapping succeeds and use
+// its result in place of the (possibly empty) Volume.NAA from CreateVolume.
+type PostMappingNAAResolver interface {
+	ResolveVolumeNAA(ctx context.Context, vol Volume) (string, error)
+}
+
 // MappingContext holds context information for volume mapping
 // It's a flexible map to store provider-specific context
 type MappingContext map[string]interface{}
