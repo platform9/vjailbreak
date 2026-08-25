@@ -1293,7 +1293,38 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	log.Printf("Made get-bootable-partition.sh executable")
 
-	// Run the script
+	// DIAGNOSTIC ONLY - do not use this to change the script's behavior yet.
+	// list-devices asks guestfish for the real attached-disk list, in -a
+	// order (the same API GetDeviceNumberFromPartition/device-index rely
+	// on), which excludes the libguestfs appliance's own backing disk. A
+	// production trace showed the script's own raw `ls /dev/[sv]d[a-z]`
+	// scan picking up that appliance disk too - a migration with exactly 2
+	// attached VM disks saw "disks found: /dev/sda /dev/sdb /dev/sdc", where
+	// /dev/sdc turned out to be the appliance's own root filesystem. That's
+	// a plausible mechanism for VJAILB-225's intermittent wrong-disk
+	// selection (if the appliance disk ever sorts before a real one, every
+	// heuristic in the script works off a list containing a device with no
+	// corresponding VMDisk). But it's only ever been observed working
+	// correctly so far - we have not yet caught it actually causing a
+	// misselection. Log list-devices' answer next to the script's own raw
+	// scan (in the trace below) on every run so the next occurrence gives
+	// us both lists side by side and we can confirm this theory against a
+	// real failure before changing get-bootable-partition.sh's actual
+	// disk-selection logic (which would otherwise make the phantom-disk
+	// condition unreproducible).
+	realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false)
+	if listErr != nil {
+		log.Printf("WARNING: diagnostic list-devices call failed (non-fatal): %v: %s", listErr, strings.TrimSpace(realDisksStr))
+	} else {
+		realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
+		if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh diagnostic: real attached disks per list-devices (appliance disk excluded, -a order): %v", realDisks)); logErr != nil {
+			log.Printf("WARNING: failed to persist list-devices diagnostic to migration log: %v", logErr)
+		}
+	}
+
+	// Run the script exactly as before (no args) so its own raw disk scan -
+	// the thing that needs to actually misfire before we can confirm the
+	// phantom-disk theory above - still runs unmodified.
 	cmd, cmdErr := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
 	if cmdErr != nil {
 		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)

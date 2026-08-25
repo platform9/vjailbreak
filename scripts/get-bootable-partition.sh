@@ -13,6 +13,22 @@
 # only the bare result ever made it back. The final result line is now
 # tagged (BOOTDISK_RESULT:<path>) so the caller can pull it out of the
 # single stdout stream and treat every other line as trace.
+#
+# NOTE ON THE RAW SCAN BELOW: production traces show this can pick up the
+# libguestfs appliance's own backing disk in addition to the real VM disks -
+# a migration with exactly 2 attached VM disks had this script report
+# "disks found: /dev/sda /dev/sdb /dev/sdc", where /dev/sdc turned out to be
+# the appliance's own root filesystem, not a VM disk. That's very likely
+# related to VJAILB-225's intermittent wrong-disk selection: if the
+# appliance's disk ever enumerates earlier than a real disk (ordering here
+# depends on SCSI/PCI probe timing, not anything guaranteed), the phantom
+# device sits in front of a real one for every heuristic below. We are
+# deliberately NOT filtering it out yet (e.g. via guestfish's list-devices,
+# which does exclude it) - the caller now logs list-devices' answer
+# alongside this script's raw scan on every run precisely so the next time
+# this misfires, we have both lists side by side and can confirm the
+# phantom-disk theory against a real occurrence before changing this
+# script's actual disk-selection behavior.
 
 # Step 1: Identify all disks in guest
 # List block devices (assuming /dev/vda, /dev/sda, etc. are available)
@@ -103,9 +119,16 @@ if [ -z "$bootdisk" ]; then
 fi
 
 # Step 6: Final fallback - use first disk
+# NOTE: $disks may now be space-joined (caller-provided args, "$*") rather
+# than newline-separated (the old `ls` fallback), so `head -1` alone can no
+# longer be trusted to isolate just the first entry - word-split on $disks
+# instead, which works for either form.
 if [ -z "$bootdisk" ]; then
   echo "[DEBUG] Step 6: fallback to first disk"
-  bootdisk=$(echo "$disks" | head -1)
+  for disk in $disks; do
+    bootdisk="$disk"
+    break
+  done
 fi
 
 echo "[DEBUG] Result: bootdisk=$bootdisk"
