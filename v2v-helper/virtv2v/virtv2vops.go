@@ -550,6 +550,7 @@ func GetOsRelease(path string) (string, error) {
 		cmd := exec.Command("guestfish", "--ro", "-a", imgPath)
 		cmd.Stdin = strings.NewReader(
 			mountScript(plan, false) + guestfishLine("cat", file) + "\n")
+		countBoot("cat %q (GetOsRelease, %s)", file, imgPath)
 		log.Printf("Executing %s with input: cat %s", cmd.String(), file)
 
 		out, err := cmd.CombinedOutput()
@@ -822,6 +823,7 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 	// The command text is passed through verbatim - callers already supply a
 	// complete guestfish command line here, not a command plus separate args.
 	cmd.Stdin = strings.NewReader(mountScript(plan, write) + command + "\n")
+	countBoot("single command %q (path=%s)", command, path)
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -861,6 +863,7 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %w", command, err)
 	}
+	countBoot("single command %q (%d disk(s))", command, len(disks))
 	log.Printf("Executing %s -- %s", cmd.String(), guestfishLine(command, args...))
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -1300,6 +1303,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	if cmdErr != nil {
 		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)
 	}
+	countBoot("sh get-bootable-partition.sh (%d disk(s))", len(disks))
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
@@ -1344,6 +1348,7 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
+	countBoot("guestmount full plan (%d disk(s))", len(disks))
 	mountCmd := exec.Command("guestmount", guestmountArgs(disks, plan.Mounts, mountPoint)...)
 	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 		// Unlike a guestfish script, guestmount cannot tolerate one failed mount,
@@ -1357,6 +1362,7 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 			return fmt.Errorf("cannot mount root %q with guestmount: -m cannot express a mountable", plan.Root)
 		}
 
+		countBoot("guestmount root-only retry (%d disk(s))", len(disks))
 		mountCmd = exec.Command("guestmount", guestmountArgs(disks, []mountSpec{{Device: plan.Root, MountPoint: "/"}}, mountPoint)...)
 		if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 			return fmt.Errorf("guestmount failed: %v, output: %s", mountErr, string(out))
