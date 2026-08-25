@@ -1294,8 +1294,6 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	log.Printf("Made get-bootable-partition.sh executable")
 
 	// Run the script
-	var runErr error
-
 	cmd, cmdErr := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
 	if cmdErr != nil {
 		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)
@@ -1304,18 +1302,37 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 	log.Printf("Executing %s", cmd.String())
-	runErr = cmd.Run()
-	if stderrBuf.Len() > 0 {
-		log.Printf("get-bootable-partition.sh debug output:\n%s", strings.TrimSpace(stderrBuf.String()))
+	runErr := cmd.Run()
+
+	// The script's entire step-by-step reasoning (which disks it enumerated,
+	// which of its six heuristics matched and why) goes to stderr. That trace
+	// is the only evidence that explains WHY a given disk was picked, but
+	// log.Printf only ever reaches the pod's raw stdout stream, not the
+	// migration's persisted log file. On a run that "succeeds" with a
+	// wrong-but-in-range answer (see VJAILB-225: get-bootable-partition.sh
+	// silently picked the wrong disk, migration completed, VM didn't boot)
+	// nothing below ever returns an error, so this trace was the only way to
+	// see why - and it was being dropped. Persist it unconditionally, success
+	// or failure, empty or not, via the same mechanism migobj.logMessage uses
+	// so it lands in the durable per-migration log file, not just stdout.
+	trace := strings.TrimSpace(stderrBuf.String())
+	if trace == "" {
+		trace = "(no debug output captured - either the deployed get-bootable-partition.sh predates step logging, or it produced none)"
 	}
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh trace:\n%s", trace)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh trace to migration log: %v", logErr)
+	}
+
 	if runErr != nil {
-		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(stderrBuf.String()))
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, trace)
 	}
 
-	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(stdoutBuf.String()))
+	result := strings.TrimSpace(stdoutBuf.String())
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh result: %q", result)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
+	}
 
-	return strings.TrimSpace(stdoutBuf.String()), nil
+	return result, nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
