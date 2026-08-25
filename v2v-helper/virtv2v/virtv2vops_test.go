@@ -538,18 +538,9 @@ func TestBuildRHELNetworkManagerKeyfiles_EmptyEntriesSkipped(t *testing.T) {
 	assert.Empty(t, files, "a MAC with zero entries must get no NetworkManager keyfile")
 }
 
-// ---------------------------------------------------------------------------
 // Phase 1 guestfish consolidation: getBootablePartitionSteps,
-// mountPersistenceSteps, wildcardNetplanSteps
-//
-// These functions only build the []guestfishStep a single RunGuestfishScript/
-// RunGuestfishScriptRaw call now runs in one appliance boot, where each of
-// them used to be 3 separate RunCommandInGuestAllVolumes calls (3 boots).
-// Since none of this is reachable without a real guestfish binary, what's
-// unit-testable - and what actually matters for "did the merge preserve the
-// exact command sequence" - is the step list itself: right commands, right
-// args, right order, right fail-fast/tolerant shape.
-// ---------------------------------------------------------------------------
+// mountPersistenceSteps, wildcardNetplanSteps - tests the step list only
+// (right commands/args/order/shape), since guestfish itself can't run here.
 
 func TestGetBootablePartitionSteps(t *testing.T) {
 	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh")
@@ -632,14 +623,9 @@ func TestWildcardNetplanSteps(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Phase 2 guestfish consolidation
-//
-// Same rationale as the Phase 1 tests above: the guestfish execution itself
-// cannot run without a real binary, so what's tested is the step-building
-// and result-picking logic - the pure Go that decides what gets sent and
-// what the batched output means.
-// ---------------------------------------------------------------------------
+// Phase 2 guestfish consolidation - same rationale as Phase 1: tests the
+// step-building and result-picking logic, the pure Go that decides what
+// gets sent and what the batched output means.
 
 func TestFixLegacyMkinitrdCheckSteps(t *testing.T) {
 	steps := fixLegacyMkinitrdCheckSteps()

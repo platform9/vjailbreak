@@ -57,24 +57,13 @@ const (
 	productNameMarker = "---VJB-PRODUCT---"
 )
 
-// guestfishBootCount counts every guestfish/guestmount appliance boot this
-// process has started. It exists purely for observability: comparing this
-// number before and after a call-site consolidation is what turns "fewer
-// appliance boots" from an assumption into something a log line proves.
-// Every place that actually launches a guestfish or guestmount process -
-// runScript here, RunCommandInGuest, RunCommandInGuestAllVolumes (via
-// prepareGuestfishCommand), runGuestfishScript (below, behind
-// RunGuestfishScript/RunGuestfishScriptRaw/RunGuestfishScriptCombinedRaw -
-// which is what RunGetBootablePartitionScript, GetOsRelease,
-// GetOsReleaseAllVolumes, GetInterfaceNames, FixLegacyMkinitrd, and
-// GetBootableVolumeIndex all now go through), and the guestmount call in
-// RunNetworkPersistence - increments this via countBoot.
+// guestfishBootCount counts every guestfish/guestmount appliance boot, for
+// observability when comparing call-site consolidations. Every launch
+// point increments it via countBoot.
 var guestfishBootCount int64
 
-// countBoot logs one appliance boot against the shared counter. reason
-// should say why the boot is happening (which caller asked for it, and
-// against how many disks) so the log stays useful for tracing where boots
-// are still being spent, not just how many there were.
+// countBoot logs one appliance boot against the shared counter; reason
+// should say why, for tracing where boots are still being spent.
 func countBoot(reason string, args ...interface{}) {
 	n := atomic.AddInt64(&guestfishBootCount, 1)
 	log.Printf("guestfish appliance boot #%d: %s", n, fmt.Sprintf(reason, args...))
@@ -556,56 +545,21 @@ func quoteArg(s string) string {
 	return b.String()
 }
 
-// Multi-step guestfish scripts.
-//
-// Every function above this point speaks one command at a time - the
-// original shape everything in this file had. Everything below lets a
-// caller batch several commands into one guestfish invocation, so several
-// previously-separate appliance boots (each a full qemu-kvm launch, the
-// expensive part of any guestfish call) collapse into one.
-//
-//	guestfishStep             one command: fail-fast (no Marker) or
-//	                          tolerant-and-marked (Marker set)
-//	buildScriptLines          renders steps into a script body
-//	describeSteps             renders steps for a log line
-//	prepareGuestfishScript    prepareGuestfishCommand's multi-step sibling
-//	runGuestfishScript        prepare, boot, run, return raw output
-//	  RunGuestfishScript              ...lowercased, for a fail-fast chain
-//	  RunGuestfishScriptRaw           ...raw case, for a tolerant batch
-//	  RunGuestfishScriptCombinedRaw   ...raw, with each step's own error
-//	                                  text folded in - for a tolerant batch
-//	                                  that needs to read *why* a step failed
-//	splitByMarker             recovers a tolerant batch's per-step output
+// Multi-step guestfish scripts: batch several commands into one guestfish
+// invocation so several appliance boots collapse into one. See guestfishStep,
+// runGuestfishScript, and splitByMarker below.
 
-// guestfishStep is one command in a multi-step guestfish script built by
-// prepareGuestfishScript. This is the building block that lets several
-// previously-separate appliance boots collapse into one: a caller that used
-// to make N single-command calls in a row now builds one []guestfishStep
-// and makes one call instead.
-//
-// Two shapes, chosen by whether Marker is set:
-//
-//   - Marker == "" (fail-fast chain): the step runs with no tolerance
-//     prefix, so a failure aborts every step after it in the same script -
-//     exactly how a sequence of separate RunCommandInGuestAllVolumes calls
-//     already behaves today, since Go already stops calling the next one on
-//     error. Use this for a strictly sequential write chain (e.g. upload,
-//     then chmod, then run).
-//   - Marker != "" (tolerant batch): the step is wrapped in "echo <marker>"
-//     and run with guestfish's "-" prefix (guestfish(1), EXIT ON ERROR
-//     BEHAVIOUR), so it cannot abort the script. Use this for several
-//     independent queries where each one's success or failure needs to be
-//     read separately afterward - splitByMarker recovers each step's output
-//     by marker. This is the same idiom rootDetailsScript/parseRootDetails
-//     already use for the mount-plan resolver, generalized here for reuse.
+// guestfishStep is one command in a multi-step guestfish script. Marker ==
+// "" is fail-fast (aborts the rest on failure); Marker != "" is tolerant
+// (wrapped in "echo <marker>" + guestfish's "-" prefix) - see splitByMarker.
 type guestfishStep struct {
 	Command string
 	Args    []string
 	Marker  string
 }
 
-// buildScriptLines renders steps into the body of a guestfish script - the
-// part appended after mountScript's mount preamble.
+// buildScriptLines renders steps into the guestfish script body appended
+// after mountScript's mount preamble.
 func buildScriptLines(steps []guestfishStep) string {
 	var b strings.Builder
 	for _, step := range steps {
@@ -653,25 +607,9 @@ func prepareGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishSte
 	return cmd, nil
 }
 
-// runGuestfishScript is the shared implementation behind RunGuestfishScript,
-// RunGuestfishScriptRaw, and RunGuestfishScriptCombinedRaw: prepare, boot,
-// run, and return raw output. It is one appliance boot regardless of how
-// many steps are passed in - that collapsing is the entire point of this
-// section.
-//
-// combined controls whether a step's own guestfish error text is folded
-// into the returned string alongside stdout (like exec.Cmd.CombinedOutput),
-// instead of being kept out of it and only logged. Most callers want
-// stdout only - that is where the actual data they asked for lands. A
-// caller that needs to tell apart *why* a tolerant step produced no
-// stdout - e.g. "No such file or directory" versus some other failure, see
-// GetOsReleaseAllVolumes - needs combined instead, because a tolerated
-// step's error text goes to guestfish's stderr, not stdout, and only
-// pointing Stdout and Stderr at the very same buffer keeps the child
-// process's own interleaving order intact, so that text still lands in the
-// right marker section. That is the same trick exec.Cmd.CombinedOutput()
-// uses, and the same reason GetOsRelease used it per-call before this
-// batched form existed.
+// runGuestfishScript backs RunGuestfishScript/Raw/CombinedRaw: prepare,
+// boot, run, return raw output - one boot regardless of step count.
+// combined folds each step's own error text into the output (see GetOsReleaseAllVolumes).
 func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestfishStep) (string, error) {
 	cmd, err := prepareGuestfishScript(disks, write, steps...)
 	if err != nil {
@@ -705,12 +643,9 @@ func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestf
 	return stdoutBuf.String(), nil
 }
 
-// RunGuestfishScript runs a fail-fast multi-step script (steps with no
-// Marker - see guestfishStep) against every disk in one appliance boot, and
-// returns the combined, lowercased stdout. This is the same contract
-// RunCommandInGuestAllVolumes has for a single command, so a caller merging
-// several of its own calls into one RunGuestfishScript call needs no other
-// change to how it reads the result.
+// RunGuestfishScript runs a fail-fast multi-step script (no Marker on any
+// step - see guestfishStep) in one appliance boot and returns lowercased
+// stdout - the same contract RunCommandInGuestAllVolumes has for one command.
 func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	out, err := runGuestfishScript(disks, write, false, steps...)
@@ -721,36 +656,24 @@ func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (
 }
 
 // RunGuestfishScriptRaw is RunGuestfishScript without the lowercasing, for
-// tolerant-batch callers that parse the output by marker with
-// splitByMarker: lowercasing first would still match the markers themselves
-// fine (they're caller-chosen constants, matched exactly either way), but
-// would corrupt any case-sensitive guest content a step's output needs to
-// preserve (e.g. a mixed-case device path or file content).
+// tolerant-batch callers using splitByMarker - lowercasing would corrupt
+// case-sensitive guest content (e.g. a mixed-case device path).
 func RunGuestfishScriptRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	return runGuestfishScript(disks, write, false, steps...)
 }
 
 // RunGuestfishScriptCombinedRaw is RunGuestfishScriptRaw, but folds each
-// tolerant step's own guestfish error text into the returned output
-// alongside its stdout - see runGuestfishScript's combined parameter. Use
-// this only when a caller genuinely needs to read why a tolerant step
-// produced no output, not merely that it did.
+// step's own error text into the output alongside stdout - use only when a
+// caller needs to read why a tolerant step produced no output.
 func RunGuestfishScriptCombinedRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 	return runGuestfishScript(disks, write, true, steps...)
 }
 
 // splitByMarker splits combined guestfish script output into per-step text
-// blocks, for a tolerant-batch script (see guestfishStep). markers is the
-// exact set of marker strings the caller wrapped its steps in; splitByMarker
-// only ever treats a line as a marker if it exactly matches one of these, so
-// it can't be confused by guest content that happens to look like a marker
-// from a different script. A marker with no output before the next marker
-// (or end of input) still gets an entry, mapped to "" - callers can tell
-// "this step ran tolerantly and printed nothing" (present, empty) apart from
-// "this marker never appeared at all", e.g. because the appliance never
-// booted.
+// blocks (see guestfishStep), keyed by markers. A marker with no output
+// still gets an entry mapped to "" - distinct from never appearing at all.
 func splitByMarker(out string, markers []string) map[string]string {
 	known := make(map[string]bool, len(markers))
 	for _, m := range markers {
