@@ -1304,18 +1304,41 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	log.Printf("Executing %s", cmd.String())
 	runErr := cmd.Run()
 
-	// The script's entire step-by-step reasoning (which disks it enumerated,
-	// which of its six heuristics matched and why) goes to stderr. That trace
-	// is the only evidence that explains WHY a given disk was picked, but
-	// log.Printf only ever reaches the pod's raw stdout stream, not the
-	// migration's persisted log file. On a run that "succeeds" with a
-	// wrong-but-in-range answer (see VJAILB-225: get-bootable-partition.sh
-	// silently picked the wrong disk, migration completed, VM didn't boot)
-	// nothing below ever returns an error, so this trace was the only way to
-	// see why - and it was being dropped. Persist it unconditionally, success
-	// or failure, empty or not, via the same mechanism migobj.logMessage uses
-	// so it lands in the durable per-migration log file, not just stdout.
-	trace := strings.TrimSpace(stderrBuf.String())
+	// libguestfs's `sh` API does not relay a guest command's stderr back to
+	// the host when the command exits 0 - only stdout survives the round
+	// trip in that case. get-bootable-partition.sh used to write its
+	// step-by-step reasoning to stderr (via `exec 3>&1 1>&2` + a final
+	// `echo "$bootdisk" >&3`) on the assumption that stderr would come back;
+	// it doesn't, so on every successful run stderrBuf below is empty and
+	// the trace that explains WHY a given disk was picked - the only way to
+	// see, e.g., VJAILB-225's "succeeded but picked the wrong disk" case -
+	// was silently lost. The script now writes its [DEBUG] lines AND a
+	// final line tagged "BOOTDISK_RESULT:<path>" to plain, unredirected
+	// stdout, which libguestfs does reliably relay; pull the tagged line out
+	// as the actual result and treat everything else in stdoutBuf as trace.
+	// stderrBuf is kept as a fallback source of trace only for the (now
+	// failure-only) case where the guest command errors out before stdout
+	// is even meaningful.
+	rawStdout := stdoutBuf.String()
+	var resultLine string
+	traceLines := make([]string, 0)
+	for _, line := range strings.Split(rawStdout, "\n") {
+		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
+			resultLine = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			traceLines = append(traceLines, line)
+		}
+	}
+	trace := strings.TrimSpace(strings.Join(traceLines, "\n"))
+	if stderrTrace := strings.TrimSpace(stderrBuf.String()); stderrTrace != "" {
+		if trace != "" {
+			trace = trace + "\n" + stderrTrace
+		} else {
+			trace = stderrTrace
+		}
+	}
 	if trace == "" {
 		trace = "(no debug output captured - either the deployed get-bootable-partition.sh predates step logging, or it produced none)"
 	}
@@ -1327,12 +1350,21 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, trace)
 	}
 
-	result := strings.TrimSpace(stdoutBuf.String())
-	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh result: %q", result)); logErr != nil {
+	if resultLine == "" {
+		// The script ran but never printed a tagged result line - either it's
+		// an older/untagged build, or all six heuristics genuinely found
+		// nothing. Fall back to treating the whole trimmed stdout as the
+		// result, matching the previous (pre-tagging) behavior, so this
+		// doesn't regress into a hard failure by itself.
+		resultLine = strings.TrimSpace(rawStdout)
+		log.Printf("WARNING: get-bootable-partition.sh stdout had no BOOTDISK_RESULT: line; falling back to raw stdout as result: %q", resultLine)
+	}
+
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh result: %q", resultLine)); logErr != nil {
 		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
 	}
 
-	return result, nil
+	return resultLine, nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
