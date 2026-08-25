@@ -48,10 +48,8 @@ on the vjailbreak node.
 
 ## Downloading a Debug Bundle from the UI
 
-Instead of SSHing into the vjailbreak node to collect logs manually, you can download a full debug bundle directly from the Migration Details page.
+Instead of SSHing into the vjailbreak node to collect logs manually, you can download a full debug bundle directly from the migration's **Pod logs** tab.
 
-:::note
-Screenshot to be added.
-:::
+![Download button on the Pod logs tab](../../../../../public/images/debug-bundle-download-button.png)
 
 There is a download button as shown in the image above. This downloads all the logs, debug logs, and everything related to the migration as a tar ball — no extra `kubectl` or SSH access is required.
