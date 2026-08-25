@@ -20,6 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1746,7 +1747,7 @@ func getCinderVolumeBackendPools(ctx context.Context, openstackClients *OpenStac
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list all storage backend pools")
 	}
-	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
+	pools, err := extractStoragePools(allStoragePoolPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
 	}
@@ -2138,6 +2139,32 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 	}
 }
 
+// storagePoolSummary decodes only the schedulerstats pool fields this package
+// actually needs. Some vendor Cinder drivers (e.g. Hitachi Vantara) report
+// capabilities.location_info as a nested JSON object rather than the plain
+// string schedulerstats.Capabilities expects; decoding the full gophercloud
+// type then fails for every pool in the scheduler-stats response, not just
+// the offending one. Decoding this narrower shape sidesteps that.
+type storagePoolSummary struct {
+	Name         string `json:"name"`
+	Capabilities struct {
+		VendorName    string `json:"vendor_name"`
+		DriverVersion string `json:"driver_version"`
+	} `json:"capabilities"`
+}
+
+// extractStoragePools decodes a schedulerstats.List page into storagePoolSummary
+// instead of gophercloud's schedulerstats.ExtractStoragePools, so a vendor-specific
+// capabilities shape on one pool can't break extraction for the rest (see
+// storagePoolSummary).
+func extractStoragePools(p pagination.Page) ([]storagePoolSummary, error) {
+	var s struct {
+		Pools []storagePoolSummary `json:"pools"`
+	}
+	err := p.(schedulerstats.StoragePoolPage).ExtractInto(&s)
+	return s.Pools, err
+}
+
 // GetBackendPools discovers and returns storage backend pools from OpenStack Cinder
 func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
 	ctxlog := log.FromContext(ctx)
@@ -2176,7 +2203,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		return nil, errors.Wrap(err, "failed to list backend pools")
 	}
 
-	backendPools, err := schedulerstats.ExtractStoragePools(poolPages)
+	backendPools, err := extractStoragePools(poolPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract backend pools")
 	}
