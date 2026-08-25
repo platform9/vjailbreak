@@ -13,8 +13,11 @@ jobs:
   comment:
     name: Post Vulnerability Summary Comment
     runs-on: ubuntu-latest
-    # Only run for PRs (not pushes to main or releases), and only when the scan actually completed
-    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    # Only run for PRs (not pushes to main or releases). Guard against a
+    # cancelled run posting a bogus "0 vulnerabilities" comment, but don't
+    # require full success — gosec_scan and trivy_scan are independent jobs,
+    # so a real failure in one shouldn't suppress the other's comment.
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion != 'cancelled'
     steps:
       - name: Download Gosec PR Summary
         uses: actions/download-artifact@v4
