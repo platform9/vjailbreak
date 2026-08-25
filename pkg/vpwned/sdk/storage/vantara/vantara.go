@@ -18,8 +18,12 @@
 //     provider transparently re-authenticates after 25min.
 //   - Async jobs: mutating calls return a jobId; poll /objects/jobs/<id>
 //     until status=Completed, then read affectedResources.
-//   - NAA:        GET /objects/ldevs/<id> returns naaId directly; the ESXi
-//     device is naa.<naaId>. No vendor formula needed.
+//   - NAA:        GET /objects/ldevs/<id> returns naaId once populated; the
+//     ESXi device is naa.<naaId>. On at least some arrays/firmware (observed
+//     on VSP One Block, CM REST API 1.56.0) naaId stays empty until the LDEV
+//     is presented to a host — it is NOT available at creation time. Callers
+//     must resolve it after mapping via storage.PostMappingNAAResolver
+//     (ResolveVolumeNAA), not from CreateVolume's return value.
 //
 // Cinder (HBSD) interop:
 //   - manage_existing accepts {"source-id": <LDEV id>} — the provider
@@ -127,6 +131,7 @@ var (
 	_ storage.StorageProvider        = (*VantaraStorageProvider)(nil)
 	_ storage.CinderManageRefBuilder = (*VantaraStorageProvider)(nil)
 	_ storage.CinderBackendPoolAware = (*VantaraStorageProvider)(nil)
+	_ storage.PostMappingNAAResolver = (*VantaraStorageProvider)(nil)
 )
 
 // Connect validates the REST API version and establishes a session.
@@ -266,8 +271,12 @@ func (p *VantaraStorageProvider) ApplyCinderPoolHint(ctx context.Context, poolHi
 }
 
 // CreateVolume creates a DP LDEV of at least size bytes in the configured
-// pool, labels it with volumeName (truncated to 32 chars), and returns the
-// volume with its NAA taken from the array's naaId attribute.
+// pool and labels it with volumeName (truncated to 32 chars).
+//
+// The returned Volume's NAA may be empty: on this array family, naaId is not
+// populated until the LDEV is presented to a host, so it isn't available at
+// creation time. Callers must resolve it after mapping via
+// storage.PostMappingNAAResolver, which this provider implements.
 func (p *VantaraStorageProvider) CreateVolume(volumeName string, size int64) (storage.Volume, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
@@ -305,14 +314,33 @@ func (p *VantaraStorageProvider) CreateVolume(volumeName string, size int64) (st
 		return storage.Volume{}, fmt.Errorf("vantara: failed to label LDEV %d: %w", ldevID, err)
 	}
 
-	info, err := p.getLdevWithNAA(ctx, ldevID)
+	info, err := p.getLdev(ctx, ldevID)
 	if err != nil {
 		p.bestEffortDeleteLdev(ctx, ldevID)
 		return storage.Volume{}, err
 	}
 
-	klog.Infof("vantara: created LDEV %d label=%s naa=%s blocks=%d pool=%d", ldevID, label, info.NaaID, info.BlockCapacity, *p.poolID)
+	klog.Infof("vantara: created LDEV %d label=%s naa=%q blocks=%d pool=%d", ldevID, label, info.NaaID, info.BlockCapacity, *p.poolID)
 	return volumeFromLdev(*info), nil
+}
+
+// ResolveVolumeNAA implements storage.PostMappingNAAResolver: it polls the
+// LDEV until naaId is populated. Must be called after the volume has been
+// mapped to a host — on this array family naaId is not available before
+// that (see CreateVolume).
+func (p *VantaraStorageProvider) ResolveVolumeNAA(ctx context.Context, vol storage.Volume) (string, error) {
+	ldevID, err := strconv.Atoi(vol.Id)
+	if err != nil {
+		return "", fmt.Errorf("vantara: volume %q has no numeric LDEV id: %w", vol.Name, err)
+	}
+	if err := p.ensureSession(ctx); err != nil {
+		return "", err
+	}
+	info, err := p.getLdevWithNAA(ctx, ldevID)
+	if err != nil {
+		return "", err
+	}
+	return naaFromID(info.NaaID), nil
 }
 
 // DeleteVolume removes the LDEV whose label matches volumeName. Missing
@@ -581,15 +609,24 @@ func (p *VantaraStorageProvider) invokeJob(ctx context.Context, method, url stri
 	return nil, fmt.Errorf("vantara: timed out waiting for job %s", jobURL)
 }
 
+// getLdev fetches an LDEV's current attributes with a single GET.
+func (p *VantaraStorageProvider) getLdev(ctx context.Context, ldevID int) (*ldevInfo, error) {
+	resp, _, err := p.doJSON(ctx, http.MethodGet, fmt.Sprintf("%s/ldevs/%d", p.baseURL, ldevID), nil, p.sessionHeaders())
+	if err != nil {
+		return nil, fmt.Errorf("vantara: failed to get LDEV %d: %w", ldevID, err)
+	}
+	return ldevFromMap(resp), nil
+}
+
 // getLdevWithNAA fetches an LDEV, retrying until naaId is populated.
 func (p *VantaraStorageProvider) getLdevWithNAA(ctx context.Context, ldevID int) (*ldevInfo, error) {
 	var info *ldevInfo
 	for attempt := 0; attempt < naaPollAttempts; attempt++ {
-		resp, _, err := p.doJSON(ctx, http.MethodGet, fmt.Sprintf("%s/ldevs/%d", p.baseURL, ldevID), nil, p.sessionHeaders())
+		var err error
+		info, err = p.getLdev(ctx, ldevID)
 		if err != nil {
-			return nil, fmt.Errorf("vantara: failed to get LDEV %d: %w", ldevID, err)
+			return nil, err
 		}
-		info = ldevFromMap(resp)
 		if info.NaaID != "" {
 			return info, nil
 		}

@@ -290,44 +290,81 @@ func withFastNAAPoll(t *testing.T, attempts int) {
 	})
 }
 
-func TestCreateVolumeSucceedsAfterNAADelay(t *testing.T) {
+func TestCreateVolumeSucceedsWithNAAStillEmpty(t *testing.T) {
+	f := newFakeGUM(t)
+	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
+
+	// Simulate an array that never populates naaId before host mapping (the
+	// Hitachi VSP One Block behavior this was written for): CreateVolume must
+	// still succeed, just with an empty NAA - it's resolved later via
+	// ResolveVolumeNAA, not here.
+	f.delayNAA(f.mu.nextLdevID, 1000)
+
+	vol, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
+	if err != nil {
+		t.Fatalf("CreateVolume should not fail on missing naaId: %v", err)
+	}
+	if vol.NAA != "" {
+		t.Fatalf("expected empty NAA when naaId isn't populated yet, got %q", vol.NAA)
+	}
+	if vol.Id == "" {
+		t.Fatal("expected a populated LDEV id even without NAA")
+	}
+}
+
+func TestResolveVolumeNAASucceedsAfterDelay(t *testing.T) {
 	withFastNAAPoll(t, 30)
 
 	f := newFakeGUM(t)
 	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
 
 	// naaId only appears on the LDEV's 4th GET (as it does on some arrays
-	// under load), well within the retry budget.
+	// under load, once mapped to a host), well within the retry budget.
 	f.delayNAA(f.mu.nextLdevID, 3)
 
 	vol, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
 	if err != nil {
-		t.Fatalf("CreateVolume should succeed once naaId eventually appears: %v", err)
+		t.Fatalf("CreateVolume failed: %v", err)
 	}
-	if vol.NAA == "" {
+
+	naa, err := p.ResolveVolumeNAA(context.Background(), vol)
+	if err != nil {
+		t.Fatalf("ResolveVolumeNAA should succeed once naaId eventually appears: %v", err)
+	}
+	if naa == "" {
 		t.Fatal("expected a populated NAA once naaId appears")
 	}
 }
 
-func TestCreateVolumeFailsWhenNAANeverAppears(t *testing.T) {
+func TestResolveVolumeNAAFailsWhenNeverAppears(t *testing.T) {
 	withFastNAAPoll(t, 3)
 
 	f := newFakeGUM(t)
 	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
 
-	// Delay well beyond the (shrunk) retry budget so it never resolves.
 	f.delayNAA(f.mu.nextLdevID, 1000)
 
-	_, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
+	vol, err := p.CreateVolume("myvm-Hard-disk-1", 1<<30)
+	if err != nil {
+		t.Fatalf("CreateVolume failed: %v", err)
+	}
+
+	_, err = p.ResolveVolumeNAA(context.Background(), vol)
 	if err == nil {
 		t.Fatal("expected an error when naaId never appears")
 	}
 	if !strings.Contains(err.Error(), "no naaId after") || !strings.Contains(err.Error(), "cannot derive ESXi device path") {
 		t.Fatalf("unexpected error message: %v", err)
 	}
-	// The LDEV created for the timed-out attempt should have been cleaned up.
-	if len(f.mu.deleted) != 1 {
-		t.Fatalf("expected LDEV to be cleaned up on NAA timeout, deleted=%v", f.mu.deleted)
+}
+
+func TestResolveVolumeNAARejectsNonNumericID(t *testing.T) {
+	f := newFakeGUM(t)
+	p, _ := newTestProvider(t, f, map[string]string{OptionPoolID: "5"})
+
+	_, err := p.ResolveVolumeNAA(context.Background(), storage.Volume{Name: "v", Id: "not-a-number"})
+	if err == nil || !strings.Contains(err.Error(), "no numeric LDEV id") {
+		t.Fatalf("expected numeric LDEV id error, got %v", err)
 	}
 }
 

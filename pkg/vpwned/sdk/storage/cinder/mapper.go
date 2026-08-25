@@ -10,8 +10,12 @@
 // Volume creation, deletion, NAA construction and Cinder-volume-to-LUN
 // resolution deliberately stay vendor-native (storage.StorageProvider):
 // creating the LUN through the array's REST API pins it to the same physical
-// array as the source datastore, and the NAA comes from the array's create
-// response rather than from driver-specific connection_info.
+// array as the source datastore, and the NAA normally comes from the
+// array's create response rather than from driver-specific connection_info.
+// The exception is a provider implementing storage.PostMappingNAAResolver
+// (e.g. Hitachi Vantara on some arrays/firmware): its NAA isn't known until
+// after this mapper's MapVolumeToGroup succeeds, so the caller resolves it
+// then instead of trusting CreateVolume's (possibly empty) Volume.NAA.
 package cinder
 
 import (

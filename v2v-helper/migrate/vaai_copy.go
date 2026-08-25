@@ -255,6 +255,7 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
 	targetVol := storage.Volume{
 		Name: cinderVolumeName, // Use the Cinder-renamed volume name
+		Id:   targetVolume.Id,  // vendor volume/LDEV id; unaffected by the Cinder rename
 		NAA:  targetVolume.NAA,
 		Size: targetVolume.Size,
 		OpenstackVol: storage.OpenstackVolume{
@@ -285,6 +286,19 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 			migobj.logMessage(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
 		}
 	}()
+
+	// Some providers (e.g. Hitachi Vantara on some arrays/firmware) don't know
+	// the volume's NAA until after it's mapped to a host - CreateVolume leaves
+	// it empty and the provider implements storage.PostMappingNAAResolver to
+	// resolve it now that mapping is done.
+	if resolver, ok := migobj.StorageProvider.(storage.PostMappingNAAResolver); ok {
+		migobj.logMessage(fmt.Sprintf("Resolving NAA for volume %s after mapping", targetVol.Name))
+		naa, err := resolver.ResolveVolumeNAA(ctx, targetVol)
+		if err != nil {
+			return storage.Volume{}, errors.Wrapf(err, "failed to resolve NAA for volume %s after mapping", targetVol.Name)
+		}
+		targetVolume.NAA = naa
+	}
 
 	// Step 6: Rescan ESXi storage and wait for target volume to appear
 	migobj.logMessage(fmt.Sprintf("Waiting for target volume %s to appear on ESXi", targetVolume.NAA))
