@@ -671,14 +671,14 @@ func CleanupResources(ctx context.Context, kubeClient client.Client, restConfig 
 // those nodes are gone. Both run asynchronously, so cleanup has to wait for them to settle
 // before the pre-upgrade checks are re-run - otherwise the checks see resources that are
 // already on their way out and abort the upgrade.
-// WaitForCustomResourcesDrained blocks until no vJailbreak custom resources remain, or the
+// waitForCustomResourcesDrained blocks until no vJailbreak custom resources remain, or the
 // timeout expires. A timeout is not fatal on its own: the caller re-runs the pre-upgrade
 // checks, which report exactly what is still present.
-func WaitForCustomResourcesDrained(ctx context.Context, kubeClient client.Client, dynamicClient dynamic.Interface) error {
-	deadline := time.Now().Add(cleanupDrainTimeout)
+func (e *UpgradeExecutor) waitForCustomResourcesDrained(ctx context.Context) error {
+	deadline := time.Now().Add(e.timing.drainTimeout)
 
 	for {
-		drained, err := checkForAnyCustomResources(ctx, kubeClient, dynamicClient)
+		drained, err := checkForAnyCustomResources(ctx, e.kubeClient, e.dynamicClient)
 		if err != nil {
 			return fmt.Errorf("failed to check whether custom resources are drained: %w", err)
 		}
@@ -688,14 +688,14 @@ func WaitForCustomResourcesDrained(ctx context.Context, kubeClient client.Client
 		}
 
 		if time.Now().After(deadline) {
-			return fmt.Errorf("custom resources still present after %s", cleanupDrainTimeout)
+			return fmt.Errorf("custom resources still present after %s", e.timing.drainTimeout)
 		}
 
 		log.Println("Waiting for custom resources to finish deleting...")
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(cleanupDrainPollInterval):
+		case <-time.After(e.timing.drainPoll):
 		}
 	}
 }

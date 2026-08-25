@@ -91,6 +91,11 @@ func init() {
 }
 
 func serve() {
+	// The server handles upgrade requests with a controller-runtime client, so it needs a
+	// logger for the same reason the upgrade job does - without one, the first API server
+	// warning prints a stack trace instead of the warning.
+	SetupControllerRuntimeLogger()
+
 	// Run the server in a goroutine
 	go func() {
 		logrus.Info(Config.Host, Config.Port, Config.APIPort)

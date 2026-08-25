@@ -27,17 +27,15 @@ import (
 // Fixtures
 // ---------------------------------------------------------------------------
 
-// fastPolling shrinks the deployment wait cadence so phase tests do not sleep through
-// production intervals.
-func fastPolling(t *testing.T) {
-	t.Helper()
-
-	originalInterval, originalTimeout := deploymentPollInterval, deploymentWaitTimeout
-	deploymentPollInterval = time.Millisecond
-	deploymentWaitTimeout = 100 * time.Millisecond
-	t.Cleanup(func() {
-		deploymentPollInterval, deploymentWaitTimeout = originalInterval, originalTimeout
-	})
+// fastTiming is the production timing with the waits shortened, so tests exercise the
+// timeout branches in milliseconds instead of minutes.
+func fastTiming() upgradeTiming {
+	return upgradeTiming{
+		deploymentWait: 100 * time.Millisecond,
+		deploymentPoll: time.Millisecond,
+		drainTimeout:   200 * time.Millisecond,
+		drainPoll:      time.Millisecond,
+	}
 }
 
 // githubRouter answers the raw.githubusercontent paths the upgrade flow fetches, and
@@ -449,6 +447,7 @@ func TestSaveAndLoadProgress(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
 	e := &UpgradeExecutor{
+		timing:     fastTiming(),
 		kubeClient: newFakeClient(t),
 		progress: &UpgradeProgress{
 			CurrentStep:   "Backing up resources",
@@ -485,7 +484,7 @@ func TestLoadProgressFailures(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
 	t.Run("missing ConfigMap", func(t *testing.T) {
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t)}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t)}
 
 		if _, err := e.loadProgress(context.Background()); err == nil {
 			t.Fatal("loadProgress() error = nil, want a not-found error")
@@ -496,7 +495,7 @@ func TestLoadProgressFailures(t *testing.T) {
 		cm := &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: getProgressConfigMapName(), Namespace: Namespace},
 		}
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t, cm)}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, cm)}
 
 		_, err := e.loadProgress(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "progress key not found") {
@@ -509,7 +508,7 @@ func TestLoadProgressFailures(t *testing.T) {
 			ObjectMeta: metav1.ObjectMeta{Name: getProgressConfigMapName(), Namespace: Namespace},
 			Data:       map[string]string{"progress": "{not json"},
 		}
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t, cm)}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, cm)}
 
 		_, err := e.loadProgress(context.Background())
 		if err == nil || !strings.Contains(err.Error(), "unmarshal") {
@@ -524,6 +523,7 @@ func TestLoadProgressFailures(t *testing.T) {
 
 func TestScaleDeployment(t *testing.T) {
 	e := &UpgradeExecutor{
+		timing:     fastTiming(),
 		kubeClient: newFakeClient(t, deployment("migration-controller-manager", 3, 3, 3)),
 		progress:   &UpgradeProgress{},
 	}
@@ -547,7 +547,7 @@ func TestScaleDeployment(t *testing.T) {
 }
 
 func TestScaleDeploymentMissingDeployment(t *testing.T) {
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
 
 	if _, err := e.scaleDeployment(context.Background(), DeploymentConfigs[0], 0, "step"); err == nil {
 		t.Fatal("scaleDeployment() error = nil, want an error for a missing deployment")
@@ -555,8 +555,6 @@ func TestScaleDeploymentMissingDeployment(t *testing.T) {
 }
 
 func TestWaitForDeploymentReady(t *testing.T) {
-	fastPolling(t)
-
 	available := func(dep *appsv1.Deployment) *appsv1.Deployment {
 		dep.Status.Conditions = []appsv1.DeploymentCondition{
 			{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
@@ -606,7 +604,7 @@ func TestWaitForDeploymentReady(t *testing.T) {
 				cancel()
 			}
 
-			e := &UpgradeExecutor{kubeClient: newFakeClient(t, tt.objects...)}
+			e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, tt.objects...)}
 			err := e.waitForDeploymentReady(ctx, aiConfig)
 
 			if tt.wantErr == "" {
@@ -623,8 +621,6 @@ func TestWaitForDeploymentReady(t *testing.T) {
 }
 
 func TestWaitForDeploymentScaledDown(t *testing.T) {
-	fastPolling(t)
-
 	tests := []struct {
 		name    string
 		objects []client.Object
@@ -659,7 +655,7 @@ func TestWaitForDeploymentScaledDown(t *testing.T) {
 				cancel()
 			}
 
-			e := &UpgradeExecutor{kubeClient: newFakeClient(t, tt.objects...)}
+			e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, tt.objects...)}
 			err := e.waitForDeploymentScaledDown(ctx, DeploymentConfigs[0])
 
 			if tt.wantErr == "" {
@@ -691,6 +687,7 @@ func TestRunPreUpgradePhase(t *testing.T) {
 
 	t.Run("a clean appliance passes", func(t *testing.T) {
 		e := &UpgradeExecutor{
+			timing:        fastTiming(),
 			kubeClient:    newFakeClient(t),
 			dynamicClient: newFakeDynamic(t),
 			progress:      &UpgradeProgress{},
@@ -706,6 +703,7 @@ func TestRunPreUpgradePhase(t *testing.T) {
 
 	t.Run("leftover resources fail when auto-cleanup is off", func(t *testing.T) {
 		e := &UpgradeExecutor{
+			timing:        fastTiming(),
 			kubeClient:    newFakeClient(t),
 			dynamicClient: newFakeDynamic(t, newCR("MigrationPlan", "plan-1")),
 			progress:      &UpgradeProgress{},
@@ -724,6 +722,7 @@ func TestRunPreUpgradePhase(t *testing.T) {
 		// The cleanup path builds its own dynamic client from the rest config, so the
 		// seeded MigrationPlan is still present on the re-check.
 		e := &UpgradeExecutor{
+			timing:        fastTiming(),
 			kubeClient:    newFakeClient(t),
 			dynamicClient: newFakeDynamic(t, newCR("MigrationPlan", "plan-1")),
 			config:        &rest.Config{Host: "http://127.0.0.1:1"},
@@ -735,6 +734,45 @@ func TestRunPreUpgradePhase(t *testing.T) {
 			t.Fatalf("runPreUpgradePhase() error = %v, want the post-cleanup failure", err)
 		}
 	})
+
+	// A drain timeout is not a failure on its own - the checks decide that - but when they
+	// do fail it is the explanation, so it has to reach the operator rather than only the
+	// log.
+	t.Run("a drain timeout is reported alongside the failing checks", func(t *testing.T) {
+		e := &UpgradeExecutor{
+			timing:        fastTiming(),
+			kubeClient:    newFakeClient(t, vjailbreakCRD("migrations.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "migrations", "Migration")),
+			dynamicClient: newFakeDynamic(t, newCR("Migration", "migration-1")),
+			config:        &rest.Config{Host: "http://127.0.0.1:1"},
+			progress:      &UpgradeProgress{},
+		}
+
+		err := e.runPreUpgradePhase(context.Background(), "v0.4.9", true)
+		if err == nil {
+			t.Fatal("runPreUpgradePhase() error = nil, want the post-cleanup failure")
+		}
+		if !strings.Contains(err.Error(), "still failing after cleanup") {
+			t.Errorf("error = %q, want it to report the failing checks", err)
+		}
+		if !strings.Contains(err.Error(), "still present") {
+			t.Errorf("error = %q, want it to carry the drain timeout that explains the failure", err)
+		}
+	})
+
+	// With nothing left behind, the checks pass and no drain timeout is mentioned.
+	t.Run("no drain timeout is reported when cleanup settles", func(t *testing.T) {
+		e := &UpgradeExecutor{
+			timing:        fastTiming(),
+			kubeClient:    newFakeClient(t),
+			dynamicClient: newFakeDynamic(t),
+			config:        &rest.Config{Host: "http://127.0.0.1:1"},
+			progress:      &UpgradeProgress{},
+		}
+
+		if err := e.runPreUpgradePhase(context.Background(), "v0.4.9", true); err != nil {
+			t.Fatalf("runPreUpgradePhase() error = %v, want nil", err)
+		}
+	})
 }
 
 func TestRunBackupAndCRDPhase(t *testing.T) {
@@ -742,6 +780,7 @@ func TestRunBackupAndCRDPhase(t *testing.T) {
 		router := serveGitHub(t)
 
 		e := &UpgradeExecutor{
+			timing:     fastTiming(),
 			kubeClient: newSettlingClient(t, settledDeployments()...),
 			progress:   &UpgradeProgress{},
 		}
@@ -770,7 +809,7 @@ func TestRunBackupAndCRDPhase(t *testing.T) {
 	t.Run("a CRD fetch failure fails the phase", func(t *testing.T) {
 		serveGitHub(t, "deploy/00crds.yaml")
 
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
 
 		if _, err := e.runBackupAndCRDPhase(context.Background(), "v0.4.9"); err == nil {
 			t.Fatal("runBackupAndCRDPhase() error = nil, want the CRD failure surfaced")
@@ -782,7 +821,7 @@ func TestRunConfigMapPhase(t *testing.T) {
 	t.Run("writes both ConfigMaps at the target version", func(t *testing.T) {
 		serveGitHub(t)
 
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
 
 		if err := e.runConfigMapPhase(context.Background(), "v0.4.9"); err != nil {
 			t.Fatalf("runConfigMapPhase() error = %v, want nil", err)
@@ -808,7 +847,7 @@ func TestRunConfigMapPhase(t *testing.T) {
 			"image_builder/configs/version-config.yaml",
 			"image_builder/configs/vjailbreak-settings.yaml")
 
-		e := &UpgradeExecutor{kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
+		e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t), progress: &UpgradeProgress{}}
 
 		if err := e.runConfigMapPhase(context.Background(), "v0.4.9"); err != nil {
 			t.Fatalf("runConfigMapPhase() error = %v, want nil", err)
@@ -817,12 +856,11 @@ func TestRunConfigMapPhase(t *testing.T) {
 }
 
 func TestRunDeploymentPhase(t *testing.T) {
-	fastPolling(t)
-
 	t.Run("applies every deployment manifest and completes", func(t *testing.T) {
 		router := serveGitHub(t)
 
 		e := &UpgradeExecutor{
+			timing:     fastTiming(),
 			kubeClient: newSettlingClient(t, settledDeployments()...),
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
@@ -858,6 +896,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 		objs[0] = deployment("migration-controller-manager", 2, 2, 2)
 
 		e := &UpgradeExecutor{
+			timing:     fastTiming(),
 			kubeClient: newSettlingClient(t, objs...),
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
@@ -874,6 +913,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 		serveGitHub(t, deploymentManifestPath("vjailbreak-ai"))
 
 		e := &UpgradeExecutor{
+			timing:     fastTiming(),
 			kubeClient: newSettlingClient(t, settledDeployments()...),
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
@@ -906,7 +946,7 @@ func TestExecuteAbortsWhenAnUpgradeIsInProgress(t *testing.T) {
 		Data:       map[string]string{"progress": string(inFlight)},
 	}
 
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t, cm)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, cm)}
 
 	err = e.Execute(context.Background(), "v0.5.0", false)
 	if err == nil || !strings.Contains(err.Error(), "existing upgrade in progress") {
@@ -930,6 +970,7 @@ func TestExecuteProceedsPastPendingProgress(t *testing.T) {
 	}
 
 	e := &UpgradeExecutor{
+		timing:        fastTiming(),
 		kubeClient:    newFakeClient(t, cm),
 		clientset:     versionConfigClientset(t, "v0.4.8"),
 		dynamicClient: newFakeDynamic(t),
@@ -945,11 +986,11 @@ func TestExecuteProceedsPastPendingProgress(t *testing.T) {
 }
 
 func TestExecuteRunsEveryPhase(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 	router := serveGitHub(t)
 
 	e := &UpgradeExecutor{
+		timing:        fastTiming(),
 		kubeClient:    newSettlingClient(t, settledDeployments()...),
 		clientset:     versionConfigClientset(t, "v0.4.8"),
 		dynamicClient: newFakeDynamic(t),
@@ -986,7 +1027,6 @@ func TestExecuteRunsEveryPhase(t *testing.T) {
 // An unreadable version-config must not stop the upgrade; the previous version is
 // recorded as unknown, which only limits manifest-driven rollback.
 func TestExecuteToleratesUnknownCurrentVersion(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 	serveGitHub(t)
 
@@ -996,6 +1036,7 @@ func TestExecuteToleratesUnknownCurrentVersion(t *testing.T) {
 	}
 
 	e := &UpgradeExecutor{
+		timing:        fastTiming(),
 		kubeClient:    newSettlingClient(t, settledDeployments()...),
 		clientset:     clientset,
 		dynamicClient: newFakeDynamic(t),
@@ -1019,6 +1060,7 @@ func TestHandleFailureRollsBack(t *testing.T) {
 	serveGitHub(t)
 
 	e := &UpgradeExecutor{
+		timing: fastTiming(),
 		kubeClient: newFakeClient(t,
 			backupConfigMap("backup-cm-version-config", "id-1",
 				"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: version-config\n  namespace: migration-system\ndata:\n  version: v0.4.8\n", 0),
@@ -1051,7 +1093,7 @@ func TestHandleFailureRollsBack(t *testing.T) {
 func TestExecuteRollbackRequiresVersionOrBackup(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t)}
 
 	err := e.ExecuteRollback(context.Background(), "", "v0.4.9", "")
 	if err == nil || !strings.Contains(err.Error(), "rollback requires") {
@@ -1066,6 +1108,7 @@ func TestExecuteRollbackSnapshotBased(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
 	e := &UpgradeExecutor{
+		timing: fastTiming(),
 		kubeClient: newFakeClient(t,
 			backupConfigMap("backup-cm-version-config", "id-1",
 				"apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: version-config\n  namespace: migration-system\ndata:\n  version: v0.4.8\n", 0),
@@ -1097,7 +1140,7 @@ func TestExecuteRollbackSnapshotBased(t *testing.T) {
 func TestExecuteRollbackSnapshotMissing(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t)}
 
 	err := e.ExecuteRollback(context.Background(), "unknown", "v0.4.9", "id-missing")
 	if err == nil {
@@ -1109,11 +1152,10 @@ func TestExecuteRollbackSnapshotMissing(t *testing.T) {
 }
 
 func TestExecuteRollbackManifestDriven(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 	router := serveGitHub(t)
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledDeployments()...)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newSettlingClient(t, settledDeployments()...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err != nil {
 		t.Fatalf("ExecuteRollback() error = %v, want nil", err)
@@ -1136,11 +1178,10 @@ func TestExecuteRollbackManifestDriven(t *testing.T) {
 
 // The controller is the one deployment a rollback cannot proceed without.
 func TestExecuteRollbackFailsWhenControllerManifestIsMissing(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 	serveGitHub(t, deploymentManifestPath("migration-controller-manager"))
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledDeployments()...)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newSettlingClient(t, settledDeployments()...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err == nil {
 		t.Fatal("ExecuteRollback() error = nil, want the controller failure surfaced")
@@ -1153,8 +1194,6 @@ func TestExecuteRollbackFailsWhenControllerManifestIsMissing(t *testing.T) {
 // When a deployment will not come up, the wait logs pod-level diagnostics; that path
 // must survive pods in every unhealthy shape rather than panicking on a nil state.
 func TestWaitForDeploymentReadyLogsPodDiagnostics(t *testing.T) {
-	fastPolling(t)
-
 	dep := deployment("vjailbreak-ai", 1, 0, 1)
 	dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"app": "vjailbreak-ai"}}
 
@@ -1192,7 +1231,7 @@ func TestWaitForDeploymentReadyLogsPodDiagnostics(t *testing.T) {
 		},
 	}
 
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t, dep, pod)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, dep, pod)}
 
 	err := e.waitForDeploymentReady(context.Background(),
 		DeploymentConfig{Name: "vjailbreak-ai", Namespace: Namespace})
@@ -1204,7 +1243,7 @@ func TestWaitForDeploymentReadyLogsPodDiagnostics(t *testing.T) {
 func TestSaveProgressWithoutProgressIsANoOp(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 
-	e := &UpgradeExecutor{kubeClient: newFakeClient(t)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t)}
 	e.saveProgress(context.Background())
 
 	cm := &corev1.ConfigMap{}
@@ -1226,7 +1265,7 @@ func TestSaveProgressToleratesWriteFailure(t *testing.T) {
 		},
 	})
 
-	e := &UpgradeExecutor{kubeClient: kubeClient, progress: &UpgradeProgress{CurrentStep: "step"}}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: kubeClient, progress: &UpgradeProgress{CurrentStep: "step"}}
 	e.saveProgress(context.Background()) // must not panic
 }
 
@@ -1237,6 +1276,7 @@ func TestHandleFailureReportsRollbackFailure(t *testing.T) {
 	serveGitHub(t)
 
 	e := &UpgradeExecutor{
+		timing:     fastTiming(),
 		kubeClient: newFakeClient(t),
 		progress:   &UpgradeProgress{PreviousVersion: "v0.4.8", BackupID: "id-missing"},
 	}
@@ -1252,11 +1292,11 @@ func TestHandleFailureReportsRollbackFailure(t *testing.T) {
 // A failing CRD phase must abort the upgrade and roll back rather than continue to the
 // deployments.
 func TestExecuteRollsBackWhenCRDPhaseFails(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 	router := serveGitHub(t, "deploy/00crds.yaml")
 
 	e := &UpgradeExecutor{
+		timing:        fastTiming(),
 		kubeClient:    newSettlingClient(t, settledDeployments()...),
 		clientset:     versionConfigClientset(t, "v0.4.8"),
 		dynamicClient: newFakeDynamic(t),
@@ -1276,10 +1316,10 @@ func TestExecuteRollsBackWhenCRDPhaseFails(t *testing.T) {
 // A failing controller manifest must abort the deployment phase; the controller is the
 // one deployment the upgrade cannot proceed without.
 func TestRunDeploymentPhaseFailsWhenControllerManifestIsMissing(t *testing.T) {
-	fastPolling(t)
 	serveGitHub(t, deploymentManifestPath("migration-controller-manager"))
 
 	e := &UpgradeExecutor{
+		timing:     fastTiming(),
 		kubeClient: newSettlingClient(t, settledDeployments()...),
 		progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 	}
@@ -1293,7 +1333,6 @@ func TestRunDeploymentPhaseFailsWhenControllerManifestIsMissing(t *testing.T) {
 // Rollback runs as its own Job, so the replica count the upgrade recorded has to come
 // back from the progress ConfigMap rather than from memory.
 func TestExecuteRollbackUsesStoredOriginalReplicas(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 
 	serveGitHub(t)
@@ -1315,7 +1354,7 @@ func TestExecuteRollbackUsesStoredOriginalReplicas(t *testing.T) {
 		Data:       map[string]string{"progress": string(stored)},
 	})
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, objs...)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newSettlingClient(t, objs...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err != nil {
 		t.Fatalf("ExecuteRollback() error = %v, want nil", err)
@@ -1334,7 +1373,6 @@ func TestExecuteRollbackUsesStoredOriginalReplicas(t *testing.T) {
 // With no stored count and a controller already at zero, restoring zero would report a
 // successful rollback while leaving the appliance without a controller.
 func TestExecuteRollbackNeverRestoresZeroReplicas(t *testing.T) {
-	fastPolling(t)
 	t.Setenv("JOB_UID", "")
 
 	serveGitHub(t)
@@ -1342,7 +1380,7 @@ func TestExecuteRollbackNeverRestoresZeroReplicas(t *testing.T) {
 	objs := settledDeployments()
 	objs[0] = deployment("migration-controller-manager", 0, 0, 0)
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, objs...)}
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newSettlingClient(t, objs...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err != nil {
 		t.Fatalf("ExecuteRollback() error = %v, want nil", err)

@@ -298,6 +298,21 @@ const (
 	// waiting for the ACPI shutdown to take effect.
 	LDMShutdownPollInterval = 10 * time.Second
 
+	// UpgradeDeploymentWaitTimeout bounds the wait for a vjailbreak deployment to
+	// become ready, or to scale to zero, during an upgrade or rollback.
+	UpgradeDeploymentWaitTimeout = 5 * time.Minute
+
+	// UpgradeDeploymentPollInterval is how often that readiness is re-checked.
+	UpgradeDeploymentPollInterval = 10 * time.Second
+
+	// UpgradeCleanupDrainTimeout bounds the wait for the credential finalizers to
+	// finish removing the resources they own after pre-upgrade cleanup.
+	UpgradeCleanupDrainTimeout = 3 * time.Minute
+
+	// UpgradeCleanupDrainPollInterval is how often the remaining resources are
+	// re-counted while waiting for that cascade.
+	UpgradeCleanupDrainPollInterval = 5 * time.Second
+
 	// LDMProbeDetachTimeout bounds the hot-detach of the probe on the "keep on SATA"
 	// path. A guest that never loaded viostor may never acknowledge the unplug, which
 	// is the usual reason for choosing this answer, so expiry is not an error.
@@ -426,11 +441,11 @@ const (
 	// let a reconcile that landed before the gate event was created resolve the phase to
 	// Succeeded, and nothing woke the controller afterwards to correct it.
 	EventMessageLDMGuestCreatedOnSATA = "VM with SATA created successfully"
-	EventMessageMigrationFailed                   = "Trying to perform cleanup"
-	EventMessageCopyingDisk                       = "Copying disk"
-	EventMessageFailed                            = "Failed to"
-	EventMessageWarningPrefix                     = "Warning:"
-	EventDisconnect                               = "Disconnected network interfaces"
+	EventMessageMigrationFailed       = "Trying to perform cleanup"
+	EventMessageCopyingDisk           = "Copying disk"
+	EventMessageFailed                = "Failed to"
+	EventMessageWarningPrefix         = "Warning:"
+	EventDisconnect                   = "Disconnected network interfaces"
 	// EventMessageDataCopied is sent by v2v-helper when data-only mode completes disk copy/conversion.
 	EventMessageDataCopied = "DataOnly mode: disk copy and conversion complete, skipping VM creation"
 

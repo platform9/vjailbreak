@@ -23,6 +23,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
 const (
@@ -64,6 +66,23 @@ var DeploymentConfigs = []DeploymentConfig{
 	},
 }
 
+// upgradeTiming is how long the flow waits on Kubernetes, and how often it re-checks.
+type upgradeTiming struct {
+	deploymentWait time.Duration
+	deploymentPoll time.Duration
+	drainTimeout   time.Duration
+	drainPoll      time.Duration
+}
+
+func defaultTiming() upgradeTiming {
+	return upgradeTiming{
+		deploymentWait: constants.UpgradeDeploymentWaitTimeout,
+		deploymentPoll: constants.UpgradeDeploymentPollInterval,
+		drainTimeout:   constants.UpgradeCleanupDrainTimeout,
+		drainPoll:      constants.UpgradeCleanupDrainPollInterval,
+	}
+}
+
 // UpgradeExecutor handles the upgrade process as a standalone job
 type UpgradeExecutor struct {
 	kubeClient    client.Client
@@ -71,6 +90,7 @@ type UpgradeExecutor struct {
 	dynamicClient dynamic.Interface
 	config        *rest.Config
 	progress      *UpgradeProgress
+	timing        upgradeTiming
 	mu            sync.Mutex
 }
 
@@ -117,6 +137,7 @@ func NewUpgradeExecutor() (*UpgradeExecutor, error) {
 		clientset:     clientset,
 		dynamicClient: dynamicClient,
 		config:        config,
+		timing:        defaultTiming(),
 	}, nil
 }
 
@@ -207,9 +228,12 @@ func (e *UpgradeExecutor) runPreUpgradePhase(ctx context.Context, targetVersion 
 			// Deletion is asynchronous: the credential finalizers remove the resources they
 			// own after cleanup returns. Re-checking immediately would see resources that
 			// are already terminating and abort the upgrade.
+			// A timeout here is not a failure by itself - the checks below decide that - but
+			// it explains one, so it is carried into the error rather than only logged.
 			e.updateProgress("Waiting for resources to be deleted", StatusInProgress, "")
-			if err := WaitForCustomResourcesDrained(ctx, e.kubeClient, e.dynamicClient); err != nil {
-				log.Printf("Warning: %v", err)
+			drainErr := e.waitForCustomResourcesDrained(ctx)
+			if drainErr != nil {
+				log.Printf("Warning: %v", drainErr)
 			}
 
 			result, err = RunPreUpgradeChecks(ctx, e.kubeClient, e.dynamicClient, targetVersion)
@@ -220,10 +244,14 @@ func (e *UpgradeExecutor) runPreUpgradePhase(ctx context.Context, targetVersion 
 				result.VMwareCredsDeleted && result.OpenStackCredsDeleted &&
 				result.AgentsScaledDown && result.NoCustomResources
 			if !allPassed {
-				return fmt.Errorf("pre-upgrade checks still failing after cleanup: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
+				checksErr := fmt.Errorf("pre-upgrade checks still failing after cleanup: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
 					result.NoMigrationPlans, result.NoRollingMigrationPlans,
 					result.VMwareCredsDeleted, result.OpenStackCredsDeleted,
 					result.AgentsScaledDown, result.NoCustomResources)
+				if drainErr != nil {
+					return fmt.Errorf("%w (%v)", checksErr, drainErr)
+				}
+				return checksErr
 			}
 		} else {
 			return fmt.Errorf("pre-upgrade checks failed: migrations=%t, rollingMigrations=%t, vmwareCreds=%t, openstackCreds=%t, agents=%t, customResources=%t",
@@ -429,8 +457,8 @@ func (e *UpgradeExecutor) scaleDeployment(ctx context.Context, cfg DeploymentCon
 }
 
 func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg DeploymentConfig) error {
-	timeout := deploymentWaitTimeout
-	interval := deploymentPollInterval
+	timeout := e.timing.deploymentWait
+	interval := e.timing.deploymentPoll
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -519,8 +547,8 @@ func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg Deploy
 }
 
 func (e *UpgradeExecutor) waitForDeploymentScaledDown(ctx context.Context, cfg DeploymentConfig) error {
-	timeout := deploymentWaitTimeout
-	interval := deploymentPollInterval
+	timeout := e.timing.deploymentWait
+	interval := e.timing.deploymentPoll
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()

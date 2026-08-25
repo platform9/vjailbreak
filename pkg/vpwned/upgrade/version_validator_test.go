@@ -562,16 +562,16 @@ func newFakeDynamic(t *testing.T, objs ...runtime.Object) *dynamicfake.FakeDynam
 	return dyn
 }
 
-// fastDrain shrinks the drain wait so tests do not sleep through production intervals.
-func fastDrain(t *testing.T) {
+// drainExecutor builds an executor whose only job is the drain wait, with the wait
+// shortened so the timeout branch is reachable in milliseconds.
+func drainExecutor(t *testing.T, kubeClient client.Client, dynamicClient dynamic.Interface) *UpgradeExecutor {
 	t.Helper()
 
-	originalTimeout, originalInterval := cleanupDrainTimeout, cleanupDrainPollInterval
-	cleanupDrainTimeout = 200 * time.Millisecond
-	cleanupDrainPollInterval = time.Millisecond
-	t.Cleanup(func() {
-		cleanupDrainTimeout, cleanupDrainPollInterval = originalTimeout, originalInterval
-	})
+	return &UpgradeExecutor{
+		kubeClient:    kubeClient,
+		dynamicClient: dynamicClient,
+		timing:        fastTiming(),
+	}
 }
 
 // deleteCallsByVerb counts the delete verbs the flow issued, so a regression back to
@@ -2147,14 +2147,12 @@ func TestBoundedPageStillDetectsAgents(t *testing.T) {
 }
 
 func TestWaitForCustomResourcesDrained(t *testing.T) {
-	fastDrain(t)
-
 	crds := []client.Object{
 		vjailbreakCRD("migrations.vjailbreak.k8s.pf9.io", "vjailbreak.k8s.pf9.io", "migrations", "Migration"),
 	}
 
 	t.Run("returns immediately when nothing is left", func(t *testing.T) {
-		err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), newFakeDynamic(t))
+		err := drainExecutor(t, newFakeClient(t, crds...), newFakeDynamic(t)).waitForCustomResourcesDrained(context.Background())
 		if err != nil {
 			t.Fatalf("WaitForCustomResourcesDrained() error = %v, want nil", err)
 		}
@@ -2178,7 +2176,7 @@ func TestWaitForCustomResourcesDrained(t *testing.T) {
 			return true, list, nil
 		})
 
-		if err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), dyn); err != nil {
+		if err := drainExecutor(t, newFakeClient(t, crds...), dyn).waitForCustomResourcesDrained(context.Background()); err != nil {
 			t.Fatalf("WaitForCustomResourcesDrained() error = %v, want nil once the resource is gone", err)
 		}
 		if polls < 3 {
@@ -2189,7 +2187,7 @@ func TestWaitForCustomResourcesDrained(t *testing.T) {
 	t.Run("reports what is still present when the timeout expires", func(t *testing.T) {
 		dyn := newFakeDynamic(t, newCR("Migration", "migration-1"))
 
-		err := WaitForCustomResourcesDrained(context.Background(), newFakeClient(t, crds...), dyn)
+		err := drainExecutor(t, newFakeClient(t, crds...), dyn).waitForCustomResourcesDrained(context.Background())
 		if err == nil {
 			t.Fatal("WaitForCustomResourcesDrained() error = nil, want a timeout")
 		}
@@ -2204,7 +2202,7 @@ func TestWaitForCustomResourcesDrained(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
-		if err := WaitForCustomResourcesDrained(ctx, newFakeClient(t, crds...), dyn); err == nil {
+		if err := drainExecutor(t, newFakeClient(t, crds...), dyn).waitForCustomResourcesDrained(ctx); err == nil {
 			t.Fatal("WaitForCustomResourcesDrained() error = nil, want the cancelled context surfaced")
 		}
 	})
