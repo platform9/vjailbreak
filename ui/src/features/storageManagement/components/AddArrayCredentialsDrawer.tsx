@@ -32,6 +32,8 @@ interface FormData {
   skipSslVerification: boolean
   netAppSvm?: string
   netAppFlexVol?: string
+  vantaraPoolId?: string
+  vantaraRestPort?: string
 }
 
 type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
@@ -62,7 +64,9 @@ export default function AddArrayCredentialsDrawer({
       password: '',
       skipSslVerification: false,
       netAppSvm: '',
-      netAppFlexVol: ''
+      netAppFlexVol: '',
+      vantaraPoolId: '',
+      vantaraRestPort: ''
     }
   })
 
@@ -196,6 +200,10 @@ export default function AddArrayCredentialsDrawer({
         NETAPP_CONFIG:
           data.vendorType === 'netapp'
             ? { svm: data.netAppSvm ?? '', flexVol: data.netAppFlexVol ?? '' }
+            : undefined,
+        VANTARA_CONFIG:
+          data.vendorType === 'vantara'
+            ? { poolId: data.vantaraPoolId ?? '', restPort: data.vantaraRestPort ?? '' }
             : undefined
       })
 

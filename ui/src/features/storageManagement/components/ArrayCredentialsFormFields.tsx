@@ -16,6 +16,8 @@ export type ArrayCredentialsFormData = {
   skipSslVerification: boolean
   netAppSvm?: string
   netAppFlexVol?: string
+  vantaraPoolId?: string
+  vantaraRestPort?: string
 }
 
 export type ArrayCredentialsFormFieldsProps = {
@@ -32,6 +34,7 @@ export default function ArrayCredentialsFormFields({
   const isAdd = mode === 'add'
   const vendorType = useWatch<ArrayCredentialsFormData>({ name: 'vendorType' }) as string | undefined
   const isNetApp = vendorType === 'netapp'
+  const isVantara = vendorType === 'vantara'
 
   return (
     <>
@@ -165,6 +168,45 @@ export default function ArrayCredentialsFormFields({
                 labelProps={{ tooltip: 'FlexVol name within the SVM where LUNs will be created' }}
                 helperText={errors.netAppFlexVol?.message}
                 error={!!errors.netAppFlexVol}
+              />
+            </FormGrid>
+          </Box>
+
+          <Box sx={{ my: 1 }} />
+        </>
+      )}
+
+      {/* Hitachi Vantara-specific targeting — both fields are optional; the
+          provider auto-selects a DP pool when the array has exactly one, and
+          defaults the REST port to 443. */}
+      {isVantara && (
+        <>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
+              Hitachi Vantara Target
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Optionally specify the DP pool and Configuration Manager REST port.
+            </Typography>
+
+            <FormGrid minWidth={280}>
+              <RHFTextField
+                name="vantaraPoolId"
+                label="Pool ID"
+                labelProps={{
+                  tooltip:
+                    'Decimal DP pool ID where target LDEVs are created. Leave empty to auto-select when the array has exactly one pool.'
+                }}
+                helperText={errors.vantaraPoolId?.message}
+                error={!!errors.vantaraPoolId}
+              />
+
+              <RHFTextField
+                name="vantaraRestPort"
+                label="REST Port"
+                labelProps={{ tooltip: 'Configuration Manager REST API port. Defaults to 443.' }}
+                helperText={errors.vantaraRestPort?.message}
+                error={!!errors.vantaraRestPort}
               />
             </FormGrid>
           </Box>
