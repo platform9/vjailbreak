@@ -25,3 +25,5 @@ ui/playwright-report/*
 ui/coverage/*
 graphify-out/
 review_pr*/
+.claude/skills/vjailbreak-pr-review/workspace/
+.claude/eval-viewer/__pycache__/
