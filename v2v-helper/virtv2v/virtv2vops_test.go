@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -99,7 +100,7 @@ func TestIsSUSEFamily(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // mkinitrdLVMWrapperFile is the on-disk source of the wrapper script that the
-// v2v-helper image ships at mkinitrdLVMWrapperPath. The script used to be an
+// v2v-helper image ships at constants.MkinitrdLVMWrapperPath. The script used to be an
 // embedded Go const (mkinitrdLVMWrapper) but was moved to
 // scripts/mkinitrd-lvm-wrapper.sh and is COPY'd into the image at build time, so
 // the tests now validate the file that actually ships. Relative to this package
@@ -632,14 +633,14 @@ func TestFixLegacyMkinitrdCheckSteps(t *testing.T) {
 
 	require.Len(t, steps, 4, "must be exactly the four stat calls the three original checks made - no more, no fewer boots collapsed")
 
-	wantMarkers := []string{mkinitrdCheckMarker, dracutUsrBinCheckMarker, dracutSbinCheckMarker, mkinitrdOrigCheckMarker}
+	wantMarkers := []string{constants.MkinitrdCheckMarker, constants.DracutUsrBinCheckMarker, constants.DracutSbinCheckMarker, constants.MkinitrdOrigCheckMarker}
 	wantPaths := []string{"/sbin/mkinitrd", "/usr/bin/dracut", "/sbin/dracut", "/sbin/mkinitrd.orig"}
 	for i, step := range steps {
 		assert.Equal(t, "stat", step.Command, "step %d", i)
 		assert.Equal(t, []string{wantPaths[i]}, step.Args, "step %d", i)
 		assert.Equal(t, wantMarkers[i], step.Marker, "step %d must be tolerant and marked - one failed stat must not abort the others", i)
 	}
-	assert.Equal(t, wantMarkers, fixLegacyMkinitrdCheckMarkers, "the marker list used to split the batch's output must match the markers actually used to build it")
+	assert.Equal(t, wantMarkers, constants.FixLegacyMkinitrdCheckMarkers, "the marker list used to split the batch's output must match the markers actually used to build it")
 }
 
 func TestFixLegacyMkinitrdWriteSteps(t *testing.T) {
@@ -654,7 +655,7 @@ func TestFixLegacyMkinitrdWriteSteps(t *testing.T) {
 
 	assert.Equal(t, guestfishStep{
 		Command: "upload",
-		Args:    []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"},
+		Args:    []string{constants.MkinitrdLVMWrapperPath, "/sbin/mkinitrd"},
 	}, steps[1], "upload must run second, after the backup exists")
 
 	assert.Equal(t, guestfishStep{
@@ -670,11 +671,11 @@ func TestFixLegacyMkinitrdWriteSteps(t *testing.T) {
 func TestOsReleaseCatSteps(t *testing.T) {
 	steps := osReleaseCatSteps()
 
-	require.Len(t, steps, len(osReleaseCandidateFiles))
-	for i, file := range osReleaseCandidateFiles {
+	require.Len(t, steps, len(constants.OSReleaseCandidateFiles))
+	for i, file := range constants.OSReleaseCandidateFiles {
 		assert.Equal(t, "cat", steps[i].Command, "step %d", i)
 		assert.Equal(t, []string{file}, steps[i].Args, "step %d", i)
-		assert.Equal(t, osReleaseMarkers[i], steps[i].Marker, "step %d must be tolerant and marked - one missing candidate must not abort the others", i)
+		assert.Equal(t, constants.OSReleaseMarkers[i], steps[i].Marker, "step %d must be tolerant and marked - one missing candidate must not abort the others", i)
 	}
 }
 
@@ -688,32 +689,32 @@ func TestPickOsRelease(t *testing.T) {
 		{
 			name: "first candidate has real content",
 			sections: map[string]string{
-				osReleaseMarkers[0]: `NAME="Ubuntu"` + "\n" + `VERSION_ID="22.04"`,
+				constants.OSReleaseMarkers[0]: `NAME="Ubuntu"` + "\n" + `VERSION_ID="22.04"`,
 			},
 			want: `name="ubuntu"` + "\n" + `version_id="22.04"`,
 		},
 		{
 			name: "first candidate missing, second has content",
 			sections: map[string]string{
-				osReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
-				osReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
+				constants.OSReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
+				constants.OSReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
 			},
 			want: "centos linux release 7.9.2009 (core)",
 		},
 		{
 			name: "first two missing, third (SLES 11) has content",
 			sections: map[string]string{
-				osReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
-				osReleaseMarkers[1]: "cat: /etc/redhat-release: No such file or directory",
-				osReleaseMarkers[2]: "SUSE Linux Enterprise Server 11 (x86_64)",
+				constants.OSReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
+				constants.OSReleaseMarkers[1]: "cat: /etc/redhat-release: No such file or directory",
+				constants.OSReleaseMarkers[2]: "SUSE Linux Enterprise Server 11 (x86_64)",
 			},
 			want: "suse linux enterprise server 11 (x86_64)",
 		},
 		{
 			name: "no output at all for a candidate is treated as not found, not a stop",
 			sections: map[string]string{
-				osReleaseMarkers[0]: "",
-				osReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
+				constants.OSReleaseMarkers[0]: "",
+				constants.OSReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
 			},
 			want: "centos linux release 7.9.2009 (core)",
 		},

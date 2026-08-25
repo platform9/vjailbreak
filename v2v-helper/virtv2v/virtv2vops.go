@@ -532,27 +532,12 @@ func virtV2VFailureReasonFromLatestLog() string {
 	return utils.ExtractVirtV2VFailureReason(logPath)
 }
 
-// osReleaseCandidateFiles is where GetOsRelease and GetOsReleaseAllVolumes
-// look for the guest's OS release info, most-specific first.
-var osReleaseCandidateFiles = []string{
-	"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
-	"/etc/redhat-release", // RHEL/CentOS legacy
-	"/etc/SuSE-release",   // SLES 11 and older
-}
-
-// Section markers for osReleaseCatSteps's tolerant batch.
-var osReleaseMarkers = []string{
-	"---VJB-OSREL-0---",
-	"---VJB-OSREL-1---",
-	"---VJB-OSREL-2---",
-}
-
 // osReleaseCatSteps builds one tolerant `cat` per candidate release file,
 // tried in one appliance boot instead of up to three.
 func osReleaseCatSteps() []guestfishStep {
-	steps := make([]guestfishStep, len(osReleaseCandidateFiles))
-	for i, file := range osReleaseCandidateFiles {
-		steps[i] = guestfishStep{Command: "cat", Args: []string{file}, Marker: osReleaseMarkers[i]}
+	steps := make([]guestfishStep, len(constants.OSReleaseCandidateFiles))
+	for i, file := range constants.OSReleaseCandidateFiles {
+		steps[i] = guestfishStep{Command: "cat", Args: []string{file}, Marker: constants.OSReleaseMarkers[i]}
 	}
 	return steps
 }
@@ -565,7 +550,7 @@ func getOsReleaseFromDisks(disks []vm.VMDisk) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get OS release: %w", err)
 	}
-	return pickOsRelease(splitByMarker(out, osReleaseMarkers))
+	return pickOsRelease(splitByMarker(out, constants.OSReleaseMarkers))
 }
 
 // pickOsRelease is getOsReleaseFromDisks's decision logic, pulled out for
@@ -573,8 +558,8 @@ func getOsReleaseFromDisks(disks []vm.VMDisk) (string, error) {
 // content rather than a "file does not exist" error or no output at all.
 func pickOsRelease(sections map[string]string) (string, error) {
 	var errs []string
-	for i, file := range osReleaseCandidateFiles {
-		section := sections[osReleaseMarkers[i]]
+	for i, file := range constants.OSReleaseCandidateFiles {
+		section := sections[constants.OSReleaseMarkers[i]]
 		if section != "" && !strings.Contains(strings.ToLower(section), "no such file or directory") {
 			return strings.ToLower(section), nil
 		}
@@ -587,7 +572,7 @@ func pickOsRelease(sections map[string]string) (string, error) {
 	}
 
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
-		strings.Join(osReleaseCandidateFiles, ", "), strings.Join(errs, " | "))
+		strings.Join(constants.OSReleaseCandidateFiles, ", "), strings.Join(errs, " | "))
 }
 
 func GetOsRelease(path string) (string, error) {
@@ -836,7 +821,6 @@ func RunCommandInGuest(path string, command string, write bool) (string, error) 
 	// The command text is passed through verbatim - callers already supply a
 	// complete guestfish command line here, not a command plus separate args.
 	cmd.Stdin = strings.NewReader(mountScript(plan, write) + command + "\n")
-	countBoot("single command %q (path=%s)", command, path)
 	log.Printf("Executing %s", cmd.String()+" "+command)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -876,7 +860,6 @@ func RunCommandInGuestAllVolumes(disks []vm.VMDisk, command string, write bool, 
 	if err != nil {
 		return "", fmt.Errorf("failed to run command (%s): %w", command, err)
 	}
-	countBoot("single command %q (%d disk(s))", command, len(disks))
 	log.Printf("Executing %s -- %s", cmd.String(), guestfishLine(command, args...))
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -945,7 +928,7 @@ func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, err
 // partitionDevNumMarkers returns the i-th partition's two markers for
 // partitionDevNumSteps: device, then partition number.
 func partitionDevNumMarkers(i int) (dev, num string) {
-	return fmt.Sprintf("---VJB-PART-%d-DEV---", i), fmt.Sprintf("---VJB-PART-%d-NUM---", i)
+	return fmt.Sprintf(constants.PartitionDevMarkerTemplate, i), fmt.Sprintf(constants.PartitionNumMarkerTemplate, i)
 }
 
 // partitionDevNumSteps builds one tolerant part-to-dev + part-to-partnum per
@@ -967,7 +950,7 @@ func partitionDevNumSteps(partitions []string) []guestfishStep {
 // partitionBootIndexMarkers returns the i-th partition's two markers for
 // partitionBootIndexSteps: bootable flag, then device index.
 func partitionBootIndexMarkers(i int) (bootable, index string) {
-	return fmt.Sprintf("---VJB-PART-%d-BOOT---", i), fmt.Sprintf("---VJB-PART-%d-IDX---", i)
+	return fmt.Sprintf(constants.PartitionBootMarkerTemplate, i), fmt.Sprintf(constants.PartitionIdxMarkerTemplate, i)
 }
 
 // partitionBootIndexSteps builds one tolerant part-get-bootable +
@@ -1112,7 +1095,7 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 // interfaceFileMarker is the split marker for the i-th matched ifcfg-* file
 // in a GetInterfaceNames batch - see interfaceCatSteps.
 func interfaceFileMarker(i int) string {
-	return fmt.Sprintf("---VJB-IFCFG-%d---", i)
+	return fmt.Sprintf(constants.InterfaceFileMarkerTemplate, i)
 }
 
 // interfaceCatSteps builds one tolerant `cat` per matched ifcfg-* file, read
@@ -1321,32 +1304,15 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 	return nil
 }
 
-// mkinitrdLVMWrapperPath is the path where the mkinitrd LVM wrapper script
-// is pre-installed in the v2v-helper Docker image (copied from
-// scripts/mkinitrd-lvm-wrapper.sh at build time).
-const mkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
-
-// Section markers for fixLegacyMkinitrdCheckSteps's tolerant batch.
-const (
-	mkinitrdCheckMarker     = "---VJB-MKINITRD---"
-	dracutUsrBinCheckMarker = "---VJB-DRACUT-USRBIN---"
-	dracutSbinCheckMarker   = "---VJB-DRACUT-SBIN---"
-	mkinitrdOrigCheckMarker = "---VJB-MKINITRD-ORIG---"
-)
-
-var fixLegacyMkinitrdCheckMarkers = []string{
-	mkinitrdCheckMarker, dracutUsrBinCheckMarker, dracutSbinCheckMarker, mkinitrdOrigCheckMarker,
-}
-
 // fixLegacyMkinitrdCheckSteps builds FixLegacyMkinitrd's three existence
 // checks (four stat calls, since the dracut check tries two paths) as one
 // tolerant batch instead of up to three separate appliance boots.
 func fixLegacyMkinitrdCheckSteps() []guestfishStep {
 	return []guestfishStep{
-		{Command: "stat", Args: []string{"/sbin/mkinitrd"}, Marker: mkinitrdCheckMarker},
-		{Command: "stat", Args: []string{"/usr/bin/dracut"}, Marker: dracutUsrBinCheckMarker},
-		{Command: "stat", Args: []string{"/sbin/dracut"}, Marker: dracutSbinCheckMarker},
-		{Command: "stat", Args: []string{"/sbin/mkinitrd.orig"}, Marker: mkinitrdOrigCheckMarker},
+		{Command: "stat", Args: []string{"/sbin/mkinitrd"}, Marker: constants.MkinitrdCheckMarker},
+		{Command: "stat", Args: []string{"/usr/bin/dracut"}, Marker: constants.DracutUsrBinCheckMarker},
+		{Command: "stat", Args: []string{"/sbin/dracut"}, Marker: constants.DracutSbinCheckMarker},
+		{Command: "stat", Args: []string{"/sbin/mkinitrd.orig"}, Marker: constants.MkinitrdOrigCheckMarker},
 	}
 }
 
@@ -1356,7 +1322,7 @@ func fixLegacyMkinitrdCheckSteps() []guestfishStep {
 func fixLegacyMkinitrdWriteSteps() []guestfishStep {
 	return []guestfishStep{
 		{Command: "cp", Args: []string{"/sbin/mkinitrd", "/sbin/mkinitrd.orig"}},
-		{Command: "upload", Args: []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"}},
+		{Command: "upload", Args: []string{constants.MkinitrdLVMWrapperPath, "/sbin/mkinitrd"}},
 		{Command: "chmod", Args: []string{"0755", "/sbin/mkinitrd"}},
 	}
 }
@@ -1373,26 +1339,26 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	if err != nil {
 		return fmt.Errorf("FixLegacyMkinitrd: failed to check guest state: %w", err)
 	}
-	sections := splitByMarker(out, fixLegacyMkinitrdCheckMarkers)
+	sections := splitByMarker(out, constants.FixLegacyMkinitrdCheckMarkers)
 
 	// 1. Does /sbin/mkinitrd exist on the guest?
-	if sections[mkinitrdCheckMarker] == "" {
+	if sections[constants.MkinitrdCheckMarker] == "" {
 		log.Printf("FixLegacyMkinitrd: /sbin/mkinitrd not found on guest, skipping")
 		return nil
 	}
 
 	// 2. Is dracut absent? (dracut == modern SUSE, no patch needed)
-	if sections[dracutUsrBinCheckMarker] != "" {
+	if sections[constants.DracutUsrBinCheckMarker] != "" {
 		log.Printf("FixLegacyMkinitrd: dracut found at /usr/bin/dracut, modern system – skipping")
 		return nil
 	}
-	if sections[dracutSbinCheckMarker] != "" {
+	if sections[constants.DracutSbinCheckMarker] != "" {
 		log.Printf("FixLegacyMkinitrd: dracut found at /sbin/dracut, modern system – skipping")
 		return nil
 	}
 
 	// 3. Already patched by a previous run?
-	if sections[mkinitrdOrigCheckMarker] != "" {
+	if sections[constants.MkinitrdOrigCheckMarker] != "" {
 		log.Printf("FixLegacyMkinitrd: wrapper already installed (/sbin/mkinitrd.orig present), skipping")
 		return nil
 	}
@@ -1470,7 +1436,6 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 	}
 
 	log.Printf("Mounting disk to %s using guestmount...", mountPoint)
-	countBoot("guestmount full plan (%d disk(s))", len(disks))
 	mountCmd := exec.Command("guestmount", guestmountArgs(disks, plan.Mounts, mountPoint)...)
 	if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 		// Unlike a guestfish script, guestmount cannot tolerate one failed mount,
@@ -1484,7 +1449,6 @@ func RunNetworkPersistence(disks []vm.VMDisk, diskPath string, ostype string, is
 			return fmt.Errorf("cannot mount root %q with guestmount: -m cannot express a mountable", plan.Root)
 		}
 
-		countBoot("guestmount root-only retry (%d disk(s))", len(disks))
 		mountCmd = exec.Command("guestmount", guestmountArgs(disks, []mountSpec{{Device: plan.Root, MountPoint: "/"}}, mountPoint)...)
 		if out, mountErr := mountCmd.CombinedOutput(); mountErr != nil {
 			return fmt.Errorf("guestmount failed: %v, output: %s", mountErr, string(out))

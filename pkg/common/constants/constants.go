@@ -876,3 +876,44 @@ var (
 	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
 	ProxyVMRequiredComponents = []string{"qemu-nbd"}
 )
+
+// Guestfish batching constants (v2v-helper/virtv2v): candidate files, section
+// markers, and marker templates used to batch several guestfish/guestmount
+// commands into one appliance boot. Internal to that package.
+const (
+	MkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
+
+	MkinitrdCheckMarker     = "---VJB-MKINITRD---"
+	DracutUsrBinCheckMarker = "---VJB-DRACUT-USRBIN---"
+	DracutSbinCheckMarker   = "---VJB-DRACUT-SBIN---"
+	MkinitrdOrigCheckMarker = "---VJB-MKINITRD-ORIG---"
+
+	PartitionDevMarkerTemplate  = "---VJB-PART-%d-DEV---"
+	PartitionNumMarkerTemplate  = "---VJB-PART-%d-NUM---"
+	PartitionBootMarkerTemplate = "---VJB-PART-%d-BOOT---"
+	PartitionIdxMarkerTemplate  = "---VJB-PART-%d-IDX---"
+	InterfaceFileMarkerTemplate = "---VJB-IFCFG-%d---"
+)
+
+var (
+	// OSReleaseCandidateFiles is where GetOsRelease/GetOsReleaseAllVolumes
+	// look for the guest's OS release info, most-specific first.
+	OSReleaseCandidateFiles = []string{
+		"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
+		"/etc/redhat-release", // RHEL/CentOS legacy
+		"/etc/SuSE-release",   // SLES 11 and older
+	}
+
+	// OSReleaseMarkers are OSReleaseCandidateFiles's section markers, same order.
+	OSReleaseMarkers = []string{
+		"---VJB-OSREL-0---",
+		"---VJB-OSREL-1---",
+		"---VJB-OSREL-2---",
+	}
+
+	// FixLegacyMkinitrdCheckMarkers collects the four mkinitrd/dracut markers
+	// for splitByMarker.
+	FixLegacyMkinitrdCheckMarkers = []string{
+		MkinitrdCheckMarker, DracutUsrBinCheckMarker, DracutSbinCheckMarker, MkinitrdOrigCheckMarker,
+	}
+)
