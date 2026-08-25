@@ -100,3 +100,27 @@ func TestExtractStoragePools_ToleratesObjectLocationInfo(t *testing.T) {
 		t.Errorf("expected vendor Pure Storage, got %q", pure.Capabilities.VendorName)
 	}
 }
+
+func TestGetArrayVendor(t *testing.T) {
+	tests := []struct {
+		name   string
+		vendor string
+		want   string
+	}{
+		{"pure storage exact", "Pure Storage", "pure"},
+		{"pure lowercase driver name", "pure_flasharray", "pure"},
+		{"netapp", "NetApp", "netapp"},
+		{"hitachi", "Hitachi", "vantara"},
+		{"hitachi vantara full name", "Hitachi Vantara", "vantara"},
+		{"unknown vendor", "Dell EMC", "unsupported"},
+		{"empty vendor", "", "unsupported"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GetArrayVendor(tt.vendor); got != tt.want {
+				t.Errorf("GetArrayVendor(%q) = %q, want %q", tt.vendor, got, tt.want)
+			}
+		})
+	}
+}
