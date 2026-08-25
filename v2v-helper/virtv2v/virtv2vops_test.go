@@ -631,3 +631,241 @@ func TestWildcardNetplanSteps(t *testing.T) {
 		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed mv/mkdir/upload must abort the rest, matching the three separate calls this replaces", i)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 guestfish consolidation
+//
+// Same rationale as the Phase 1 tests above: the guestfish execution itself
+// cannot run without a real binary, so what's tested is the step-building
+// and result-picking logic - the pure Go that decides what gets sent and
+// what the batched output means.
+// ---------------------------------------------------------------------------
+
+func TestFixLegacyMkinitrdCheckSteps(t *testing.T) {
+	steps := fixLegacyMkinitrdCheckSteps()
+
+	require.Len(t, steps, 4, "must be exactly the four stat calls the three original checks made - no more, no fewer boots collapsed")
+
+	wantMarkers := []string{mkinitrdCheckMarker, dracutUsrBinCheckMarker, dracutSbinCheckMarker, mkinitrdOrigCheckMarker}
+	wantPaths := []string{"/sbin/mkinitrd", "/usr/bin/dracut", "/sbin/dracut", "/sbin/mkinitrd.orig"}
+	for i, step := range steps {
+		assert.Equal(t, "stat", step.Command, "step %d", i)
+		assert.Equal(t, []string{wantPaths[i]}, step.Args, "step %d", i)
+		assert.Equal(t, wantMarkers[i], step.Marker, "step %d must be tolerant and marked - one failed stat must not abort the others", i)
+	}
+	assert.Equal(t, wantMarkers, fixLegacyMkinitrdCheckMarkers, "the marker list used to split the batch's output must match the markers actually used to build it")
+}
+
+func TestFixLegacyMkinitrdWriteSteps(t *testing.T) {
+	steps := fixLegacyMkinitrdWriteSteps()
+
+	require.Len(t, steps, 3, "must be exactly backup, upload, chmod - no more, no fewer boots collapsed")
+
+	assert.Equal(t, guestfishStep{
+		Command: "cp",
+		Args:    []string{"/sbin/mkinitrd", "/sbin/mkinitrd.orig"},
+	}, steps[0], "the original must be backed up first, before it is overwritten")
+
+	assert.Equal(t, guestfishStep{
+		Command: "upload",
+		Args:    []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"},
+	}, steps[1], "upload must run second, after the backup exists")
+
+	assert.Equal(t, guestfishStep{
+		Command: "chmod",
+		Args:    []string{"0755", "/sbin/mkinitrd"},
+	}, steps[2], "chmod must run last, after the wrapper is in place")
+
+	for i, step := range steps {
+		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed backup or upload must abort the rest, matching the three separate calls this replaces", i)
+	}
+}
+
+func TestOsReleaseCatSteps(t *testing.T) {
+	steps := osReleaseCatSteps()
+
+	require.Len(t, steps, len(osReleaseCandidateFiles))
+	for i, file := range osReleaseCandidateFiles {
+		assert.Equal(t, "cat", steps[i].Command, "step %d", i)
+		assert.Equal(t, []string{file}, steps[i].Args, "step %d", i)
+		assert.Equal(t, osReleaseMarkers[i], steps[i].Marker, "step %d must be tolerant and marked - one missing candidate must not abort the others", i)
+	}
+}
+
+func TestPickOsRelease(t *testing.T) {
+	tests := []struct {
+		name     string
+		sections map[string]string
+		want     string
+		wantErr  bool
+	}{
+		{
+			name: "first candidate has real content",
+			sections: map[string]string{
+				osReleaseMarkers[0]: `NAME="Ubuntu"` + "\n" + `VERSION_ID="22.04"`,
+			},
+			want: `name="ubuntu"` + "\n" + `version_id="22.04"`,
+		},
+		{
+			name: "first candidate missing, second has content",
+			sections: map[string]string{
+				osReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
+				osReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
+			},
+			want: "centos linux release 7.9.2009 (core)",
+		},
+		{
+			name: "first two missing, third (SLES 11) has content",
+			sections: map[string]string{
+				osReleaseMarkers[0]: "cat: /etc/os-release: No such file or directory",
+				osReleaseMarkers[1]: "cat: /etc/redhat-release: No such file or directory",
+				osReleaseMarkers[2]: "SUSE Linux Enterprise Server 11 (x86_64)",
+			},
+			want: "suse linux enterprise server 11 (x86_64)",
+		},
+		{
+			name: "no output at all for a candidate is treated as not found, not a stop",
+			sections: map[string]string{
+				osReleaseMarkers[0]: "",
+				osReleaseMarkers[1]: "CentOS Linux release 7.9.2009 (Core)",
+			},
+			want: "centos linux release 7.9.2009 (core)",
+		},
+		{
+			name:     "nothing found anywhere",
+			sections: map[string]string{},
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pickOsRelease(tt.sections)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestInterfaceCatSteps(t *testing.T) {
+	files := []string{"ifcfg-eth0", "ifcfg-eth1"}
+	steps := interfaceCatSteps(files)
+
+	require.Len(t, steps, 2)
+	assert.Equal(t, guestfishStep{
+		Command: "cat",
+		Args:    []string{"/etc/sysconfig/network-scripts/ifcfg-eth0"},
+		Marker:  interfaceFileMarker(0),
+	}, steps[0])
+	assert.Equal(t, guestfishStep{
+		Command: "cat",
+		Args:    []string{"/etc/sysconfig/network-scripts/ifcfg-eth1"},
+		Marker:  interfaceFileMarker(1),
+	}, steps[1])
+	assert.NotEqual(t, interfaceFileMarker(0), interfaceFileMarker(1), "distinct files must get distinct markers or their output cannot be told apart")
+}
+
+func TestPartitionDevNumSteps(t *testing.T) {
+	steps := partitionDevNumSteps([]string{"/dev/sda1", "/dev/sda2"})
+
+	require.Len(t, steps, 4, "two steps per partition (part-to-dev, part-to-partnum)")
+
+	dev0, num0 := partitionDevNumMarkers(0)
+	dev1, num1 := partitionDevNumMarkers(1)
+	assert.Equal(t, guestfishStep{Command: "part-to-dev", Args: []string{"/dev/sda1"}, Marker: dev0}, steps[0])
+	assert.Equal(t, guestfishStep{Command: "part-to-partnum", Args: []string{"/dev/sda1"}, Marker: num0}, steps[1])
+	assert.Equal(t, guestfishStep{Command: "part-to-dev", Args: []string{"/dev/sda2"}, Marker: dev1}, steps[2])
+	assert.Equal(t, guestfishStep{Command: "part-to-partnum", Args: []string{"/dev/sda2"}, Marker: num1}, steps[3])
+
+	for i, step := range steps {
+		assert.NotEmpty(t, step.Marker, "step %d must be tolerant and marked - one partition's failure must not abort the others", i)
+	}
+}
+
+func TestPartitionBootIndexSteps(t *testing.T) {
+	steps := partitionBootIndexSteps([]string{"/dev/sda", "/dev/sdb"}, []string{"1", "2"})
+
+	require.Len(t, steps, 4, "two steps per partition (part-get-bootable, device-index)")
+
+	boot0, idx0 := partitionBootIndexMarkers(0)
+	boot1, idx1 := partitionBootIndexMarkers(1)
+	assert.Equal(t, guestfishStep{Command: "part-get-bootable", Args: []string{"/dev/sda", "1"}, Marker: boot0}, steps[0])
+	assert.Equal(t, guestfishStep{Command: "device-index", Args: []string{"/dev/sda"}, Marker: idx0}, steps[1])
+	assert.Equal(t, guestfishStep{Command: "part-get-bootable", Args: []string{"/dev/sdb", "2"}, Marker: boot1}, steps[2])
+	assert.Equal(t, guestfishStep{Command: "device-index", Args: []string{"/dev/sdb"}, Marker: idx1}, steps[3])
+}
+
+func TestPickBootableIndex(t *testing.T) {
+	boot0, idx0 := partitionBootIndexMarkers(0)
+	boot1, idx1 := partitionBootIndexMarkers(1)
+	boot2, idx2 := partitionBootIndexMarkers(2)
+
+	tests := []struct {
+		name           string
+		partitionCount int
+		sections       map[string]string
+		want           int
+		wantErr        bool
+	}{
+		{
+			name:           "first partition bootable with a valid index wins",
+			partitionCount: 2,
+			sections: map[string]string{
+				boot0: "true", idx0: "0",
+				boot1: "false", idx1: "1",
+			},
+			want: 0,
+		},
+		{
+			name:           "first partition not bootable, second is",
+			partitionCount: 2,
+			sections: map[string]string{
+				boot0: "false", idx0: "0",
+				boot1: "true", idx1: "1",
+			},
+			want: 1,
+		},
+		{
+			name:           "bootable but non-numeric index falls through to the next partition",
+			partitionCount: 3,
+			sections: map[string]string{
+				boot0: "true", idx0: "not-a-number",
+				boot1: "true", idx1: "1",
+				boot2: "false", idx2: "2",
+			},
+			want: 1,
+		},
+		{
+			name:           "no partition bootable",
+			partitionCount: 2,
+			sections: map[string]string{
+				boot0: "false", idx0: "0",
+				boot1: "false", idx1: "1",
+			},
+			wantErr: true,
+		},
+		{
+			name:           "no partitions at all",
+			partitionCount: 0,
+			sections:       map[string]string{},
+			wantErr:        true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := pickBootableIndex(tt.partitionCount, tt.sections)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Equal(t, -1, got)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

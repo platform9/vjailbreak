@@ -63,9 +63,12 @@ const (
 // appliance boots" from an assumption into something a log line proves.
 // Every place that actually launches a guestfish or guestmount process -
 // runScript here, RunCommandInGuest, RunCommandInGuestAllVolumes (via
-// prepareGuestfishCommand), RunGetBootablePartitionScript, GetOsRelease's
-// per-file guestfish invocation, runGuestfishScript (below), and the
-// guestmount call in RunNetworkPersistence - increments this via countBoot.
+// prepareGuestfishCommand), runGuestfishScript (below, behind
+// RunGuestfishScript/RunGuestfishScriptRaw/RunGuestfishScriptCombinedRaw -
+// which is what RunGetBootablePartitionScript, GetOsRelease,
+// GetOsReleaseAllVolumes, GetInterfaceNames, FixLegacyMkinitrd, and
+// GetBootableVolumeIndex all now go through), and the guestmount call in
+// RunNetworkPersistence - increments this via countBoot.
 var guestfishBootCount int64
 
 // countBoot logs one appliance boot against the shared counter. reason
@@ -566,9 +569,12 @@ func quoteArg(s string) string {
 //	buildScriptLines          renders steps into a script body
 //	describeSteps             renders steps for a log line
 //	prepareGuestfishScript    prepareGuestfishCommand's multi-step sibling
-//	runGuestfishScript        prepare, boot, run, return raw stdout
-//	  RunGuestfishScript        ...lowercased, for a fail-fast chain
-//	  RunGuestfishScriptRaw     ...raw case, for a tolerant batch
+//	runGuestfishScript        prepare, boot, run, return raw output
+//	  RunGuestfishScript              ...lowercased, for a fail-fast chain
+//	  RunGuestfishScriptRaw           ...raw case, for a tolerant batch
+//	  RunGuestfishScriptCombinedRaw   ...raw, with each step's own error
+//	                                  text folded in - for a tolerant batch
+//	                                  that needs to read *why* a step failed
 //	splitByMarker             recovers a tolerant batch's per-step output
 
 // guestfishStep is one command in a multi-step guestfish script built by
@@ -647,12 +653,26 @@ func prepareGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishSte
 	return cmd, nil
 }
 
-// runGuestfishScript is the shared implementation behind RunGuestfishScript
-// and RunGuestfishScriptRaw: prepare, boot, run, and return the raw
-// (non-lowercased) combined stdout. It is one appliance boot regardless of
-// how many steps are passed in - that collapsing is the entire point of
-// this section.
-func runGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+// runGuestfishScript is the shared implementation behind RunGuestfishScript,
+// RunGuestfishScriptRaw, and RunGuestfishScriptCombinedRaw: prepare, boot,
+// run, and return raw output. It is one appliance boot regardless of how
+// many steps are passed in - that collapsing is the entire point of this
+// section.
+//
+// combined controls whether a step's own guestfish error text is folded
+// into the returned string alongside stdout (like exec.Cmd.CombinedOutput),
+// instead of being kept out of it and only logged. Most callers want
+// stdout only - that is where the actual data they asked for lands. A
+// caller that needs to tell apart *why* a tolerant step produced no
+// stdout - e.g. "No such file or directory" versus some other failure, see
+// GetOsReleaseAllVolumes - needs combined instead, because a tolerated
+// step's error text goes to guestfish's stderr, not stdout, and only
+// pointing Stdout and Stderr at the very same buffer keeps the child
+// process's own interleaving order intact, so that text still lands in the
+// right marker section. That is the same trick exec.Cmd.CombinedOutput()
+// uses, and the same reason GetOsRelease used it per-call before this
+// batched form existed.
+func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestfishStep) (string, error) {
 	cmd, err := prepareGuestfishScript(disks, write, steps...)
 	if err != nil {
 		return "", fmt.Errorf("failed to prepare guestfish script: %w", err)
@@ -660,6 +680,17 @@ func runGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (
 
 	countBoot("script of %d step(s) (%d disk(s))", len(steps), len(disks))
 	log.Printf("Executing %s -- %s", cmd.String(), describeSteps(steps))
+
+	if combined {
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		err = cmd.Run()
+		if err != nil {
+			return "", fmt.Errorf("failed to run guestfish script: %v: %s", err, strings.TrimSpace(buf.String()))
+		}
+		return buf.String(), nil
+	}
 
 	var stdoutBuf, stderrBuf bytes.Buffer
 	cmd.Stdout = &stdoutBuf
@@ -682,7 +713,7 @@ func runGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (
 // change to how it reads the result.
 func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	out, err := runGuestfishScript(disks, write, steps...)
+	out, err := runGuestfishScript(disks, write, false, steps...)
 	if err != nil {
 		return "", err
 	}
@@ -697,7 +728,17 @@ func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (
 // preserve (e.g. a mixed-case device path or file content).
 func RunGuestfishScriptRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	return runGuestfishScript(disks, write, steps...)
+	return runGuestfishScript(disks, write, false, steps...)
+}
+
+// RunGuestfishScriptCombinedRaw is RunGuestfishScriptRaw, but folds each
+// tolerant step's own guestfish error text into the returned output
+// alongside its stdout - see runGuestfishScript's combined parameter. Use
+// this only when a caller genuinely needs to read why a tolerant step
+// produced no output, not merely that it did.
+func RunGuestfishScriptCombinedRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	return runGuestfishScript(disks, write, true, steps...)
 }
 
 // splitByMarker splits combined guestfish script output into per-step text
