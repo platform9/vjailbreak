@@ -12,19 +12,18 @@ export const SUBMENU_SPINE_X_PX = 22
 export const SUBMENU_CONNECTOR_SVG_LEFT_PX = SUBMENU_SPINE_X_PX - 4
 export const SUBMENU_TEXT_INDENT_PX = 36
 
-export const ACTIVE_MIGRATION_PHASES = new Set<Phase>([
-  Phase.Pending,
-  Phase.Validating,
-  Phase.AwaitingDataCopyStart,
-  Phase.CopyingBlocks,
-  Phase.CopyingChangedBlocks,
-  Phase.ConvertingDisk,
-  Phase.AwaitingCutOverStartTime,
-  Phase.AwaitingAdminCutOver,
-  Phase.WaitingForLDMBootSuccess,
-  Phase.PromotingToVirtio,
-  Phase.Unknown
+export const UPGRADE_SAFE_MIGRATION_PHASES = new Set<Phase>([
+  Phase.Succeeded,
+  Phase.Failed,
+  Phase.ValidationFailed
 ])
+
+// canUpgrade reports whether every migration has finished. No migrations at all is safe.
+export const canUpgrade = (migrations: { status?: { phase?: string } }[] | undefined): boolean => {
+  if (!Array.isArray(migrations)) return false
+
+  return migrations.every((m) => UPGRADE_SAFE_MIGRATION_PHASES.has(m.status?.phase as Phase))
+}
 
 export const isPathActive = (navPath: string, currentFullPath: string): boolean => {
   if (navPath === currentFullPath) return true

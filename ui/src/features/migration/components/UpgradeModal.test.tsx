@@ -22,7 +22,7 @@ function renderModal(ui: ReactElement) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
   })
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+  return { queryClient, ...render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>) }
 }
 
 const selectVersion = async (user: ReturnType<typeof userEvent.setup>, version: string) => {
@@ -31,6 +31,8 @@ const selectVersion = async (user: ReturnType<typeof userEvent.setup>, version: 
 }
 
 const upgradeButton = () => screen.getByTestId('upgrade-button')
+
+const versionSelect = () => screen.getByRole('combobox')
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -289,5 +291,44 @@ describe('UpgradeModal — progress and alert placement', () => {
       .getByText('Processing. Please do not close or refresh this page.')
       .closest('.MuiAlert-root')
     expect(warning).toHaveStyle({ justifyContent: 'center' })
+  })
+})
+
+describe('UpgradeModal — selected version display', () => {
+  it('keeps showing the selected version after it drops out of the tag list', async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderModal(<UpgradeModal show onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Select a version...')).toBeInTheDocument())
+    await selectVersion(user, 'v0.1.4')
+    expect(versionSelect()).toHaveTextContent('v0.1.4')
+
+    // The upgrade job rewrites version-config to the target, so a later /tags refetch returns
+    // only versions newer than it - the selection is no longer one of the options.
+    queryClient.setQueryData(['availableTags'], { updates: [{ version: 'v0.1.5' }] })
+
+    await waitFor(() =>
+      expect(screen.queryByRole('option', { name: 'v0.1.4' })).not.toBeInTheDocument()
+    )
+    // Still displayed, because the Select renders the value rather than a matching option.
+    expect(versionSelect()).toHaveTextContent('v0.1.4')
+  })
+
+  it('keeps showing the selected version when the tag list empties completely', async () => {
+    const user = userEvent.setup()
+    const { queryClient } = renderModal(<UpgradeModal show onClose={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByText('Select a version...')).toBeInTheDocument())
+    await selectVersion(user, 'v0.1.4')
+
+    queryClient.setQueryData(['availableTags'], { updates: [] })
+
+    await waitFor(() => expect(versionSelect()).toHaveTextContent('v0.1.4'))
+  })
+
+  it('shows the placeholder while nothing is selected', async () => {
+    renderModal(<UpgradeModal show onClose={vi.fn()} />)
+
+    await waitFor(() => expect(versionSelect()).toHaveTextContent('Select a version...'))
   })
 })
