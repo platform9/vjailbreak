@@ -755,34 +755,35 @@ func buildWildcardNetplanYAML(guestNetworks []vjailbreakv1alpha1.GuestNetwork, g
 	return b.String()
 }
 
+// wildcardNetplanSteps builds the mv+mkdir+upload sequence
+// AddWildcardNetplan runs in one appliance boot instead of three: back up
+// the existing /etc/netplan, recreate it empty, then upload the wildcard
+// config. Split out so the command/arg construction is unit-testable
+// without a real guestfish binary.
+func wildcardNetplanSteps() []guestfishStep {
+	return []guestfishStep{
+		{Command: "mv", Args: []string{"/etc/netplan", "/etc/netplan-bkp"}},
+		{Command: "mkdir", Args: []string{"/etc/netplan"}},
+		{Command: "upload", Args: []string{"/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml"}},
+	}
+}
+
 func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry) error {
 	netplanYAML := buildWildcardNetplanYAML(guestNetworks, gatewayIP, ipPerMac)
 	log.Printf("NETPLAN YAML : %s", netplanYAML)
 	// Create the netplan file
-	err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644)
-	if err != nil {
+	if err := os.WriteFile("/home/fedora/99-wildcard.network", []byte(netplanYAML), 0644); err != nil {
 		return fmt.Errorf("failed to create netplan file: %w", err)
 	}
 	log.Println("Created local netplan file")
 	log.Println("Uploading netplan file to disk")
-	// Upload it to the disk
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	var ans string
-	command := "mv"
-	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan", "/etc/netplan-bkp")
-	if err != nil {
-		return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-	}
-	command = "mkdir"
-	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/etc/netplan")
-	if err != nil {
-		return fmt.Errorf("failed to run command (%s): %w: %s", command, err, strings.TrimSpace(ans))
-	}
-	command = "upload"
-	ans, err = RunCommandInGuestAllVolumes(disks, command, true, "/home/fedora/99-wildcard.network", "/etc/netplan/99-wildcard.yaml")
-	if err != nil {
-		log.Printf("failed to upload netplan file: %v: %s", err, strings.TrimSpace(ans))
-		return fmt.Errorf("failed to upload netplan file: %w: %s", err, strings.TrimSpace(ans))
+
+	// mv, mkdir, upload in one appliance boot instead of three; none of
+	// these steps carries a Marker, so a failure at any step aborts the
+	// rest and returns an error, exactly as the three separate fail-fast
+	// calls this replaces did.
+	if _, err := RunGuestfishScript(disks, true, wildcardNetplanSteps()...); err != nil {
+		return fmt.Errorf("failed to add wildcard netplan: %w", err)
 	}
 	return nil
 }
@@ -1143,9 +1144,20 @@ func parseWindowsProductName(out string) string {
 // references — manifesting as GRUB Error 21 at boot. Using --replace-fstab
 // fixes fstab and udev rules without touching device.map or grub config files,
 // allowing virt-v2v to handle GRUB correctly.
-func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease string) error {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+// mountPersistenceSteps builds the upload+chmod+sh sequence
+// RunMountPersistenceScript runs in one appliance boot instead of three,
+// against scriptArgs already resolved by MountPersistenceScriptArgs. Split
+// out so the command/arg construction is unit-testable without a real
+// guestfish binary.
+func mountPersistenceSteps(scriptPath, scriptArgs string) []guestfishStep {
+	return []guestfishStep{
+		{Command: "upload", Args: []string{scriptPath, "/tmp/generate-mount-persistence.sh"}},
+		{Command: "chmod", Args: []string{"0755", "/tmp/generate-mount-persistence.sh"}},
+		{Command: "sh", Args: []string{"/tmp/generate-mount-persistence.sh " + scriptArgs}},
+	}
+}
 
+func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease string) error {
 	// Script should be available in the container at /home/fedora/
 	scriptPath := "/home/fedora/generate-mount-persistence.sh"
 
@@ -1163,47 +1175,23 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 
 	log.Printf("Running generate-mount-persistence.sh with %s option(s)", scriptArgs)
 
-	// Upload the script to the guest VM
-	var uploadErr error
-	var uploadOutput string
-
-	command := "upload"
-	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/generate-mount-persistence.sh")
-
-	if uploadErr != nil {
-		return fmt.Errorf("failed to upload generate-mount-persistence.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
-	}
-
-	log.Printf("Successfully uploaded generate-mount-persistence.sh to guest")
-
-	// Make the script executable
-	var chmodErr error
-	var chmodOutput string
-
-	command = "chmod"
-	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/generate-mount-persistence.sh")
-
-	if chmodErr != nil {
-		return fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
-	}
-
-	log.Printf("Made generate-mount-persistence.sh executable")
-
-	// Run the script with the chosen flag
-	var runErr error
-	var runOutput string
-
-	command = "sh"
-	runOutput, runErr = RunCommandInGuestAllVolumes(disks, command, true, "/tmp/generate-mount-persistence.sh "+scriptArgs)
-
-	if runErr != nil {
-		log.Printf("Warning: generate-mount-persistence.sh execution failed: %v: %s", runErr, strings.TrimSpace(runOutput))
+	// Upload, chmod, and run in one appliance boot instead of three. The
+	// three separate calls this replaces had different fatality (a failed
+	// upload/chmod returned an error, a failed script run was swallowed),
+	// but the only caller (handleLinuxOSDetection) never fails the
+	// migration over any of them either way - it just logs a warning and
+	// continues - so collapsing all three into one "warn and continue"
+	// outcome changes no migration behaviour, only which log line a
+	// failure produces.
+	out, err := RunGuestfishScriptRaw(disks, true, mountPersistenceSteps(scriptPath, scriptArgs)...)
+	if err != nil {
+		log.Printf("Warning: generate-mount-persistence.sh did not complete: %v", err)
 		// Don't return error, just log warning as this is not critical
 		return nil
 	}
 
 	log.Printf("Successfully executed generate-mount-persistence.sh with %s", scriptArgs)
-	log.Printf("Script output: %s", strings.TrimSpace(runOutput))
+	log.Printf("Script output: %s", strings.TrimSpace(out))
 
 	return nil
 }
@@ -1259,9 +1247,19 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	return nil
 }
 
-func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+// getBootablePartitionSteps builds the upload+chmod+sh sequence
+// RunGetBootablePartitionScript runs in one appliance boot instead of
+// three. Split out so the command/arg construction is unit-testable
+// without a real guestfish binary.
+func getBootablePartitionSteps(scriptPath string) []guestfishStep {
+	return []guestfishStep{
+		{Command: "upload", Args: []string{scriptPath, "/tmp/get-bootable-partition.sh"}},
+		{Command: "chmod", Args: []string{"0755", "/tmp/get-bootable-partition.sh"}},
+		{Command: "sh", Args: []string{"/tmp/get-bootable-partition.sh"}},
+	}
+}
 
+func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	// Script should be available in the container at /home/fedora/
 	scriptPath := "/home/fedora/get-bootable-partition.sh"
 
@@ -1270,56 +1268,25 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
-	// Upload the script to the guest VM
-	var uploadErr error
-	var uploadOutput string
-
-	command := "upload"
-	uploadOutput, uploadErr = RunCommandInGuestAllVolumes(disks, command, true, scriptPath, "/tmp/get-bootable-partition.sh")
-
-	if uploadErr != nil {
-		return "", fmt.Errorf("failed to upload get-bootable-partition.sh: %v: %s", uploadErr, strings.TrimSpace(uploadOutput))
-	}
-
-	log.Printf("Successfully uploaded get-bootable-partition.sh to guest")
-
-	// Make the script executable
-	var chmodErr error
-	var chmodOutput string
-
-	command = "chmod"
-	chmodOutput, chmodErr = RunCommandInGuestAllVolumes(disks, command, true, "0755", "/tmp/get-bootable-partition.sh")
-
-	if chmodErr != nil {
-		return "", fmt.Errorf("failed to make script executable: %v: %s", chmodErr, strings.TrimSpace(chmodOutput))
-	}
-
-	log.Printf("Made get-bootable-partition.sh executable")
-
-	// Run the script
-	var runErr error
-
-	cmd, cmdErr := prepareGuestfishCommand(disks, "sh", true, "/tmp/get-bootable-partition.sh")
-	if cmdErr != nil {
-		return "", fmt.Errorf("failed to prepare get-bootable-partition.sh invocation: %w", cmdErr)
-	}
-	countBoot("sh get-bootable-partition.sh (%d disk(s))", len(disks))
-	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd.Stdout = &stdoutBuf
-	cmd.Stderr = &stderrBuf
-	log.Printf("Executing %s", cmd.String())
-	runErr = cmd.Run()
-	if stderrBuf.Len() > 0 {
-		log.Printf("get-bootable-partition.sh debug output:\n%s", strings.TrimSpace(stderrBuf.String()))
-	}
-	if runErr != nil {
-		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %v: %s", runErr, strings.TrimSpace(stderrBuf.String()))
+	// Upload, chmod, and run in one appliance boot instead of three: none
+	// of these steps carries a Marker, so guestfish's default fail-fast
+	// behaviour applies (guestfish(1), EXIT ON ERROR BEHAVIOUR) - a failed
+	// upload aborts before chmod, a failed chmod aborts before sh, exactly
+	// as the three separate calls this replaces already behaved. The
+	// script's own debug trace still goes to stderr and only the real
+	// answer to stdout (see get-bootable-partition.sh's fd 3 redirect), so
+	// RunGuestfishScriptRaw's raw, uncased stdout is what gets trimmed and
+	// returned - lowercasing here would be harmless for a device path but
+	// there is no reason to add it back.
+	out, err := RunGuestfishScriptRaw(disks, true, getBootablePartitionSteps(scriptPath)...)
+	if err != nil {
+		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
 
 	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(stdoutBuf.String()))
+	log.Printf("Script output: %s", strings.TrimSpace(out))
 
-	return strings.TrimSpace(stdoutBuf.String()), nil
+	return strings.TrimSpace(out), nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
