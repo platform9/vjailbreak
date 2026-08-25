@@ -532,52 +532,82 @@ func virtV2VFailureReasonFromLatestLog() string {
 	return utils.ExtractVirtV2VFailureReason(logPath)
 }
 
-func GetOsRelease(path string) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+// osReleaseCandidateFiles is where GetOsRelease and GetOsReleaseAllVolumes
+// look for the guest's OS release info, most-specific first.
+var osReleaseCandidateFiles = []string{
+	"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
+	"/etc/redhat-release", // RHEL/CentOS legacy
+	"/etc/SuSE-release",   // SLES 11 and older
+}
 
-	releaseFiles := []string{
-		"/etc/os-release",
-		"/etc/redhat-release",
-		"/etc/SuSE-release", // SLES 11
+// Section markers for osReleaseCatSteps's tolerant batch.
+var osReleaseMarkers = []string{
+	"---VJB-OSREL-0---",
+	"---VJB-OSREL-1---",
+	"---VJB-OSREL-2---",
+}
+
+// osReleaseCatSteps builds one tolerant `cat` per candidate release file, so
+// getOsReleaseFromDisks can try every candidate in the one appliance boot
+// this replaces up to three of.
+func osReleaseCatSteps() []guestfishStep {
+	steps := make([]guestfishStep, len(osReleaseCandidateFiles))
+	for i, file := range osReleaseCandidateFiles {
+		steps[i] = guestfishStep{Command: "cat", Args: []string{file}, Marker: osReleaseMarkers[i]}
 	}
+	return steps
+}
 
-	plan, planErr := resolveMountPlan([]vm.VMDisk{{Path: path}})
-	if planErr != nil {
-		return "", fmt.Errorf("failed to get OS release from %s: %w", path, planErr)
+// getOsReleaseFromDisks is the shared implementation behind GetOsRelease and
+// GetOsReleaseAllVolumes: try every candidate release file in order and
+// return the first one that reads back real content.
+//
+// Originally each candidate cost its own appliance boot, and the loop broke
+// out early on the first error that was not "file does not exist" -
+// avoiding paying for a boot that a repeat of the same problem would waste.
+// Now every candidate is read in one tolerant batch (see guestfishStep)
+// regardless, so that early-break no longer saves anything: trying the
+// remaining candidates is free once the boot has already happened, so this
+// version always looks at all of them and returns the first one that looks
+// like real content, which can only find an answer the original version
+// would have missed, never lose one it would have found.
+func getOsReleaseFromDisks(disks []vm.VMDisk) (string, error) {
+	out, err := RunGuestfishScriptCombinedRaw(disks, false, osReleaseCatSteps()...)
+	if err != nil {
+		return "", fmt.Errorf("failed to get OS release: %w", err)
 	}
+	return pickOsRelease(splitByMarker(out, osReleaseMarkers))
+}
 
-	runGuestfishCat := func(imgPath, file string) (string, error) {
-		cmd := exec.Command("guestfish", "--ro", "-a", imgPath)
-		cmd.Stdin = strings.NewReader(
-			mountScript(plan, false) + guestfishLine("cat", file) + "\n")
-		countBoot("cat %q (GetOsRelease, %s)", file, imgPath)
-		log.Printf("Executing %s with input: cat %s", cmd.String(), file)
-
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return strings.ToLower(string(out)), err
-		}
-		return strings.ToLower(string(out)), nil
-	}
-
+// pickOsRelease is getOsReleaseFromDisks's decision logic, pulled out as a
+// pure function so it is unit-testable without a real guestfish binary: pick
+// the first candidate (in osReleaseCandidateFiles order) whose section looks
+// like real content rather than a "file does not exist" error or no output
+// at all.
+func pickOsRelease(sections map[string]string) (string, error) {
 	var errs []string
-	for _, file := range releaseFiles {
-		out, err := runGuestfishCat(path, file)
-		if err == nil {
-			return out, nil
+	for i, file := range osReleaseCandidateFiles {
+		section := sections[osReleaseMarkers[i]]
+		if section != "" && !strings.Contains(strings.ToLower(section), "no such file or directory") {
+			return strings.ToLower(section), nil
 		}
-
-		errStr := strings.TrimSpace(out)
-		errs = append(errs, errStr)
-
-		// If it's not a "no such file" error, stop immediately
-		if !strings.Contains(strings.ToLower(errStr), "no such file or directory") {
-			break
+		if section == "" {
+			// Tolerant cat produced neither content nor error text for this
+			// candidate - treat as "not found", same as the other empty-
+			// section conventions elsewhere in this package (see
+			// splitByMarker).
+			section = file + ": no output"
 		}
+		errs = append(errs, section)
 	}
 
 	return "", fmt.Errorf("failed to get OS release from %v: %v",
-		strings.Join(releaseFiles, ", "), strings.Join(errs, " | "))
+		strings.Join(osReleaseCandidateFiles, ", "), strings.Join(errs, " | "))
+}
+
+func GetOsRelease(path string) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	return getOsReleaseFromDisks([]vm.VMDisk{{Path: path}})
 }
 func InjectMacToIps(disks []vm.VMDisk, diskPath string, guestNetworks []vjailbreakv1alpha1.GuestNetwork, gatewayIP map[string]string, ipPerMac map[string][]vm.IpEntry, osType string) error {
 	// Add wildcard to netplan
@@ -892,7 +922,12 @@ func IsLDMSystemVolume(disks []vm.VMDisk) (bool, string, error) {
 	return isLDMDevice(plan.Root), plan.Root, nil
 }
 
-// GetDeviceNumberFromPartition returns the device index for a given partition name
+// GetDeviceNumberFromPartition returns the device index for a given
+// partition name. Kept for callers that only need the answer for one
+// partition, at its original cost of up to four appliance boots.
+// GetBootableVolumeIndex, which needs the answer for every partition on the
+// guest, has its own batched implementation below instead of calling this
+// in a loop - see partitionDevNumSteps and partitionBootIndexSteps.
 func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, error) {
 	command := "part-to-dev"
 	device, err := RunCommandInGuestAllVolumes(disks, command, false, strings.TrimSpace(partition))
@@ -928,6 +963,71 @@ func GetDeviceNumberFromPartition(disks []vm.VMDisk, partition string) (int, err
 	return -1, errors.New("partition is not bootable")
 }
 
+// partitionDevNumMarkers returns the i-th partition's two markers for
+// partitionDevNumSteps: device, then partition number.
+func partitionDevNumMarkers(i int) (dev, num string) {
+	return fmt.Sprintf("---VJB-PART-%d-DEV---", i), fmt.Sprintf("---VJB-PART-%d-NUM---", i)
+}
+
+// partitionDevNumSteps builds one tolerant part-to-dev + part-to-partnum per
+// partition - boot 2 of GetBootableVolumeIndex's flat 3. Both only need the
+// partition string itself, so unlike part-get-bootable and device-index
+// (which need this boot's own results as their arguments, and so cannot run
+// in the same boot as it) every partition's pair can run together here.
+func partitionDevNumSteps(partitions []string) []guestfishStep {
+	steps := make([]guestfishStep, 0, len(partitions)*2)
+	for i, partition := range partitions {
+		partition = strings.TrimSpace(partition)
+		devMarker, numMarker := partitionDevNumMarkers(i)
+		steps = append(steps,
+			guestfishStep{Command: "part-to-dev", Args: []string{partition}, Marker: devMarker},
+			guestfishStep{Command: "part-to-partnum", Args: []string{partition}, Marker: numMarker},
+		)
+	}
+	return steps
+}
+
+// partitionBootIndexMarkers returns the i-th partition's two markers for
+// partitionBootIndexSteps: bootable flag, then device index.
+func partitionBootIndexMarkers(i int) (bootable, index string) {
+	return fmt.Sprintf("---VJB-PART-%d-BOOT---", i), fmt.Sprintf("---VJB-PART-%d-IDX---", i)
+}
+
+// partitionBootIndexSteps builds one tolerant part-get-bootable +
+// device-index per partition - boot 3 of GetBootableVolumeIndex's flat 3.
+// device-index is fetched for every partition's device up front, whether or
+// not that partition turns out to be bootable, so that picking an answer
+// never needs a fourth boot. devices and nums are indexed the same as the
+// partitions slice they were resolved from (see partitionDevNumSteps).
+func partitionBootIndexSteps(devices, nums []string) []guestfishStep {
+	steps := make([]guestfishStep, 0, len(devices)*2)
+	for i := range devices {
+		bootMarker, idxMarker := partitionBootIndexMarkers(i)
+		steps = append(steps,
+			guestfishStep{Command: "part-get-bootable", Args: []string{devices[i], nums[i]}, Marker: bootMarker},
+			guestfishStep{Command: "device-index", Args: []string{devices[i]}, Marker: idxMarker},
+		)
+	}
+	return steps
+}
+
+// GetBootableVolumeIndex finds the device index of the guest's bootable
+// partition, at a flat 3 appliance boots regardless of how many partitions
+// the guest has, instead of the up-to-1+4N boots calling
+// GetDeviceNumberFromPartition per partition would cost. part-get-bootable
+// and device-index need a partition's device and number as literal
+// arguments, which are themselves the answers to part-to-dev and
+// part-to-partnum - so those two pairs cannot share a boot with each other,
+// but everything within each pair can be gathered for every partition at
+// once instead of one partition at a time:
+//
+//	boot 1: list-partitions
+//	boot 2: part-to-dev + part-to-partnum, for every partition
+//	boot 3: part-get-bootable + device-index, for every partition
+//
+// Partitions are still checked in list-partitions order and the first
+// bootable one with a usable index wins, exactly as the original
+// one-partition-at-a-time version did.
 func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 	command := "list-partitions"
 	partitionsStr, err := RunCommandInGuestAllVolumes(disks, command, false)
@@ -935,13 +1035,68 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		return -1, fmt.Errorf("failed to run command (%s): %v: %s", command, err, strings.TrimSpace(partitionsStr))
 	}
 
-	partitions := strings.Split(strings.TrimSpace(partitionsStr), "\n")
-	for _, partition := range partitions {
-		deviceNum, err := GetDeviceNumberFromPartition(disks, partition)
-		if err == nil {
-			return deviceNum, nil
+	var partitions []string
+	for _, p := range strings.Split(strings.TrimSpace(partitionsStr), "\n") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			partitions = append(partitions, p)
 		}
-		// Continue to next partition if this one is not bootable or has an error
+	}
+	if len(partitions) == 0 {
+		return -1, errors.New("bootable volume not found")
+	}
+
+	devNumMarkers := make([]string, 0, len(partitions)*2)
+	for i := range partitions {
+		devMarker, numMarker := partitionDevNumMarkers(i)
+		devNumMarkers = append(devNumMarkers, devMarker, numMarker)
+	}
+	devNumOut, err := RunGuestfishScriptRaw(disks, false, partitionDevNumSteps(partitions)...)
+	if err != nil {
+		return -1, fmt.Errorf("failed to resolve partition devices: %w", err)
+	}
+	devNumSections := splitByMarker(devNumOut, devNumMarkers)
+
+	devices := make([]string, len(partitions))
+	nums := make([]string, len(partitions))
+	for i := range partitions {
+		devMarker, numMarker := partitionDevNumMarkers(i)
+		devices[i] = strings.TrimSpace(devNumSections[devMarker])
+		nums[i] = strings.TrimSpace(devNumSections[numMarker])
+	}
+
+	bootIdxMarkers := make([]string, 0, len(partitions)*2)
+	for i := range partitions {
+		bootMarker, idxMarker := partitionBootIndexMarkers(i)
+		bootIdxMarkers = append(bootIdxMarkers, bootMarker, idxMarker)
+	}
+	bootIdxOut, err := RunGuestfishScriptRaw(disks, false, partitionBootIndexSteps(devices, nums)...)
+	if err != nil {
+		return -1, fmt.Errorf("failed to check partition bootability: %w", err)
+	}
+
+	return pickBootableIndex(len(partitions), splitByMarker(bootIdxOut, bootIdxMarkers))
+}
+
+// pickBootableIndex is GetBootableVolumeIndex's decision logic, pulled out
+// as a pure function so it is unit-testable without a real guestfish
+// binary: walk the partitions in list-partitions order (partitionCount of
+// them) and return the first one that is both bootable and has a usable
+// device index.
+func pickBootableIndex(partitionCount int, bootIdxSections map[string]string) (int, error) {
+	for i := 0; i < partitionCount; i++ {
+		bootMarker, idxMarker := partitionBootIndexMarkers(i)
+		if strings.TrimSpace(bootIdxSections[bootMarker]) != "true" {
+			continue
+		}
+		index, err := strconv.Atoi(strings.TrimSpace(bootIdxSections[idxMarker]))
+		if err != nil {
+			// Bootable but no usable index for this partition's device -
+			// same as the original one-at-a-time version's device-index
+			// call failing: try the next partition instead.
+			continue
+		}
+		return index, nil
 	}
 	return -1, errors.New("bootable volume not found")
 }
@@ -997,23 +1152,70 @@ func GetNetworkInterfaceNames(path string) ([]string, error) {
 
 }
 
+// interfaceFileMarker is the split marker for the i-th matched ifcfg-* file
+// in a GetInterfaceNames batch - see interfaceCatSteps.
+func interfaceFileMarker(i int) string {
+	return fmt.Sprintf("---VJB-IFCFG-%d---", i)
+}
+
+// interfaceCatSteps builds one tolerant `cat` per matched ifcfg-* file, so
+// GetInterfaceNames can read every file's content in the one appliance boot
+// that follows the `ls` that found them, instead of one appliance boot per
+// file.
+func interfaceCatSteps(files []string) []guestfishStep {
+	steps := make([]guestfishStep, len(files))
+	for i, file := range files {
+		steps[i] = guestfishStep{
+			Command: "cat",
+			Args:    []string{"/etc/sysconfig/network-scripts/" + file},
+			Marker:  interfaceFileMarker(i),
+		}
+	}
+	return steps
+}
+
 func GetInterfaceNames(path string) ([]string, error) {
 	cmd := "ls /etc/sysconfig/network-scripts | grep '^ifcfg-'"
 	lsOut, err := RunCommandInGuest(path, cmd, false)
 	if err != nil {
 		return nil, err
 	}
-	interfaces := []string{}
-	// Parse the output
-	// Split by newline and trim spaces
-	// Ignore 'ifcfg-lo' as it is the loopback interface
-	files := strings.Split(strings.TrimSpace(lsOut), "\n")
-	for _, file := range files {
-		if file == "ifcfg-lo" {
+
+	// Parse the output: split by newline, trim spaces, ignore 'ifcfg-lo'
+	// (the loopback interface) and any blank line.
+	var files []string
+	for _, file := range strings.Split(strings.TrimSpace(lsOut), "\n") {
+		file = strings.TrimSpace(file)
+		if file == "" || file == "ifcfg-lo" {
 			continue
 		}
-		content, err := RunCommandInGuest(path, fmt.Sprintf("cat /etc/sysconfig/network-scripts/%s", file), false)
-		if err != nil {
+		files = append(files, file)
+	}
+
+	interfaces := []string{}
+	if len(files) == 0 {
+		return interfaces, nil
+	}
+
+	// Every matched file's content in one appliance boot instead of one
+	// boot per file (see interfaceCatSteps) - boot 2 of 2, after the `ls`
+	// above.
+	out, err := RunGuestfishScriptRaw([]vm.VMDisk{{Path: path}}, false, interfaceCatSteps(files)...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read interface config files: %w", err)
+	}
+
+	markers := make([]string, len(files))
+	for i := range files {
+		markers[i] = interfaceFileMarker(i)
+	}
+	sections := splitByMarker(out, markers)
+
+	for i, file := range files {
+		content := sections[interfaceFileMarker(i)]
+		if content == "" {
+			// Tolerant cat produced nothing for this file - same as the
+			// per-file boot this replaces returning an error: skip it.
 			continue
 		}
 		// Extract DEVICE or infer from filename
@@ -1042,34 +1244,11 @@ func extractKeyValue(content, key string) string {
 	return ""
 }
 
+// GetOsReleaseAllVolumes tries every candidate release file across all of a
+// guest's disks at once - see getOsReleaseFromDisks, which this and
+// GetOsRelease share.
 func GetOsReleaseAllVolumes(disks []vm.VMDisk) (string, error) {
-	// Try multiple OS release files in order of preference
-	releaseFiles := []string{
-		"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
-		"/etc/redhat-release", // RHEL/CentOS legacy
-		"/etc/SuSE-release",   // SUSE 11 and older
-	}
-
-	var errors []string
-	for _, file := range releaseFiles {
-		output, err := RunCommandInGuestAllVolumes(disks, "cat", false, file)
-		if err == nil {
-			log.Printf("Successfully read OS release from %s", file)
-			return output, nil
-		}
-
-		// Log the failure and continue to next file
-		log.Printf("Failed to get %s: %v", file, err)
-		errors = append(errors, fmt.Sprintf("%s: %v", file, err))
-
-		// If it's not a "file not found" error, stop trying
-		if !strings.Contains(err.Error(), "No such file or directory") {
-			break
-		}
-	}
-
-	// All attempts failed
-	return "", fmt.Errorf("failed to get OS release from any known location: %s", strings.Join(errors, "; "))
+	return getOsReleaseFromDisks(disks)
 }
 
 // GetWindowsVersion detects the Windows version using guestfish inspect commands.
@@ -1201,46 +1380,92 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 // scripts/mkinitrd-lvm-wrapper.sh at build time).
 const mkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
 
+// Section markers for fixLegacyMkinitrdCheckSteps's tolerant batch.
+const (
+	mkinitrdCheckMarker     = "---VJB-MKINITRD---"
+	dracutUsrBinCheckMarker = "---VJB-DRACUT-USRBIN---"
+	dracutSbinCheckMarker   = "---VJB-DRACUT-SBIN---"
+	mkinitrdOrigCheckMarker = "---VJB-MKINITRD-ORIG---"
+)
+
+var fixLegacyMkinitrdCheckMarkers = []string{
+	mkinitrdCheckMarker, dracutUsrBinCheckMarker, dracutSbinCheckMarker, mkinitrdOrigCheckMarker,
+}
+
+// fixLegacyMkinitrdCheckSteps builds FixLegacyMkinitrd's three existence
+// checks (four stat calls, since the dracut check tries two paths) as one
+// tolerant batch instead of up to three separate appliance boots.
+func fixLegacyMkinitrdCheckSteps() []guestfishStep {
+	return []guestfishStep{
+		{Command: "stat", Args: []string{"/sbin/mkinitrd"}, Marker: mkinitrdCheckMarker},
+		{Command: "stat", Args: []string{"/usr/bin/dracut"}, Marker: dracutUsrBinCheckMarker},
+		{Command: "stat", Args: []string{"/sbin/dracut"}, Marker: dracutSbinCheckMarker},
+		{Command: "stat", Args: []string{"/sbin/mkinitrd.orig"}, Marker: mkinitrdOrigCheckMarker},
+	}
+}
+
+// fixLegacyMkinitrdWriteSteps builds the backup+upload+chmod chain that
+// installs the wrapper, as one fail-fast script instead of three separate
+// appliance boots: a failed backup aborts before upload, a failed upload
+// aborts before chmod, exactly as the three separate calls this replaces
+// already behaved.
+func fixLegacyMkinitrdWriteSteps() []guestfishStep {
+	return []guestfishStep{
+		{Command: "cp", Args: []string{"/sbin/mkinitrd", "/sbin/mkinitrd.orig"}},
+		{Command: "upload", Args: []string{mkinitrdLVMWrapperPath, "/sbin/mkinitrd"}},
+		{Command: "chmod", Args: []string{"0755", "/sbin/mkinitrd"}},
+	}
+}
+
 // This must be called BEFORE ConvertDisk / virt-v2v-in-place so that the
 // patched binary is in place when virt-v2v chroots into the guest.
 func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
 
+	// Boot 1: all four existence checks in one tolerant batch (see
+	// fixLegacyMkinitrdCheckSteps) instead of up to three separate
+	// appliance boots. A tolerant step that fails prints nothing to stdout
+	// rather than returning a Go error (see splitByMarker), so "found" vs
+	// "not found" is read from whether that step's section came back
+	// empty, not from an error.
+	out, err := RunGuestfishScriptRaw(disks, false, fixLegacyMkinitrdCheckSteps()...)
+	if err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to check guest state: %w", err)
+	}
+	sections := splitByMarker(out, fixLegacyMkinitrdCheckMarkers)
+
 	// 1. Does /sbin/mkinitrd exist on the guest?
-	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd"); err != nil {
+	if sections[mkinitrdCheckMarker] == "" {
 		log.Printf("FixLegacyMkinitrd: /sbin/mkinitrd not found on guest, skipping")
 		return nil
 	}
 
 	// 2. Is dracut absent? (dracut == modern SUSE, no patch needed)
-	for _, draculPath := range []string{"/usr/bin/dracut", "/sbin/dracut"} {
-		if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, draculPath); err == nil {
-			log.Printf("FixLegacyMkinitrd: dracut found at %s, modern system – skipping", draculPath)
-			return nil
-		}
+	if sections[dracutUsrBinCheckMarker] != "" {
+		log.Printf("FixLegacyMkinitrd: dracut found at /usr/bin/dracut, modern system – skipping")
+		return nil
+	}
+	if sections[dracutSbinCheckMarker] != "" {
+		log.Printf("FixLegacyMkinitrd: dracut found at /sbin/dracut, modern system – skipping")
+		return nil
 	}
 
 	// 3. Already patched by a previous run?
-	if _, err := RunCommandInGuestAllVolumes(disks, "stat", false, "/sbin/mkinitrd.orig"); err == nil {
+	if sections[mkinitrdOrigCheckMarker] != "" {
 		log.Printf("FixLegacyMkinitrd: wrapper already installed (/sbin/mkinitrd.orig present), skipping")
 		return nil
 	}
 
 	log.Printf("FixLegacyMkinitrd: old mkinitrd detected (no dracut), installing LVM path translation wrapper")
 
-	// 4. Back up original mkinitrd inside the guest.
-	if out, err := RunCommandInGuestAllVolumes(disks, "cp", true, "/sbin/mkinitrd", "/sbin/mkinitrd.orig"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to backup /sbin/mkinitrd: %v: %s", err, strings.TrimSpace(out))
-	}
-
-	// 5. Upload the wrapper as the new /sbin/mkinitrd.
-	if out, err := RunCommandInGuestAllVolumes(disks, "upload", true, mkinitrdLVMWrapperPath, "/sbin/mkinitrd"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to upload wrapper: %v: %s", err, strings.TrimSpace(out))
-	}
-
-	// 6. Ensure the wrapper is executable.
-	if out, err := RunCommandInGuestAllVolumes(disks, "chmod", true, "0755", "/sbin/mkinitrd"); err != nil {
-		return fmt.Errorf("FixLegacyMkinitrd: failed to chmod wrapper: %v: %s", err, strings.TrimSpace(out))
+	// Boot 2: backup, upload, chmod - one fail-fast script instead of three
+	// separate appliance boots. A single script failure no longer says
+	// which of the three steps it was (the guestfish error text it wraps
+	// usually still names the failing command), the same trade-off already
+	// made for RunGetBootablePartitionScript and RunMountPersistenceScript
+	// in Phase 1.
+	if _, err := RunGuestfishScript(disks, true, fixLegacyMkinitrdWriteSteps()...); err != nil {
+		return fmt.Errorf("FixLegacyMkinitrd: failed to install wrapper: %w", err)
 	}
 
 	log.Printf("FixLegacyMkinitrd: wrapper installed successfully at /sbin/mkinitrd (original at /sbin/mkinitrd.orig)")
