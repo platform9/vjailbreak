@@ -11,10 +11,9 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import { useTheme } from '@mui/material/styles'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
-import { Phase } from 'src/api/migrations/model'
 import { FIVE_SECONDS, THIRTY_SECONDS } from 'src/constants'
 import {
-  ACTIVE_MIGRATION_PHASES,
+  canUpgrade,
   SUBMENU_CONNECTOR_BLUE,
   SUBMENU_CONNECTOR_GREY,
   SUBMENU_ROW_HEIGHT_PX,
@@ -88,11 +87,9 @@ export default function Sidenav({
     refetchOnMount: true
   })
 
-  const hasActiveMigrations = useMemo(() => {
-    return Array.isArray(migrations)
-      ? migrations.some((m) => ACTIVE_MIGRATION_PHASES.has(m.status?.phase as Phase))
-      : false
-  }, [migrations])
+  // Upgrading is only offered once every migration has finished. Anything else - running,
+  // awaiting cutover, or not yet reconciled - keeps the button disabled.
+  const upgradeBlocked = useMemo(() => !canUpgrade(migrations), [migrations])
 
   useEffect(() => {
     if (controlledCollapsed === undefined) {
@@ -367,7 +364,7 @@ export default function Sidenav({
             <Tooltip
               title={
                 <Typography variant="body2">
-                  {hasActiveMigrations
+                  {upgradeBlocked
                     ? "Migrations are in progress, can't upgrade"
                     : 'Upgrade Available'}
                 </Typography>
@@ -382,7 +379,7 @@ export default function Sidenav({
                   variant="contained"
                   sx={{ mt: 2, minWidth: 0, width: 40, height: 40, borderRadius: '50%' }}
                   onClick={() => setIsUpgradeModalOpen(true)}
-                  disabled={hasActiveMigrations}
+                  disabled={upgradeBlocked}
                 >
                   <UpgradeIcon />
                 </Button>
@@ -391,7 +388,7 @@ export default function Sidenav({
           ) : (
             <Tooltip
               title={
-                hasActiveMigrations ? (
+                upgradeBlocked ? (
                   <Typography variant="body2">Migrations are in progress, can't upgrade</Typography>
                 ) : (
                   ''
@@ -399,7 +396,7 @@ export default function Sidenav({
               }
               placement="top"
               arrow
-              disableHoverListener={!hasActiveMigrations}
+              disableHoverListener={!upgradeBlocked}
               slotProps={{ tooltip: { sx: { ...theme.typography.body2 } } }}
             >
               <span>
@@ -410,7 +407,7 @@ export default function Sidenav({
                   sx={{ mt: 1, fontWeight: 600 }}
                   startIcon={<UpgradeIcon />}
                   onClick={() => setIsUpgradeModalOpen(true)}
-                  disabled={hasActiveMigrations}
+                  disabled={upgradeBlocked}
                 >
                   Upgrade Available
                 </Button>

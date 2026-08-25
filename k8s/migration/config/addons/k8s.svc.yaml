@@ -18,8 +18,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
@@ -37,6 +35,11 @@ spec:
         securityContext:
           runAsUser: 0
           allowPrivilegeEscalation: false
+          # Replaces the container.apparmor.security.beta.kubernetes.io/vpwned annotation,
+          # which the API server has deprecated since Kubernetes v1.30 and warns about on
+          # every apply. vpwned shells out to virt-v2v and nbdkit, so it stays unconfined.
+          appArmorProfile:
+            type: Unconfined
           capabilities:
             add:
             - DAC_OVERRIDE

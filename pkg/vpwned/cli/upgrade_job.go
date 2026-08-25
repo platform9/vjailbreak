@@ -6,10 +6,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/go-logr/logr/funcr"
 	"github.com/platform9/vjailbreak/pkg/vpwned/upgrade"
 	"github.com/spf13/cobra"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 var (
@@ -37,27 +35,8 @@ func init() {
 	upgradeJobCmd.Flags().StringVar(&prevVersion, "previous-version", "", "Previous version for rollback (required for rollback mode)")
 }
 
-// setupControllerRuntimeLogger routes controller-runtime's logger into the standard
-// logger this job already writes to.
-//
-// controller-runtime only logs through a logger the process installs. Nothing installed
-// one, so the first time it had something to say it printed a one-off
-// "log.SetLogger(...) was never called; logs will not be displayed" notice with a full
-// stack trace, and dropped the actual message. That message is a Warning header
-// (HTTP 299) returned by the API server on the server-side apply requests the upgrade
-// makes, which is worth reading rather than discarding.
-func setupControllerRuntimeLogger() {
-	logf.SetLogger(funcr.New(func(prefix, args string) {
-		if prefix != "" {
-			log.Printf("%s: %s", prefix, args)
-			return
-		}
-		log.Print(args)
-	}, funcr.Options{}))
-}
-
 func runUpgradeJob() {
-	setupControllerRuntimeLogger()
+	SetupControllerRuntimeLogger()
 
 	if targetVersion == "" {
 		targetVersion = os.Getenv("UPGRADE_TARGET_VERSION")
