@@ -48,12 +48,8 @@ in the vjailbreak node.
 
 Instead of SSHing into the vjailbreak node to collect logs manually, you can download a full debug bundle directly from the Migration Details page.
 
-| Location                   | What the button does                                                                                                                      | Screenshot |
-|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------|------------|
-| Migration Details → Debug Logs tab | Downloads a `.tar.gz` bundle containing the pod's `stdout`/`stderr` logs, the related Kubernetes resource YAMLs, and the split debug log files described above from `/var/log/pf9`. | _screenshot coming soon_ |
-
 :::note
 Screenshot to be added.
 :::
 
-The bundle is named `<vm-name>-debug-bundle-<timestamp>.tar.gz` and is downloaded straight from the browser — no extra `kubectl` or SSH access is required. If a collection step fails (e.g. the debug logs directory isn't available on that node), the bundle still downloads and includes a `collection-warnings.txt` file describing what was skipped.
+There is a download button as shown in the image above. This downloads all the logs, debug logs, and everything related to the migration as a tar ball — no extra `kubectl` or SSH access is required.
