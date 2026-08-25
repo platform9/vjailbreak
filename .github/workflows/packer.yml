@@ -55,6 +55,9 @@ env:
 jobs:
   determine-release:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-determine-release-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
     outputs:
       is_release: ${{ env.release_found }}
       is_nightly: ${{ github.event.inputs.is_nightly }}
@@ -156,6 +159,9 @@ jobs:
   build-ui:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-ui-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -187,6 +193,9 @@ jobs:
   build-v2v-helper:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-v2v-helper-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -221,6 +230,9 @@ jobs:
   build-controller:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-controller-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -232,6 +244,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'k8s/migration/go.mod'
+          cache-dependency-path: 'k8s/migration/go.sum'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -258,6 +271,9 @@ jobs:
   build-vpwned:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-vpwned-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -289,6 +305,9 @@ jobs:
   build-vjailbreak-ai:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-vjailbreak-ai-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -320,6 +339,9 @@ jobs:
   push-images:
     runs-on: ubuntu-latest
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai]
+    concurrency:
+      group: ${{ github.workflow }}-push-images-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: false
     if: |
       needs.determine-release.result == 'success' &&
       (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
@@ -576,6 +598,7 @@ jobs:
         with:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
+          retention-days: 1
 
       - name: Set AWS credentials based on build type
         id: set-creds
@@ -645,6 +668,7 @@ jobs:
         with:
           name: s3-urls
           path: s3-urls.txt
+          retention-days: 1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -657,3 +681,4 @@ jobs:
             image_builder/deploy/version-config.yaml
             image_builder/deploy/version-checker.yaml
             image_builder/deploy/vjailbreak-settings.yaml
+          retention-days: 7
