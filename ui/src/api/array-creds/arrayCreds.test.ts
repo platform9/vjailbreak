@@ -50,7 +50,8 @@ describe('vantaraConfig round-trip', () => {
       { poolId: '', restPort: '' }
     )
 
-    const body = mockedAxios.post.mock.calls[0][0].data
+    const body = (mockedAxios.post.mock.calls[0][0] as { data: { spec: Record<string, unknown> } })
+      .data
     expect(body.spec.vantaraConfig).toBeUndefined()
   })
 
@@ -64,7 +65,8 @@ describe('vantaraConfig round-trip', () => {
       { poolId: '5', restPort: '8443' }
     )
 
-    const body = mockedAxios.post.mock.calls[0][0].data
+    const body = (mockedAxios.post.mock.calls[0][0] as { data: { spec: Record<string, unknown> } })
+      .data
     expect(body.spec.vantaraConfig).toBeUndefined()
   })
 
