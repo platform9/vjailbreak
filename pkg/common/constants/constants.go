@@ -893,6 +893,14 @@ const (
 	PartitionBootMarkerTemplate = "---VJB-PART-%d-BOOT---"
 	PartitionIdxMarkerTemplate  = "---VJB-PART-%d-IDX---"
 	InterfaceFileMarkerTemplate = "---VJB-IFCFG-%d---"
+
+	// GuestfishOutput* select RunGuestfishScript's output handling: lowercased
+	// for a fail-fast chain, raw/combined-raw for a tolerant batch read back
+	// with splitByMarker (combined-raw also folds a failed step's error text
+	// into the output - see GetOsReleaseAllVolumes).
+	GuestfishOutputLowercased  = "lowercased"
+	GuestfishOutputRaw         = "raw"
+	GuestfishOutputCombinedRaw = "combined_raw"
 )
 
 var (

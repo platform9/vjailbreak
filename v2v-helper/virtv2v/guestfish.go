@@ -46,6 +46,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -593,9 +594,9 @@ func prepareGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishSte
 	return cmd, nil
 }
 
-// runGuestfishScript backs RunGuestfishScript/Raw/CombinedRaw: prepare,
-// boot, run, return raw output - one boot regardless of step count.
-// combined folds each step's own error text into the output (see GetOsReleaseAllVolumes).
+// runGuestfishScript backs RunGuestfishScript's switch: prepare, boot, run,
+// return raw output - one boot regardless of step count. combined folds
+// each step's own error text into the output (see GetOsReleaseAllVolumes).
 func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestfishStep) (string, error) {
 	cmd, err := prepareGuestfishScript(disks, write, steps...)
 	if err != nil {
@@ -628,32 +629,25 @@ func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestf
 	return stdoutBuf.String(), nil
 }
 
-// RunGuestfishScript runs a fail-fast multi-step script (no Marker on any
-// step - see guestfishStep) in one appliance boot and returns lowercased
-// stdout - the same contract RunCommandInGuestAllVolumes has for one command.
-func RunGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
+// RunGuestfishScript is the single entry point for a multi-step guestfish
+// script, one appliance boot regardless of step count. outputMode (see
+// constants.GuestfishOutput* for what each one means) picks how the result is handled.
+func RunGuestfishScript(disks []vm.VMDisk, write bool, outputMode string, steps ...guestfishStep) (string, error) {
 	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	out, err := runGuestfishScript(disks, write, false, steps...)
-	if err != nil {
-		return "", err
+	switch outputMode {
+	case constants.GuestfishOutputLowercased:
+		out, err := runGuestfishScript(disks, write, false, steps...)
+		if err != nil {
+			return "", err
+		}
+		return strings.ToLower(out), nil
+	case constants.GuestfishOutputRaw:
+		return runGuestfishScript(disks, write, false, steps...)
+	case constants.GuestfishOutputCombinedRaw:
+		return runGuestfishScript(disks, write, true, steps...)
+	default:
+		return "", fmt.Errorf("RunGuestfishScript: unknown output mode %q", outputMode)
 	}
-	return strings.ToLower(out), nil
-}
-
-// RunGuestfishScriptRaw is RunGuestfishScript without the lowercasing, for
-// tolerant-batch callers using splitByMarker - lowercasing would corrupt
-// case-sensitive guest content (e.g. a mixed-case device path).
-func RunGuestfishScriptRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	return runGuestfishScript(disks, write, false, steps...)
-}
-
-// RunGuestfishScriptCombinedRaw is RunGuestfishScriptRaw, but folds each
-// step's own error text into the output alongside stdout - use only when a
-// caller needs to read why a tolerant step produced no output.
-func RunGuestfishScriptCombinedRaw(disks []vm.VMDisk, write bool, steps ...guestfishStep) (string, error) {
-	os.Setenv("LIBGUESTFS_BACKEND", "direct")
-	return runGuestfishScript(disks, write, true, steps...)
 }
 
 // splitByMarker splits combined guestfish script output into per-step text

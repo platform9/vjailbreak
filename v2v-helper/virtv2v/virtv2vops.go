@@ -546,7 +546,7 @@ func osReleaseCatSteps() []guestfishStep {
 // GetOsReleaseAllVolumes: read all candidate files in one tolerant batch
 // (see guestfishStep) and return the first that reads back real content.
 func getOsReleaseFromDisks(disks []vm.VMDisk) (string, error) {
-	out, err := RunGuestfishScriptCombinedRaw(disks, false, osReleaseCatSteps()...)
+	out, err := RunGuestfishScript(disks, false, constants.GuestfishOutputCombinedRaw, osReleaseCatSteps()...)
 	if err != nil {
 		return "", fmt.Errorf("failed to get OS release: %w", err)
 	}
@@ -779,7 +779,7 @@ func AddWildcardNetplan(disks []vm.VMDisk, diskPath string, guestNetworks []vjai
 	// mv, mkdir, upload in one appliance boot instead of three; no step
 	// carries a Marker, so a failure aborts the rest, same as the three
 	// fail-fast calls this replaces.
-	if _, err := RunGuestfishScript(disks, true, wildcardNetplanSteps()...); err != nil {
+	if _, err := RunGuestfishScript(disks, true, constants.GuestfishOutputLowercased, wildcardNetplanSteps()...); err != nil {
 		return fmt.Errorf("failed to add wildcard netplan: %w", err)
 	}
 	return nil
@@ -994,7 +994,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		devMarker, numMarker := partitionDevNumMarkers(i)
 		devNumMarkers = append(devNumMarkers, devMarker, numMarker)
 	}
-	devNumOut, err := RunGuestfishScriptRaw(disks, false, partitionDevNumSteps(partitions)...)
+	devNumOut, err := RunGuestfishScript(disks, false, constants.GuestfishOutputRaw, partitionDevNumSteps(partitions)...)
 	if err != nil {
 		return -1, fmt.Errorf("failed to resolve partition devices: %w", err)
 	}
@@ -1013,7 +1013,7 @@ func GetBootableVolumeIndex(disks []vm.VMDisk) (int, error) {
 		bootMarker, idxMarker := partitionBootIndexMarkers(i)
 		bootIdxMarkers = append(bootIdxMarkers, bootMarker, idxMarker)
 	}
-	bootIdxOut, err := RunGuestfishScriptRaw(disks, false, partitionBootIndexSteps(devices, nums)...)
+	bootIdxOut, err := RunGuestfishScript(disks, false, constants.GuestfishOutputRaw, partitionBootIndexSteps(devices, nums)...)
 	if err != nil {
 		return -1, fmt.Errorf("failed to check partition bootability: %w", err)
 	}
@@ -1136,7 +1136,7 @@ func GetInterfaceNames(path string) ([]string, error) {
 	}
 
 	// Every matched file in one boot instead of one per file - boot 2 of 2.
-	out, err := RunGuestfishScriptRaw([]vm.VMDisk{{Path: path}}, false, interfaceCatSteps(files)...)
+	out, err := RunGuestfishScript([]vm.VMDisk{{Path: path}}, false, constants.GuestfishOutputRaw, interfaceCatSteps(files)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read interface config files: %w", err)
 	}
@@ -1291,7 +1291,7 @@ func RunMountPersistenceScript(disks []vm.VMDisk, diskPath string, osRelease str
 	// Upload, chmod, and run in one boot instead of three. The only caller
 	// (handleLinuxOSDetection) warns-and-continues on any failure either
 	// way, so collapsing to one "warn and continue" outcome changes nothing.
-	out, err := RunGuestfishScriptRaw(disks, true, mountPersistenceSteps(scriptPath, scriptArgs)...)
+	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, mountPersistenceSteps(scriptPath, scriptArgs)...)
 	if err != nil {
 		log.Printf("Warning: generate-mount-persistence.sh did not complete: %v", err)
 		// Don't return error, just log warning as this is not critical
@@ -1335,7 +1335,7 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	// Boot 1: all four existence checks in one tolerant batch instead of
 	// up to three boots. A failed step prints nothing to stdout (not a Go
 	// error - see splitByMarker), so "found" means a non-empty section.
-	out, err := RunGuestfishScriptRaw(disks, false, fixLegacyMkinitrdCheckSteps()...)
+	out, err := RunGuestfishScript(disks, false, constants.GuestfishOutputRaw, fixLegacyMkinitrdCheckSteps()...)
 	if err != nil {
 		return fmt.Errorf("FixLegacyMkinitrd: failed to check guest state: %w", err)
 	}
@@ -1368,7 +1368,7 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	// Boot 2: backup, upload, chmod - one fail-fast script instead of
 	// three. A failure no longer says which step it was - same trade-off
 	// as RunGetBootablePartitionScript/RunMountPersistenceScript.
-	if _, err := RunGuestfishScript(disks, true, fixLegacyMkinitrdWriteSteps()...); err != nil {
+	if _, err := RunGuestfishScript(disks, true, constants.GuestfishOutputLowercased, fixLegacyMkinitrdWriteSteps()...); err != nil {
 		return fmt.Errorf("FixLegacyMkinitrd: failed to install wrapper: %w", err)
 	}
 
@@ -1399,7 +1399,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	// Upload, chmod, and run in one boot instead of three: no step carries
 	// a Marker, so a failure aborts the rest. The script's debug trace goes
 	// to stderr, only the real answer to stdout, used as-is (uncased).
-	out, err := RunGuestfishScriptRaw(disks, true, getBootablePartitionSteps(scriptPath)...)
+	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
