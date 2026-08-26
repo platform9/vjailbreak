@@ -1376,14 +1376,17 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	return nil
 }
 
-// getBootablePartitionSteps builds the upload+chmod+sh sequence
-// RunGetBootablePartitionScript runs in one appliance boot instead of
-// three.
-func getBootablePartitionSteps(scriptPath string) []guestfishStep {
+// getBootablePartitionSteps passes realDisks to the script as args, so its
+// heuristics never see the appliance's own disk; nil/empty falls back to no args.
+func getBootablePartitionSteps(scriptPath string, realDisks []string) []guestfishStep {
+	shCommand := "/tmp/get-bootable-partition.sh"
+	if len(realDisks) > 0 {
+		shCommand = shCommand + " " + strings.Join(realDisks, " ")
+	}
 	return []guestfishStep{
 		{Command: "upload", Args: []string{scriptPath, "/tmp/get-bootable-partition.sh"}},
 		{Command: "chmod", Args: []string{"0755", "/tmp/get-bootable-partition.sh"}},
-		{Command: "sh", Args: []string{"/tmp/get-bootable-partition.sh"}},
+		{Command: "sh", Args: []string{shCommand}},
 	}
 }
 
@@ -1396,26 +1399,18 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
-	// DIAGNOSTIC ONLY - does not change the script's behavior. list-devices
-	// asks guestfish for the real attached-disk list, in -a order (the same
-	// API GetDeviceNumberFromPartition/device-index rely on), which excludes
-	// the libguestfs appliance's own backing disk. A production trace showed
-	// the script's own raw `ls /dev/[sv]d[a-z]` scan picking up that
-	// appliance disk too - a migration with exactly 2 attached VM disks saw
-	// "disks found: /dev/sda /dev/sdb /dev/sdc", where /dev/sdc turned out to
-	// be the appliance's own root filesystem. That's a plausible mechanism
-	// for VJAILB-225's intermittent wrong-disk selection. Log list-devices'
-	// answer next to the script's own raw scan (in the trace below) on every
-	// run so the next occurrence gives us both lists side by side, instead
-	// of changing get-bootable-partition.sh's actual disk-selection logic
-	// (which would make the phantom-disk condition unreproducible).
-	if realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false); listErr != nil {
-		log.Printf("WARNING: diagnostic list-devices call failed (non-fatal): %v: %s", listErr, strings.TrimSpace(realDisksStr))
-	} else {
-		realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
-		if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh diagnostic: real attached disks per list-devices (appliance disk excluded, -a order): %v", realDisks)); logErr != nil {
-			log.Printf("WARNING: failed to persist list-devices diagnostic to migration log: %v", logErr)
-		}
+	// list-devices excludes the appliance's own disk (unlike the script's raw
+	// scan); pass it to the script so it can never pick that disk as bootable.
+	realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false)
+	if listErr != nil {
+		return "", fmt.Errorf("failed to list real guest devices via list-devices: %v: %s", listErr, strings.TrimSpace(realDisksStr))
+	}
+	realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
+	if len(realDisks) == 0 {
+		return "", errors.New("list-devices returned no attached disks")
+	}
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh: real attached disks per list-devices (appliance disk excluded, -a order): %v", realDisks)); logErr != nil {
+		log.Printf("WARNING: failed to persist list-devices to migration log: %v", logErr)
 	}
 
 	// Upload, chmod, and run in one boot instead of three: no step carries
@@ -1432,7 +1427,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	// plain, unredirected stdout, which libguestfs does reliably relay (and
 	// which GuestfishOutputRaw captures in full below). Pull the tagged line
 	// out as the actual result and treat everything else as trace.
-	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath)...)
+	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath, realDisks)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
@@ -1470,7 +1465,22 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
 	}
 
+	// Defense in depth: refuse anything not in realDisks, in case an older
+	// deployed script or future edit reintroduces its own disk discovery.
+	if !stringInSlice(resultLine, realDisks) {
+		return "", fmt.Errorf("get-bootable-partition.sh returned %q, which is not one of the real attached disks %v; refusing to use it", resultLine, realDisks)
+	}
+
 	return resultLine, nil
+}
+
+func stringInSlice(s string, list []string) bool {
+	for _, item := range list {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script

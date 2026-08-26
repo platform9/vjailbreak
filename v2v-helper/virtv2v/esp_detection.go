@@ -48,6 +48,18 @@ func DetectESPDiskIndex(disks []vm.VMDisk) (int, error) {
 		}
 	}
 
+	// list-devices excludes the appliance's own disk (unlike the /proc/mounts
+	// scan above); reject baseDisk here unless it's actually one of the real disks.
+	realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false)
+	if listErr != nil {
+		return -1, fmt.Errorf("failed to list real guest devices via list-devices: %w", listErr)
+	}
+	realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
+	if !stringInSlice(baseDisk, realDisks) {
+		log.Printf("ESP mount device %s (base %s) is not one of the real attached disks %v; ignoring (likely the libguestfs appliance's own disk)", espDevice, baseDisk, realDisks)
+		return -1, nil
+	}
+
 	// Map device back to disk index
 	deviceIndexStr, err := RunCommandInGuestAllVolumes(disks, "device-index", false, baseDisk)
 	if err != nil {
@@ -62,6 +74,10 @@ func DetectESPDiskIndex(disks []vm.VMDisk) (int, error) {
 	_, err = fmt.Sscanf(deviceIndex, "%d", &diskIndex)
 	if err != nil {
 		return -1, fmt.Errorf("failed to parse device index '%s': %v", deviceIndex, err)
+	}
+
+	if diskIndex < 0 || diskIndex >= len(disks) {
+		return -1, fmt.Errorf("resolved ESP disk index %d is out of range for %d disk(s); not treating any disk as the ESP disk", diskIndex, len(disks))
 	}
 
 	log.Printf("ESP detected on disk %d (%s) at %s", diskIndex, disks[diskIndex].Name, espDevice)
