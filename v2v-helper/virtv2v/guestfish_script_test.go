@@ -143,3 +143,42 @@ func TestSplitByMarker(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// describeSteps
+// ---------------------------------------------------------------------------
+
+func TestDescribeSteps(t *testing.T) {
+	tests := []struct {
+		name  string
+		steps []guestfishStep
+		want  string
+	}{
+		{
+			name:  "no steps",
+			steps: nil,
+			want:  "",
+		},
+		{
+			name: "single step",
+			steps: []guestfishStep{
+				{Command: "upload", Args: []string{"/local/path", "/guest/path"}},
+			},
+			want: `upload "/local/path" "/guest/path"`,
+		},
+		{
+			name: "a mix of tolerant and fail-fast steps, joined with '; ' - Marker never appears in the rendered line",
+			steps: []guestfishStep{
+				{Command: "stat", Args: []string{"/sbin/mkinitrd"}, Marker: "M1"},
+				{Command: "upload", Args: []string{"/local/wrapper.sh", "/sbin/mkinitrd"}},
+			},
+			want: `stat "/sbin/mkinitrd"; upload "/local/wrapper.sh" "/sbin/mkinitrd"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, describeSteps(tt.steps))
+		})
+	}
+}
