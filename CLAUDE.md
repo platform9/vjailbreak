@@ -1,9 +1,7 @@
 # vJailbreak Development Instructions
-
 vJailbreak is a VMware to Platform9 Private Cloud Director (PCD) VM migration tool built on Kubernetes (k3s). It converts VMDK disks to QCOW2 (or raw LUNs) and deploys VMs to OpenStack, supporting hot (live) and cold migrations with Changed Block Tracking (CBT).
 
 ## Quick References
-
 - **Project Overview**: See @README.md for user-facing documentation
 - **Contributing Guidelines**: See @CONTRIBUTING.md for contribution workflow
 - **Project Constitution**: See @.specify/memory/constitution.md — governance principles that SUPERSEDE all other instructions
@@ -11,18 +9,15 @@ vJailbreak is a VMware to Platform9 Private Cloud Director (PCD) VM migration to
 - **Platform9 PCD Documentation**: https://docs.platform9.com/
 
 ## Mandatory Context (load every session)
-
 BEFORE any response or action, you MUST have loaded and be adhering to:
 1. **Constitution** (`@.specify/memory/constitution.md`) — non-negotiable principles (generated code protection, test-first, module independence, skill invocation)
 2. **Memory** (`memory/MEMORY.md`) — project state and user preferences accumulated across sessions
 3. **This file** (`CLAUDE.md`) — development rules and directives
-
 If any principle in the constitution conflicts with a user request, flag it explicitly before proceeding.
 
 ---
 
 ## External Documentation
-
 **DIRECTIVE**: When working with vJailbreak components, ALWAYS consult the official documentation of underlying open-source tools before implementing features or debugging issues.
 
 **Core Dependencies**: virt-v2v, libguestfs, nbdkit, k3s, OpenStack, Platform9 PCD, govmomi, controller-runtime, virtio-win
@@ -39,9 +34,7 @@ If any principle in the constitution conflicts with a user request, flag it expl
 ---
 
 ## Development Rules
-
 **Critical directives — follow these strictly:**
-
 ### CRD Changes
 - After editing types in `k8s/migration/api/v1alpha1/`, ALWAYS run `make generate` inside `k8s/migration/` to regenerate deepcopy/client code and update CRD YAML
 - Test CRD changes with `cd k8s/migration && make test` before committing
@@ -65,6 +58,28 @@ If any principle in the constitution conflicts with a user request, flag it expl
 - v2v-helper tests require `CGO_ENABLED=1 GOOS=linux GOARCH=amd64` and will NOT compile on macOS without a Linux cross-compilation toolchain — use Docker or a Linux VM
 - Run `make test-v2v-helper` for v2v-helper tests, `cd k8s/migration && make test` for controller tests
 - ALWAYS run tests before submitting PRs
+
+### UI Test Requirements (Constitution Principle XI — NON-NEGOTIABLE)
+The UI has **two** test layers with **one** runner each. Never add a third E2E runner.
+
+| Layer | Runner | Location | Command |
+|-------|--------|----------|---------|
+| End-to-end (browser, user flows) | Playwright | `ui/e2e/**/*.spec.ts` | `cd ui && yarn pw:run` |
+| Unit (pure functions, hooks, reducers, single components) | Vitest | `ui/src/**/*.test.ts(x)` | `cd ui && yarn test` |
+
+Before writing UI code, state which layer(s) the change needs:
+- User-visible behavior (component, page, form, flow) → **Playwright spec required**
+- Pure helper / hook / reducer / util → **Vitest test required**
+- A change spanning both (e.g. a form field plus its validation helper) → **both**
+
+Rules:
+- E2E specs MUST stub every backend call with `page.route()`. Never reach a real vCenter, OpenStack or Kubernetes API. Reuse `ui/e2e/migration/helpers/migration.helpers.ts` (`mockRoute`, the `API` route map) and the fixtures beside it
+- A new E2E spec MUST live under `ui/e2e/`; a new unit test under `ui/src/`. Files elsewhere are silently never executed
+- Reject a UI PR that adds no test at either layer
+
+**No workflow change is needed when you add a test.** `packer.yml`'s `ui-e2e` job runs `yarn pw:run --shard=N/8` and `ui-unit` runs `yarn test`; both runners discover files by pattern and Playwright rebalances shards by test count. Touch `.github/workflows/packer.yml` only when:
+- a shard starts approaching its `timeout-minutes` → raise the shard count in the `ui-e2e` matrix (throughput, never correctness), or
+- a test was placed outside `ui/e2e/` or `ui/src/` → move it instead of editing the workflow
 
 ### Migration Form Field Parity (Constitution Principle VIII — NON-NEGOTIABLE)
 Adding a field, block, section, or toggle to the Migration Form is NOT done until the same PR updates all four surfaces. Never defer any of them to a follow-up ticket.
@@ -111,7 +126,6 @@ Adding a Deployment/pod, a container image, or a `deploy/*.yaml` manifest? Eithe
 ---
 
 ## Repository Layout
-
 | Path | Purpose |
 |------|---------|
 | `k8s/migration/` | Kubernetes controller manager (Go module, controller-runtime) |
@@ -130,7 +144,6 @@ Adding a Deployment/pod, a container image, or a `deploy/*.yaml` manifest? Eithe
 ---
 
 ## Quick Commands
-
 ```bash
 make setup-hooks                       # One-time setup
 make ui v2v-helper vjail-controller build-vpwned
@@ -147,7 +160,6 @@ cd ui && yarn dev                      # UI dev server (requires VITE_API_HOST, 
 ---
 
 ## Common Pitfalls
-
 - **macOS Development**: v2v-helper tests require Linux CGO, use Docker/Linux VM
 - **DNS Resolution**: ESXi host DNS required for VM copy. Add to `/etc/hosts` or restart controller after `/etc/resolv.conf` changes
 - **VDDK Libraries**: Must be in `/home/ubuntu/vmware-vix-disklib-distrib` on vJailbreak VM
@@ -156,7 +168,6 @@ cd ui && yarn dev                      # UI dev server (requires VITE_API_HOST, 
 ---
 
 ## Debugging
-
 ```bash
 kubectl -n vjailbreak logs -l control-plane=controller-manager -f   # Controller logs
 kubectl -n migration-system get migration <name> -o yaml            # Migration status
@@ -174,7 +185,6 @@ at specs/2180-v2v-restructure/plan.md
 <!-- SPECKIT END -->
 
 ## graphify
-
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
 Rules:
