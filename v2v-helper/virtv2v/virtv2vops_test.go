@@ -544,7 +544,7 @@ func TestBuildRHELNetworkManagerKeyfiles_EmptyEntriesSkipped(t *testing.T) {
 // (right commands/args/order/shape), since guestfish itself can't run here.
 
 func TestGetBootablePartitionSteps(t *testing.T) {
-	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh")
+	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh", []string{"/dev/sda", "/dev/sdb"})
 
 	require.Len(t, steps, 3, "must be exactly upload, chmod, sh - no more, no fewer boots collapsed")
 
@@ -560,12 +560,24 @@ func TestGetBootablePartitionSteps(t *testing.T) {
 
 	assert.Equal(t, guestfishStep{
 		Command: "sh",
-		Args:    []string{"/tmp/get-bootable-partition.sh"},
-	}, steps[2], "sh must run last, after the script is uploaded and executable")
+		Args:    []string{"/tmp/get-bootable-partition.sh /dev/sda /dev/sdb"},
+	}, steps[2], "sh must pass the real disk list as args, so the script's heuristics never see the appliance's own disk")
 
 	for i, step := range steps {
 		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed upload or chmod must abort the rest, matching the three separate calls this replaces", i)
 	}
+}
+
+func TestGetBootablePartitionStepsNoRealDisks(t *testing.T) {
+	// Empty/nil realDisks (list-devices unavailable) must fall back to
+	// running the script with no args, not crash or pass an empty arg.
+	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh", nil)
+
+	require.Len(t, steps, 3)
+	assert.Equal(t, guestfishStep{
+		Command: "sh",
+		Args:    []string{"/tmp/get-bootable-partition.sh"},
+	}, steps[2], "with no real disk list, sh must run the script bare so it falls back to its own raw scan")
 }
 
 func TestMountPersistenceSteps(t *testing.T) {
