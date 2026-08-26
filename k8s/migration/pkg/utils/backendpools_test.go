@@ -138,7 +138,6 @@ func TestResolveVolumeTypeForPool(t *testing.T) {
 		name                        string
 		volumeBackendNameCapability string
 		parsedBackendName           string
-		poolVolumeType              string
 		wantVolumeType              string
 		wantFromAPI                 bool
 	}{
@@ -151,7 +150,6 @@ func TestResolveVolumeTypeForPool(t *testing.T) {
 			// silently wrong here.
 			volumeBackendNameCapability: "hitach-primary",
 			parsedBackendName:           "hitachi-primary",
-			poolVolumeType:              "hitach-primary",
 			wantVolumeType:              "hitachi",
 			wantFromAPI:                 true,
 		},
@@ -159,7 +157,6 @@ func TestResolveVolumeTypeForPool(t *testing.T) {
 			name:                        "capability matches parsed backend name - resolves via API as before",
 			volumeBackendNameCapability: "pure-iscsi-1",
 			parsedBackendName:           "pure-iscsi-1",
-			poolVolumeType:              "vt-pure-iscsi",
 			wantVolumeType:              "vt-pure-iscsi",
 			wantFromAPI:                 true,
 		},
@@ -167,16 +164,18 @@ func TestResolveVolumeTypeForPool(t *testing.T) {
 			name:                        "driver reports no volume_backend_name capability - falls back to parsed backend name",
 			volumeBackendNameCapability: "",
 			parsedBackendName:           "pure-iscsi-1",
-			poolVolumeType:              "vt-pure-iscsi",
 			wantVolumeType:              "vt-pure-iscsi",
 			wantFromAPI:                 true,
 		},
 		{
-			name:                        "no match anywhere - falls back to pool name parsing",
+			name: "no match anywhere - best effort, left blank rather than guessed from pool name",
+			// Neither a Cinder volume-types API lookup failure nor an
+			// unmapped backend should surface the pool-name-parsing guess
+			// as if it were a real volume type name (see Hitachi case above
+			// for why that guess can be wrong) - leave it blank instead.
 			volumeBackendNameCapability: "unknown-backend",
 			parsedBackendName:           "unknown-backend",
-			poolVolumeType:              "some-pool-name",
-			wantVolumeType:              "some-pool-name",
+			wantVolumeType:              "",
 			wantFromAPI:                 false,
 		},
 	}
@@ -184,7 +183,7 @@ func TestResolveVolumeTypeForPool(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			gotType, gotFromAPI, _ := resolveVolumeTypeForPool(
-				backendToVolumeType, tt.volumeBackendNameCapability, tt.parsedBackendName, tt.poolVolumeType)
+				backendToVolumeType, tt.volumeBackendNameCapability, tt.parsedBackendName)
 			if gotType != tt.wantVolumeType {
 				t.Errorf("volumeType = %q, want %q", gotType, tt.wantVolumeType)
 			}
