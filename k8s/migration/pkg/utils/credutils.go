@@ -2181,11 +2181,14 @@ func extractStoragePools(p pagination.Page) ([]storagePoolSummary, error) {
 //
 // volumeBackendNameCapability is the pool's own volume_backend_name
 // capability; parsedBackendName is the parsed backend-section name, used as
-// the join key only when the driver doesn't report the capability;
-// poolVolumeType is the pool-name "#"-suffix fallback used when neither
-// lookup matches. fromAPI reports whether the result came from the
+// the join key only when the driver doesn't report the capability. This is
+// best-effort: when neither lookup matches (e.g. the Cinder volume-types API
+// call failed, or no volume type maps to this backend), volumeType is left
+// blank rather than falling back to the pool-name "#"-suffix, since that
+// suffix is not actually a volume type name and can be silently wrong (see
+// the Hitachi case above). fromAPI reports whether the result came from the
 // authoritative Cinder API lookup, for caller logging.
-func resolveVolumeTypeForPool(backendToVolumeType map[string]string, volumeBackendNameCapability, parsedBackendName, poolVolumeType string) (volumeType string, fromAPI bool, key string) {
+func resolveVolumeTypeForPool(backendToVolumeType map[string]string, volumeBackendNameCapability, parsedBackendName string) (volumeType string, fromAPI bool, key string) {
 	key = volumeBackendNameCapability
 	if key == "" {
 		key = parsedBackendName
@@ -2193,7 +2196,7 @@ func resolveVolumeTypeForPool(backendToVolumeType map[string]string, volumeBacke
 	if vtName, ok := backendToVolumeType[key]; ok {
 		return vtName, true, key
 	}
-	return poolVolumeType, false, key
+	return "", false, key
 }
 
 func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
@@ -2253,7 +2256,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	for _, pool := range backendPools {
 		vendor := pool.Capabilities.VendorName
 		driver := pool.Capabilities.DriverVersion
-		poolVolumeType, backendName := parsePoolName(pool.Name)
+		_, backendName := parsePoolName(pool.Name)
 
 		// Get Cinder host from volume services API (preferred) or fall back to pool name parsing
 		var cinderHost string
@@ -2266,11 +2269,11 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 			ctxlog.Info("Using Cinder host from pool name", "backend", backendName, "host", cinderHost)
 		}
 
-		volumeType, fromAPI, volumeBackendNameKey := resolveVolumeTypeForPool(backendToVolumeType, pool.Capabilities.VolumeBackendName, backendName, poolVolumeType)
+		volumeType, fromAPI, volumeBackendNameKey := resolveVolumeTypeForPool(backendToVolumeType, pool.Capabilities.VolumeBackendName, backendName)
 		if fromAPI {
 			ctxlog.Info("Using volume type from Cinder volume types API", "backend", backendName, "volumeBackendName", volumeBackendNameKey, "volumeType", volumeType)
 		} else {
-			ctxlog.Info("Volume type not found in Cinder API, using pool name parsing", "backend", backendName, "volumeBackendName", volumeBackendNameKey, "volumeType", volumeType)
+			ctxlog.Info("Volume type not found in Cinder API, leaving blank (best effort)", "backend", backendName, "volumeBackendName", volumeBackendNameKey)
 		}
 
 		backendMap[backendName] = map[string]string{
