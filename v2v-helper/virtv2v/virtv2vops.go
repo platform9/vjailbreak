@@ -1396,18 +1396,81 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
+	// DIAGNOSTIC ONLY - does not change the script's behavior. list-devices
+	// asks guestfish for the real attached-disk list, in -a order (the same
+	// API GetDeviceNumberFromPartition/device-index rely on), which excludes
+	// the libguestfs appliance's own backing disk. A production trace showed
+	// the script's own raw `ls /dev/[sv]d[a-z]` scan picking up that
+	// appliance disk too - a migration with exactly 2 attached VM disks saw
+	// "disks found: /dev/sda /dev/sdb /dev/sdc", where /dev/sdc turned out to
+	// be the appliance's own root filesystem. That's a plausible mechanism
+	// for VJAILB-225's intermittent wrong-disk selection. Log list-devices'
+	// answer next to the script's own raw scan (in the trace below) on every
+	// run so the next occurrence gives us both lists side by side, instead
+	// of changing get-bootable-partition.sh's actual disk-selection logic
+	// (which would make the phantom-disk condition unreproducible).
+	if realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false); listErr != nil {
+		log.Printf("WARNING: diagnostic list-devices call failed (non-fatal): %v: %s", listErr, strings.TrimSpace(realDisksStr))
+	} else {
+		realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
+		if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh diagnostic: real attached disks per list-devices (appliance disk excluded, -a order): %v", realDisks)); logErr != nil {
+			log.Printf("WARNING: failed to persist list-devices diagnostic to migration log: %v", logErr)
+		}
+	}
+
 	// Upload, chmod, and run in one boot instead of three: no step carries
-	// a Marker, so a failure aborts the rest. The script's debug trace goes
-	// to stderr, only the real answer to stdout, used as-is (uncased).
+	// a Marker, so a failure aborts the rest.
+	//
+	// libguestfs's `sh` API does not relay a guest command's stderr back to
+	// the host when the command exits 0 - only stdout survives the round
+	// trip in that case. get-bootable-partition.sh used to write its
+	// step-by-step reasoning to stderr on the assumption that stderr would
+	// come back; it doesn't, so the trace that explains WHY a given disk was
+	// picked - the only way to see, e.g., VJAILB-225's "succeeded but picked
+	// the wrong disk" case - was silently lost. The script now writes its
+	// [DEBUG] lines AND a final line tagged "BOOTDISK_RESULT:<path>" to
+	// plain, unredirected stdout, which libguestfs does reliably relay (and
+	// which GuestfishOutputRaw captures in full below). Pull the tagged line
+	// out as the actual result and treat everything else as trace.
 	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
 
-	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(out))
+	var resultLine string
+	traceLines := make([]string, 0)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
+			resultLine = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			traceLines = append(traceLines, line)
+		}
+	}
+	trace := strings.TrimSpace(strings.Join(traceLines, "\n"))
+	if trace == "" {
+		trace = "(no debug output captured - either the deployed get-bootable-partition.sh predates step logging, or it produced none)"
+	}
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh trace:\n%s", trace)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh trace to migration log: %v", logErr)
+	}
 
-	return strings.TrimSpace(out), nil
+	if resultLine == "" {
+		// The script ran but never printed a tagged result line - either
+		// it's an older/untagged build, or all six heuristics genuinely
+		// found nothing. Fall back to treating the whole trimmed output as
+		// the result, matching the previous (pre-tagging) behavior, so this
+		// doesn't regress into a hard failure by itself.
+		resultLine = strings.TrimSpace(out)
+		log.Printf("WARNING: get-bootable-partition.sh output had no BOOTDISK_RESULT: line; falling back to raw output as result: %q", resultLine)
+	}
+
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh result: %q", resultLine)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
+	}
+
+	return resultLine, nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
