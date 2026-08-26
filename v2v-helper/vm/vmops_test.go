@@ -4,6 +4,7 @@ package vm
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/vmware/govmomi"
 	"github.com/vmware/govmomi/find"
+	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
 	"github.com/vmware/govmomi/simulator"
 	"github.com/vmware/govmomi/vim25/mo"
@@ -344,3 +346,143 @@ func TestGetSnapshot(t *testing.T) {
 
 // Could not make unit tests for CustomQueryChangedDiskAreas and UpdateDiskInfo
 // as they rely on change block tracking which is not supported by the simulator
+
+// powerOffVM powers the simulated VM off and waits for the task to finish.
+func powerOffVM(t *testing.T, vmops *VMOps) {
+	t.Helper()
+	task, err := vmops.VMObj.PowerOff(context.Background())
+	assert.NoError(t, err)
+	assert.NoError(t, task.Wait(context.Background()))
+}
+
+// invalidPowerStateErr returns the real InvalidPowerState fault vCenter raises when
+// a power operation targets a VM that is already in the requested state. powerOff
+// selects which operation is attempted, so the caller can produce the fault while
+// the VM is off (power off an off VM) or on (power on an on VM).
+func invalidPowerStateErr(t *testing.T, vmops *VMOps, powerOff bool) error {
+	t.Helper()
+	var (
+		task *object.Task
+		err  error
+	)
+	if powerOff {
+		task, err = vmops.VMObj.PowerOff(context.Background())
+	} else {
+		task, err = vmops.VMObj.PowerOn(context.Background())
+	}
+	assert.NoError(t, err)
+	err = task.Wait(context.Background())
+	assert.Error(t, err, "expected an InvalidPowerState fault from the simulator")
+	return err
+}
+
+// TestVMPowerOffAlreadyPoweredOff covers the guard at the top of VMPowerOff: a VM
+// that is already off must not be shut down or powered off again.
+func TestVMPowerOffAlreadyPoweredOff(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmops, err := VMOpsBuilder(context.Background(), *simVC, "DC0_H0_VM0", "", nil)
+	assert.NoError(t, err)
+	powerOffVM(t, vmops)
+
+	assert.NoError(t, vmops.VMPowerOff())
+}
+
+// TestForcePowerOffSkipsAlreadyPoweredOffVM is the regression guard for the case
+// where the guest finished shutting down after the shutdown wait expired. The
+// forced power off must be skipped, not attempted and reported as a failure.
+func TestForcePowerOffSkipsAlreadyPoweredOffVM(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmops, err := VMOpsBuilder(context.Background(), *simVC, "DC0_H0_VM0", "", nil)
+	assert.NoError(t, err)
+	powerOffVM(t, vmops)
+
+	err = vmops.forcePowerOff(errors.New("guest shutdown timed out after 5 minutes"))
+	assert.NoError(t, err)
+
+	state, err := vmops.GetVmPowerState()
+	assert.NoError(t, err)
+	assert.Equal(t, types.VirtualMachinePowerStatePoweredOff, state)
+}
+
+// TestForcePowerOffPowersOffRunningVM covers the unchanged path: the guest really
+// did not shut down, so the forced power off must still run.
+func TestForcePowerOffPowersOffRunningVM(t *testing.T) {
+	simVC, model, server, err := simulateVCenter()
+	defer cleanupSimulator(model, server)
+	assert.Nil(t, err)
+
+	vmops, err := VMOpsBuilder(context.Background(), *simVC, "DC0_H0_VM0", "", nil)
+	assert.NoError(t, err)
+
+	err = vmops.forcePowerOff(errors.New("guest shutdown timed out after 5 minutes"))
+	assert.NoError(t, err)
+
+	state, err := vmops.GetVmPowerState()
+	assert.NoError(t, err)
+	assert.Equal(t, types.VirtualMachinePowerStatePoweredOff, state)
+}
+
+func TestPoweredOffAfterFault(t *testing.T) {
+	tests := []struct {
+		name string
+		// setup prepares the VM and returns the error to classify.
+		setup func(t *testing.T, vmops *VMOps) error
+		want  bool
+	}{
+		{
+			// The reported failure: vCenter accepted the power off task and then
+			// failed it because the VM had already reached poweredOff.
+			name: "InvalidPowerState while the VM is powered off",
+			setup: func(t *testing.T, vmops *VMOps) error {
+				powerOffVM(t, vmops)
+				return invalidPowerStateErr(t, vmops, true)
+			},
+			want: true,
+		},
+		{
+			// An InvalidPowerState raised for any other state is a real failure and
+			// must not be swallowed.
+			name: "InvalidPowerState while the VM is powered on",
+			setup: func(t *testing.T, vmops *VMOps) error {
+				return invalidPowerStateErr(t, vmops, false)
+			},
+			want: false,
+		},
+		{
+			name: "unrelated error",
+			setup: func(t *testing.T, vmops *VMOps) error {
+				powerOffVM(t, vmops)
+				return errors.New("connection reset by peer")
+			},
+			want: false,
+		},
+		{
+			name: "no error",
+			setup: func(t *testing.T, vmops *VMOps) error {
+				powerOffVM(t, vmops)
+				return nil
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			simVC, model, server, err := simulateVCenter()
+			defer cleanupSimulator(model, server)
+			assert.Nil(t, err)
+
+			vmops, err := VMOpsBuilder(context.Background(), *simVC, "DC0_H0_VM0", "", nil)
+			assert.NoError(t, err)
+
+			got := vmops.poweredOffAfterFault(tt.setup(t, vmops))
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
