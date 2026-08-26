@@ -1136,7 +1136,7 @@ func GetInterfaceNames(path string) ([]string, error) {
 	}
 
 	// Every matched file in one boot instead of one per file - boot 2 of 2.
-	out, err := RunGuestfishScript([]vm.VMDisk{{Path: path}}, false, constants.GuestfishOutputRaw, interfaceCatSteps(files)...)
+	out, err := RunGuestfishScript([]vm.VMDisk{{Path: path}}, false, constants.GuestfishOutputCombinedRaw, interfaceCatSteps(files)...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read interface config files: %w", err)
 	}
@@ -1149,9 +1149,10 @@ func GetInterfaceNames(path string) ([]string, error) {
 
 	for i, file := range files {
 		content := sections[interfaceFileMarker(i)]
-		if content == "" {
-			// Tolerant cat produced nothing for this file - same as the
-			// per-file boot this replaces returning an error: skip it.
+		if content != "" && strings.Contains(strings.ToLower(content), "no such file or directory") {
+			// Tolerant cat failed for this file (removed between ls and cat,
+			// or permission denied) - same as the per-file boot this replaces
+			// returning a Go error: skip it.
 			continue
 		}
 		// Extract DEVICE or infer from filename
