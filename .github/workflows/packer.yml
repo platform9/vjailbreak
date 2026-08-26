@@ -498,8 +498,9 @@ jobs:
       group: ${{ github.workflow }}-push-images-${{ github.event_name }}-${{ github.ref }}
       cancel-in-progress: false
     if: |
+      !cancelled() &&
       needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      needs.build-ui.result == 'success' &&
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
       (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
       (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
@@ -599,7 +600,9 @@ jobs:
     # push-images already gates on every build job, so re-checking them here would only
     # duplicate that. determine-release stays for its image-tag outputs.
     needs: [determine-release, push-images]
-    if: needs.push-images.result == 'success'
+    if: |
+      !cancelled() &&
+      needs.push-images.result == 'success'
 
     steps:
 
