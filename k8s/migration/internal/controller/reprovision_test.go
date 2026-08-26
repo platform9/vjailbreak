@@ -135,6 +135,7 @@ func TestReconcileReprovision_RequestedIdleNode(t *testing.T) {
 		},
 		Status: vjailbreakv1alpha1.VjailbreakNodeStatus{
 			OpenstackUUID:    "uuid-abc",
+			OpenstackName:    "vjb-appliance-01-vjailbreak-agent-x9k2p1",
 			ActiveMigrations: []string{},
 		},
 	}
@@ -163,6 +164,9 @@ func TestReconcileReprovision_RequestedIdleNode(t *testing.T) {
 	}
 	if updated.Status.OpenstackUUID != "" {
 		t.Errorf("OpenstackUUID should be cleared, got %q", updated.Status.OpenstackUUID)
+	}
+	if updated.Status.OpenstackName != "" {
+		t.Errorf("OpenstackName should be cleared, got %q", updated.Status.OpenstackName)
 	}
 	if updated.Status.Phase != "" {
 		t.Errorf("Phase should be reset, got %q", updated.Status.Phase)
