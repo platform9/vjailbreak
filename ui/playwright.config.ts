@@ -32,5 +32,11 @@ export default defineConfig({
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',
+        // The specs stub their own API calls; anything they miss must be refused
+        // instantly rather than left to DNS. See the proxy fallback in vite.config.ts.
+        env: {
+          VITE_API_HOST: process.env.VITE_API_HOST ?? 'http://127.0.0.1:9',
+          VITE_API_TOKEN: process.env.VITE_API_TOKEN ?? 'e2e-placeholder-token',
+        },
       },
 })

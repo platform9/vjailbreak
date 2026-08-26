@@ -35,6 +35,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 env:
   PACKER_VERSION: "latest"
   QCOW2_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak
@@ -196,7 +199,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: determine-release
     if: needs.determine-release.outputs.ui_changed == 'true'
-    timeout-minutes: 12
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -247,18 +250,10 @@ jobs:
             npx playwright install --with-deps chromium
           fi
 
-      - name: Cache Vite dependency pre-bundle
-        uses: actions/cache@v4
-        with:
-          path: ui/node_modules/.vite
-          key: ${{ runner.os }}-vite-deps-${{ hashFiles('ui/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-vite-deps-
-
-      # playwright.config.ts starts the vite dev server itself (webServer block) and every
-      # spec stubs its backend calls with page.route(), so no vCenter / OpenStack /
-      # Kubernetes access is needed. A single failing spec fails this shard, which fails
-      # the ui-e2e dependency as a whole.
+      # playwright.config.ts builds and serves the bundle itself (webServer -> pw:serve),
+      # and every spec stubs its backend calls with page.route(), so no vCenter /
+      # OpenStack / Kubernetes access is needed. A single failing spec fails this shard,
+      # which fails the ui-e2e dependency as a whole.
       - name: Run Playwright E2E tests
         run: yarn pw:run --shard=${{ matrix.shard }}/8
         env:
