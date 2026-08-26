@@ -33,6 +33,21 @@ import (
 // use CBT and must be migrated using cold migration. See VMware KB 1020128.
 const MinCBTHardwareVersion = 7
 
+// TEST ONLY — revert to 5 * time.Minute / 5 * time.Second and drop
+// simulateShutdownTimeout before merge.
+//
+// The timeouts are shortened so a cutover reaches the power-off fallback in
+// seconds instead of minutes. simulateShutdownTimeout makes VMGuestShutdown
+// report a timeout even after the guest has powered off, which is what puts the
+// fallback in front of an already powered-off VM — the #2242 failure. Shortening
+// the timeout alone cannot do that: it just means the guest is still running when
+// the fallback fires, which is the path that always worked.
+var (
+	guestShutdownTimeout      = 5 * time.Second
+	guestShutdownPollInterval = 1 * time.Second
+	simulateShutdownTimeout   = true
+)
+
 type VMOperations interface {
 	GetVMInfo(ostype string, rdmDisks []string) (VMInfo, error)
 	GetVMObj() *object.VirtualMachine
@@ -826,8 +841,8 @@ func (vmops *VMOps) VMGuestShutdown() error {
 		}
 	}
 
-	// Wait for up to 5 minutes for the VM to power off
-	ctx, cancel := context.WithTimeout(vmops.ctx, 5*time.Minute)
+	// Wait for the VM to power off
+	ctx, cancel := context.WithTimeout(vmops.ctx, guestShutdownTimeout)
 	defer cancel()
 
 	for {
@@ -849,10 +864,18 @@ func (vmops *VMOps) VMGuestShutdown() error {
 		// Check if timeout occurred
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("guest shutdown timed out after 5 minutes")
+			return fmt.Errorf("guest shutdown timed out after %s", guestShutdownTimeout)
 		default:
-			time.Sleep(5 * time.Second)
+			time.Sleep(guestShutdownPollInterval)
 		}
+	}
+
+	// TEST ONLY — remove before merge. Reproduces #2242 deterministically: report a
+	// timeout even though the guest completed its shutdown, so the fallback runs
+	// against a VM that is already powered off.
+	if simulateShutdownTimeout {
+		log.Printf("TEST BUILD: reporting a simulated guest shutdown timeout so the power-off fallback runs against an already powered-off VM")
+		return fmt.Errorf("guest shutdown timed out after %s (simulated)", guestShutdownTimeout)
 	}
 
 	return nil
