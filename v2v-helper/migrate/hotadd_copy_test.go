@@ -35,6 +35,9 @@ func lsiLogicController(key int32) *govmomitypes.VirtualLsiLogicController {
 }
 
 // diskOn builds a VirtualDisk occupying the given unit number on controllerKey.
+// Its own Key doesn't matter for findPreferredDiskController's scan (which
+// only reads ControllerKey/UnitNumber), so callers that don't also need to
+// populate a controller's Device list (see fillDisks) can use this directly.
 func diskOn(controllerKey, unit int32) *govmomitypes.VirtualDisk {
 	u := unit
 	return &govmomitypes.VirtualDisk{
@@ -45,17 +48,29 @@ func diskOn(controllerKey, unit int32) *govmomitypes.VirtualDisk {
 	}
 }
 
-// fillDisks returns one VirtualDisk per unit 0..maxSCSIControllerUnits-1 on
-// controllerKey, skipping unit 7 (reserved for the controller itself) -- i.e.
-// enough disks to make that controller report as full.
-func fillDisks(controllerKey int32) []govmomitypes.BaseVirtualDevice {
+func fillDisks(ctrl govmomitypes.BaseVirtualController) []govmomitypes.BaseVirtualDevice {
+	controllerKey := ctrl.GetVirtualController().Key
+	nextDiskKey := controllerKey + 1000 // arbitrary, just distinct from every controller/other disk key used in these tests
+
 	var disks []govmomitypes.BaseVirtualDevice
+	var childKeys []int32
 	for unit := int32(0); unit < maxSCSIControllerUnits; unit++ {
 		if unit == 7 {
 			continue
 		}
-		disks = append(disks, diskOn(controllerKey, unit))
+		diskKey := nextDiskKey
+		nextDiskKey++
+		u := unit
+		disks = append(disks, &govmomitypes.VirtualDisk{
+			VirtualDevice: govmomitypes.VirtualDevice{
+				Key:           diskKey,
+				ControllerKey: controllerKey,
+				UnitNumber:    &u,
+			},
+		})
+		childKeys = append(childKeys, diskKey)
 	}
+	ctrl.GetVirtualController().Device = childKeys
 	return disks
 }
 
@@ -89,14 +104,22 @@ func TestFindPreferredDiskController(t *testing.T) {
 			wantPVSCSI: true,
 		},
 		{
-			name:       "full PVSCSI is skipped, falls back to the other controller",
-			devices:    devs(pvscsiController(1000), lsiLogicController(1001), fillDisks(1000)),
+			name: "full PVSCSI is skipped, falls back to the other controller",
+			devices: func() object.VirtualDeviceList {
+				pvscsi := pvscsiController(1000)
+				lsiLogic := lsiLogicController(1001)
+				return devs(pvscsi, lsiLogic, fillDisks(pvscsi))
+			}(),
 			wantKey:    1001,
 			wantPVSCSI: false,
 		},
 		{
-			name:       "first PVSCSI full, second PVSCSI free -> second is chosen",
-			devices:    devs(pvscsiController(1000), pvscsiController(1001), fillDisks(1000), diskOn(1001, 0)),
+			name: "first PVSCSI full, second PVSCSI free -> second is chosen",
+			devices: func() object.VirtualDeviceList {
+				full := pvscsiController(1000)
+				free := pvscsiController(1001)
+				return devs(full, free, fillDisks(full), diskOn(1001, 0))
+			}(),
 			wantKey:    1001,
 			wantPVSCSI: true,
 		},
