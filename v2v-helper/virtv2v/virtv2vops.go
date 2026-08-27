@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1451,20 +1452,11 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 
 	// Defense in depth: refuse anything not in realDisks, in case an older
 	// deployed script or future edit reintroduces its own disk discovery.
-	if !stringInSlice(resultLine, realDisks) {
+	if !slices.Contains(realDisks, resultLine) {
 		return "", fmt.Errorf("get-bootable-partition.sh returned %q, which is not one of the real attached disks %v; refusing to use it", resultLine, realDisks)
 	}
 
 	return resultLine, nil
-}
-
-func stringInSlice(s string, list []string) bool {
-	for _, item := range list {
-		if item == s {
-			return true
-		}
-	}
-	return false
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
