@@ -352,16 +352,20 @@ func hasParaVirtualController(ctx context.Context, vmObj *object.VirtualMachine)
 	if err != nil {
 		return false, "", err
 	}
-	var otherControllerType string
+	pvscsiPresent, otherControllerType := classifyProxyControllers(deviceList)
+	return pvscsiPresent, otherControllerType, nil
+}
+
+func classifyProxyControllers(deviceList object.VirtualDeviceList) (pvscsiPresent bool, otherControllerType string) {
 	for _, dev := range deviceList {
 		if _, ok := dev.(*govmomitypes.ParaVirtualSCSIController); ok {
-			return true, "", nil
+			return true, ""
 		}
 		if _, ok := dev.(govmomitypes.BaseVirtualSCSIController); ok {
 			otherControllerType = fmt.Sprintf("%T", dev)
 		}
 	}
-	return false, otherControllerType, nil
+	return false, otherControllerType
 }
 
 // isDiskEnableUUIDSet reports whether disk.enableUUID is set to TRUE in the VM's ExtraConfig.
