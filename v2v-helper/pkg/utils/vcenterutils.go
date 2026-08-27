@@ -76,12 +76,15 @@ type MigrationParams struct {
 	DataOnly bool
 
 	// DebugStaleNFCSessions is a fault-injection knob, disabled at 0 (the
-	// default). A positive value tells LiveReplicateDisks to open that many
-	// extra, otherwise-unused NFC sessions against this migration's own disk
-	// before starting the real disk copy, to intentionally pressure/exceed the
-	// target vCenter's NFC session cap from within a single migration. See
-	// nbd.StartDebugStaleNFCSessions and constants.DebugStaleNFCSessionsKey.
-	// Only ever set this against a lab/test vCenter.
+	// default). A positive value tells SyncCBT (the periodic sync cycle) to
+	// open that many extra, otherwise-unused NFC sessions against the disk
+	// being synced for the duration of that cycle's NBD server restart, to
+	// intentionally pressure/exceed the target vCenter's NFC session cap.
+	// Read live on every cycle, not cached from migration start, so an
+	// operator can hand-edit the ConfigMap on a running migration and have it
+	// take effect on the next cycle. See nbd.StartDebugStaleNFCSessions and
+	// constants.DebugStaleNFCSessionsKey. Only ever set this against a
+	// lab/test vCenter.
 	DebugStaleNFCSessions int
 }
 

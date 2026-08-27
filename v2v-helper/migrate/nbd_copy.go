@@ -125,14 +125,40 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 				return errors.Wrap(err, "failed to update disk info")
 			}
 
+			// DEBUG fault-injection: re-read the migration ConfigMap right before
+			// THIS cycle's real StopNBDServer/StartNBDServer restart (not a value
+			// fetched once at migration start), so an operator can `kubectl edit
+			// configmap` the DEBUG_STALE_NFC_SESSIONS key on a running migration
+			// and have it take effect on the very next periodic sync cycle. This
+			// is where the real NFC session-cap/"faulted session" failures have
+			// actually been observed (VJAILB-243, VJAILB-244): periodic sync
+			// restarts the NBD server - and therefore opens a fresh NFC session -
+			// on every cycle that has changed blocks, not just once at the start
+			// of the migration, so session-cap pressure accumulates over many
+			// cycles rather than showing up on the very first copy. A positive
+			// value opens that many extra stale NFC sessions against this disk,
+			// held for the duration of this cycle's restart+copy, to intentionally
+			// pressure/exceed vCenter's NFC session cap right when the real code
+			// is trying to open its own fresh session. Only ever set it against a
+			// lab/test vCenter - see nbd.StartDebugStaleNFCSessions.
+			var staleNFCSessions []*nbd.StaleNFCSession
+			if debugParams, debugErr := utils.GetMigrationParams(ctx, migobj.K8sClient); debugErr != nil {
+				migobj.logMessage(fmt.Sprintf("DEBUG: failed to re-read migration ConfigMap for stale NFC session count, skipping: %v", debugErr))
+			} else if debugParams.DebugStaleNFCSessions > 0 {
+				staleNFCSessions = nbd.StartDebugStaleNFCSessions(debugParams.DebugStaleNFCSessions, vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint,
+					vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk)
+			}
+
 			utils.PrintLog("Restarting NBD server")
 			err = nbdops[idx].StopNBDServer()
 			if err != nil {
+				nbd.StopDebugStaleNFCSessions(staleNFCSessions)
 				return errors.Wrap(err, "failed to stop NBD server")
 			}
 
 			err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vminfo.VMDisks[idx].Snapname, vminfo.VMDisks[idx].SnapBackingDisk, migobj.EventReporter)
 			if err != nil {
+				nbd.StopDebugStaleNFCSessions(staleNFCSessions)
 				return errors.Wrap(err, "failed to start NBD server")
 			}
 			// sleep for 2 seconds to allow the NBD server to start
@@ -143,6 +169,10 @@ func (migobj *Migrate) SyncCBT(ctx context.Context, vminfo vm.VMInfo) error {
 			startTime := time.Now()
 			migobj.logMessage(fmt.Sprintf("Periodic Sync: Starting incremental block copy for disk %d at %s", idx, startTime))
 			err = nbdops[idx].CopyChangedBlocks(ctx, changedAreas, vminfo.VMDisks[idx].Path, vminfo.VMDisks[idx].OpenstackVol.Encrypted)
+			// Stale sessions were only needed to pressure the cap during the
+			// restart+copy above; release them now regardless of outcome, rather
+			// than holding them open until this whole function returns.
+			nbd.StopDebugStaleNFCSessions(staleNFCSessions)
 			if err != nil {
 				migobj.logMessage(fmt.Sprintf("Periodic Sync: Failed to copy changed blocks for disk %d: %v", idx, err))
 				select {
@@ -431,29 +461,6 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 		err = nbdops[idx].StartNBDServer(vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint, vmdisk.Snapname, vmdisk.SnapBackingDisk, migobj.EventReporter)
 		if err != nil {
 			return vminfo, errors.Wrap(err, "failed to start NBD server")
-		}
-	}
-
-	// DEBUG fault-injection: re-read the migration ConfigMap right before the
-	// real copy starts (rather than reusing the migrationParams fetched above)
-	// so an operator can `kubectl edit configmap` the DEBUG_STALE_NFC_SESSIONS
-	// key on this running migration - any time after triggering it, up until
-	// this point - and have it take effect. A positive value opens that many
-	// extra stale NFC sessions against this migration's first disk to
-	// intentionally pressure/exceed vCenter's NFC session cap from within a
-	// single migration, for reproducing session-cap/"faulted session" failures
-	// (e.g. VJAILB-244) against a lab vCenter. Only ever set it against a
-	// lab/test vCenter - see nbd.StartDebugStaleNFCSessions.
-	if len(vminfo.VMDisks) > 0 {
-		debugParams, debugErr := utils.GetMigrationParams(ctx, migobj.K8sClient)
-		if debugErr != nil {
-			migobj.logMessage(fmt.Sprintf("DEBUG: failed to re-read migration ConfigMap for stale NFC session count, skipping: %v", debugErr))
-		} else if debugParams.DebugStaleNFCSessions > 0 {
-			staleNFCSessions := nbd.StartDebugStaleNFCSessions(debugParams.DebugStaleNFCSessions, vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint,
-				vminfo.VMDisks[0].Snapname, vminfo.VMDisks[0].SnapBackingDisk)
-			if len(staleNFCSessions) > 0 {
-				defer nbd.StopDebugStaleNFCSessions(staleNFCSessions)
-			}
 		}
 	}
 

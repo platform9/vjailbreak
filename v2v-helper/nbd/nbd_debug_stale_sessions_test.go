@@ -15,9 +15,10 @@ func TestStartDebugStaleNFCSessions_NonPositiveCountIsNoop(t *testing.T) {
 
 func TestStartDebugStaleNFCSessions_PositiveCountAttemptsAndDoesNotPanic(t *testing.T) {
 	// nbdkit isn't installed in the unit test environment, so every attempt
-	// to open a session is expected to fail - this exercises the "keep going
-	// and log" error path rather than a happy path, and asserts the function
-	// never panics and never returns more sessions than were requested.
+	// to start a session is expected to fail before it ever gets to the
+	// libnbd connect step - this exercises the "keep going and log" error
+	// path rather than a happy path, and asserts the function never panics
+	// and never returns more sessions than were requested.
 	got := StartDebugStaleNFCSessions(3, nil, "vcenter.example.com", "user", "pass", "thumb", "snap-1", "/vm/disk.vmdk")
 	if len(got) > 3 {
 		t.Errorf("StartDebugStaleNFCSessions(3, ...) returned %d sessions, want at most 3", len(got))
@@ -30,5 +31,5 @@ func TestStartDebugStaleNFCSessions_PositiveCountAttemptsAndDoesNotPanic(t *test
 func TestStopDebugStaleNFCSessions_NilAndEmptyAreSafe(t *testing.T) {
 	// Must not panic.
 	StopDebugStaleNFCSessions(nil)
-	StopDebugStaleNFCSessions([]*NBDServer{})
+	StopDebugStaleNFCSessions([]*StaleNFCSession{})
 }

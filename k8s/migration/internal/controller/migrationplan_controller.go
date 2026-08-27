@@ -1667,9 +1667,9 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
 		// Fault-injection knob, disabled by default. An operator can edit this
 		// key on the running migration's ConfigMap (kubectl edit configmap) at
-		// any point after the migration starts, up until v2v-helper reaches the
-		// CopyingBlocks/nbdcopy phase, to reproduce NFC session-cap failures
-		// against a lab vCenter. See constants.DebugStaleNFCSessionsKey.
+		// any point; it's re-read on every periodic sync cycle (not just once
+		// at migration start) to reproduce NFC session-cap failures against a
+		// lab vCenter. See constants.DebugStaleNFCSessionsKey.
 		constants.DebugStaleNFCSessionsKey: "0",
 	}
 }

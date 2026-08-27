@@ -409,12 +409,16 @@ const (
 	// DebugStaleNFCSessionsKey is the migration ConfigMap key controlling the
 	// stale-NFC-session fault-injection knob (see nbd.StartDebugStaleNFCSessions
 	// in v2v-helper). The controller seeds it at "0" (disabled) when the
-	// ConfigMap is created; an operator can edit it on a running migration's
-	// ConfigMap - after the migration is triggered, before the CopyingBlocks/
-	// nbdcopy phase starts - to a positive integer to intentionally pressure/
-	// exceed a vCenter's NFC session cap from within a single migration and
-	// reproduce session-cap failures like VJAILB-244. Only ever set this
-	// against a lab/test vCenter, never a production vCenter.
+	// ConfigMap is created. It is read live on every periodic sync cycle
+	// (Migrate.SyncCBT, right before that cycle's NBD server restart) rather
+	// than once at migration start, because that is where real NFC
+	// session-cap/"faulted session" failures have actually been observed
+	// (VJAILB-243, VJAILB-244): periodic sync opens a fresh NFC session on
+	// every cycle that has changed blocks, so session-cap pressure builds up
+	// over many cycles, not on the first copy. An operator can edit this key
+	// on a running migration's ConfigMap at any time and it takes effect on
+	// the next periodic sync cycle. Only ever set this against a lab/test
+	// vCenter, never a production vCenter.
 	DebugStaleNFCSessionsKey = "DEBUG_STALE_NFC_SESSIONS"
 
 	// Number of intervals to wait for the volume to become available
