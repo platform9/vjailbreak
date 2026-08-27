@@ -9,6 +9,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -432,6 +433,30 @@ func (migobj *Migrate) LiveReplicateDisks(ctx context.Context, vminfo vm.VMInfo)
 			return vminfo, errors.Wrap(err, "failed to start NBD server")
 		}
 	}
+
+	// DEBUG fault-injection: re-read the migration ConfigMap right before the
+	// real copy starts (rather than reusing the migrationParams fetched above)
+	// so an operator can `kubectl edit configmap` the DEBUG_STALE_NFC_SESSIONS
+	// key on this running migration - any time after triggering it, up until
+	// this point - and have it take effect. A positive value opens that many
+	// extra stale NFC sessions against this migration's first disk to
+	// intentionally pressure/exceed vCenter's NFC session cap from within a
+	// single migration, for reproducing session-cap/"faulted session" failures
+	// (e.g. VJAILB-244) against a lab vCenter. Only ever set it against a
+	// lab/test vCenter - see nbd.StartDebugStaleNFCSessions.
+	if len(vminfo.VMDisks) > 0 {
+		debugParams, debugErr := utils.GetMigrationParams(ctx, migobj.K8sClient)
+		if debugErr != nil {
+			migobj.logMessage(fmt.Sprintf("DEBUG: failed to re-read migration ConfigMap for stale NFC session count, skipping: %v", debugErr))
+		} else if debugParams.DebugStaleNFCSessions > 0 {
+			staleNFCSessions := nbd.StartDebugStaleNFCSessions(debugParams.DebugStaleNFCSessions, vmops.GetVMObj(), envURL, envUserName, envPassword, thumbprint,
+				vminfo.VMDisks[0].Snapname, vminfo.VMDisks[0].SnapBackingDisk)
+			if len(staleNFCSessions) > 0 {
+				defer nbd.StopDebugStaleNFCSessions(staleNFCSessions)
+			}
+		}
+	}
+
 	// sleep for 2 seconds to allow the NBD server to start
 	time.Sleep(2 * time.Second)
 	final := false

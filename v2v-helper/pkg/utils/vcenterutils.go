@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
@@ -73,6 +74,27 @@ type MigrationParams struct {
 
 	// DataOnly indicates no OpenStack VM should be created after disk conversion.
 	DataOnly bool
+
+	// DebugStaleNFCSessions is a fault-injection knob, disabled at 0 (the
+	// default). A positive value tells LiveReplicateDisks to open that many
+	// extra, otherwise-unused NFC sessions against this migration's own disk
+	// before starting the real disk copy, to intentionally pressure/exceed the
+	// target vCenter's NFC session cap from within a single migration. See
+	// nbd.StartDebugStaleNFCSessions and constants.DebugStaleNFCSessionsKey.
+	// Only ever set this against a lab/test vCenter.
+	DebugStaleNFCSessions int
+}
+
+// nonNegativeIntOrZero parses raw as a base-10 integer, returning 0 (disabled)
+// for empty, non-numeric, or negative input rather than an error - this is a
+// ConfigMap value an operator may hand-edit, so a typo should disable the
+// fault-injection knob it guards, not fail the whole migration.
+func nonNegativeIntOrZero(raw string) int {
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 // GetMigrationParams is function that returns the migration parameters
@@ -152,5 +174,6 @@ func GetMigrationParams(ctx context.Context, client client.Client) (*MigrationPa
 		SourceTagsMetadata:             sourceTagsMetadata,
 		CustomMetadata:                 customMetadata,
 		DataOnly:                       string(configMap.Data["DATA_ONLY"]) == "true",
+		DebugStaleNFCSessions:          nonNegativeIntOrZero(configMap.Data[constants.DebugStaleNFCSessionsKey]),
 	}, nil
 }

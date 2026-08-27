@@ -406,6 +406,17 @@ const (
 	// flavor ID the VM will be created with. Read back by v2v-helper.
 	TargetFlavorIDKey = "TARGET_FLAVOR_ID"
 
+	// DebugStaleNFCSessionsKey is the migration ConfigMap key controlling the
+	// stale-NFC-session fault-injection knob (see nbd.StartDebugStaleNFCSessions
+	// in v2v-helper). The controller seeds it at "0" (disabled) when the
+	// ConfigMap is created; an operator can edit it on a running migration's
+	// ConfigMap - after the migration is triggered, before the CopyingBlocks/
+	// nbdcopy phase starts - to a positive integer to intentionally pressure/
+	// exceed a vCenter's NFC session cap from within a single migration and
+	// reproduce session-cap failures like VJAILB-244. Only ever set this
+	// against a lab/test vCenter, never a production vCenter.
+	DebugStaleNFCSessionsKey = "DEBUG_STALE_NFC_SESSIONS"
+
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
 

@@ -1665,6 +1665,12 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"REMOVE_VMWARE_TOOLS":               strconv.FormatBool(removeVMwareTools),
 		"ACKNOWLEDGE_NETWORK_CONFLICT_RISK": strconv.FormatBool(migrationplan.Spec.AdvancedOptions.AcknowledgeNetworkConflictRisk),
 		"DISCONNECT_SOURCE_NETWORK":         strconv.FormatBool(migrationobj.Spec.DisconnectSourceNetwork),
+		// Fault-injection knob, disabled by default. An operator can edit this
+		// key on the running migration's ConfigMap (kubectl edit configmap) at
+		// any point after the migration starts, up until v2v-helper reaches the
+		// CopyingBlocks/nbdcopy phase, to reproduce NFC session-cap failures
+		// against a lab vCenter. See constants.DebugStaleNFCSessionsKey.
+		constants.DebugStaleNFCSessionsKey: "0",
 	}
 }
 
