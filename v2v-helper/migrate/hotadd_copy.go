@@ -62,7 +62,6 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	return getter.GetVCenterClient(), nil
 }
 
-
 // attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
 //
 // Multiple migrations can share one Proxy VM. attachDiskToProxy computes a
@@ -153,7 +152,7 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get proxy VM device list")
 	}
-	controller, err := deviceList.FindDiskController("")
+	controller, err := findPreferredDiskController(deviceList)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to find available disk controller on proxy VM")
 	}
@@ -185,6 +184,46 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 		}
 	}
 	return 0, fmt.Errorf("could not determine device key for newly attached disk %s", vmdkPath)
+}
+
+func findPreferredDiskController(deviceList object.VirtualDeviceList) (govmomitypes.BaseVirtualController, error) {
+	// Count occupied unit numbers per controller key so "has a PVSCSI
+	// controller" doesn't wrongly match one that's already full.
+	usedUnits := make(map[int32]map[int32]bool)
+	for _, dev := range deviceList {
+		vd := dev.GetVirtualDevice()
+		if vd.ControllerKey == 0 || vd.UnitNumber == nil {
+			continue
+		}
+		if usedUnits[vd.ControllerKey] == nil {
+			usedUnits[vd.ControllerKey] = make(map[int32]bool)
+		}
+		usedUnits[vd.ControllerKey][*vd.UnitNumber] = true
+	}
+
+	for _, dev := range deviceList {
+		pvscsi, ok := dev.(*govmomitypes.ParaVirtualSCSIController)
+		if !ok {
+			continue
+		}
+		key := pvscsi.GetVirtualDevice().Key
+		full := true
+		for unit := int32(0); unit < 16; unit++ {
+			if unit == 7 { // reserved for the controller itself
+				continue
+			}
+			if !usedUnits[key][unit] {
+				full = false
+				break
+			}
+		}
+		if !full {
+			return pvscsi, nil
+		}
+	}
+
+	// No PVSCSI controller with room -- fall back to whatever's available.
+	return deviceList.FindDiskController("")
 }
 
 // getDiskKeys returns a set of VirtualDisk device keys currently on a VM.
