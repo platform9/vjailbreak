@@ -1392,6 +1392,30 @@ func getBootablePartitionSteps(scriptPath string, realDisks []string) []guestfis
 	}
 }
 
+// parseBootDiskResult splits stdout into BOOTDISK_RESULT and trace, falling
+// back to raw output if untagged, and rejects a result outside realDisks.
+func parseBootDiskResult(out string, realDisks []string) (result, trace string, err error) {
+	traceLines := make([]string, 0)
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
+			result = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			traceLines = append(traceLines, line)
+		}
+	}
+	trace = strings.TrimSpace(strings.Join(traceLines, "\n"))
+
+	if result == "" {
+		result = strings.TrimSpace(out)
+	}
+	if !slices.Contains(realDisks, result) {
+		err = fmt.Errorf("get-bootable-partition.sh returned %q, which is not one of the real attached disks %v; refusing to use it", result, realDisks)
+	}
+	return result, trace, err
+}
+
 func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 	scriptPath := "/home/fedora/get-bootable-partition.sh"
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
@@ -1417,18 +1441,7 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
 
-	var resultLine string
-	traceLines := make([]string, 0)
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
-			resultLine = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
-			continue
-		}
-		if strings.TrimSpace(line) != "" {
-			traceLines = append(traceLines, line)
-		}
-	}
-	trace := strings.TrimSpace(strings.Join(traceLines, "\n"))
+	resultLine, trace, parseErr := parseBootDiskResult(out, realDisks)
 	if trace == "" {
 		trace = "(no debug output captured - either the deployed get-bootable-partition.sh predates step logging, or it produced none)"
 	}
@@ -1436,13 +1449,8 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		log.Printf("WARNING: failed to persist get-bootable-partition.sh trace to migration log: %v", logErr)
 	}
 
-	if resultLine == "" {
-		// The script ran but never printed a tagged result line - either
-		// it's an older/untagged build, or all six heuristics genuinely
-		// found nothing. Fall back to treating the whole trimmed output as
-		// the result, matching the previous (pre-tagging) behavior, so this
-		// doesn't regress into a hard failure by itself.
-		resultLine = strings.TrimSpace(out)
+	// No tagged line found (older/untagged build); already fell back to raw output.
+	if !strings.Contains(out, "BOOTDISK_RESULT:") {
 		log.Printf("WARNING: get-bootable-partition.sh output had no BOOTDISK_RESULT: line; falling back to raw output as result: %q", resultLine)
 	}
 
@@ -1450,10 +1458,8 @@ func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
 		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
 	}
 
-	// Defense in depth: refuse anything not in realDisks, in case an older
-	// deployed script or future edit reintroduces its own disk discovery.
-	if !slices.Contains(realDisks, resultLine) {
-		return "", fmt.Errorf("get-bootable-partition.sh returned %q, which is not one of the real attached disks %v; refusing to use it", resultLine, realDisks)
+	if parseErr != nil {
+		return "", parseErr
 	}
 
 	return resultLine, nil

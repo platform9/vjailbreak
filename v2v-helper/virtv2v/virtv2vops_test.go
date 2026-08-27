@@ -580,6 +580,61 @@ func TestGetBootablePartitionStepsNoRealDisks(t *testing.T) {
 	}, steps[2], "with no real disk list, sh must run the script bare so it falls back to its own raw scan")
 }
 
+func TestParseBootDiskResult(t *testing.T) {
+	tests := []struct {
+		name       string
+		out        string
+		realDisks  []string
+		wantResult string
+		wantTrace  string
+		wantErr    bool
+	}{
+		{
+			name:       "tagged result in realDisks",
+			out:        "[DEBUG] Step 1: disks passed by caller: /dev/sda /dev/sdb\n[DEBUG] Step 6: fallback to first disk\nBOOTDISK_RESULT:/dev/sda",
+			realDisks:  []string{"/dev/sda", "/dev/sdb"},
+			wantResult: "/dev/sda",
+			wantTrace:  "[DEBUG] Step 1: disks passed by caller: /dev/sda /dev/sdb\n[DEBUG] Step 6: fallback to first disk",
+		},
+		{
+			name:       "tagged but empty result falls back to raw output",
+			out:        "BOOTDISK_RESULT:",
+			realDisks:  []string{"BOOTDISK_RESULT:"},
+			wantResult: "BOOTDISK_RESULT:",
+			wantTrace:  "",
+		},
+		{
+			// No tag: the one line becomes both trace and, via fallback, result.
+			name:       "untagged old-script single-line output accepted",
+			out:        "/dev/sda\n",
+			realDisks:  []string{"/dev/sda"},
+			wantResult: "/dev/sda",
+			wantTrace:  "/dev/sda",
+		},
+		{
+			name:       "result not in realDisks is rejected",
+			out:        "[DEBUG] Step 6: fallback to first disk\nBOOTDISK_RESULT:/dev/sdc",
+			realDisks:  []string{"/dev/sda", "/dev/sdb"},
+			wantResult: "/dev/sdc",
+			wantTrace:  "[DEBUG] Step 6: fallback to first disk",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, trace, err := parseBootDiskResult(tt.out, tt.realDisks)
+			assert.Equal(t, tt.wantResult, result, "result")
+			assert.Equal(t, tt.wantTrace, trace, "trace")
+			if tt.wantErr {
+				assert.Error(t, err, "a result outside realDisks must be rejected, not silently used")
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestMountPersistenceSteps(t *testing.T) {
 	steps := mountPersistenceSteps("/home/fedora/generate-mount-persistence.sh", "--force-uuid")
 
