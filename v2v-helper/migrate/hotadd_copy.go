@@ -42,7 +42,7 @@ type hotAddDiskTransfer struct {
 	DestDevice       string // /dev/sdX on the vJailbreak appliance (destination)
 	SnapshotVMDKPath string // frozen parent VMDK datastore path
 	DiskKey          int32  // vCenter device key — used to detach during cleanup
-	WWID             string // normalised NAA UUID (no dashes, lowercase)
+	SCSITarget       int32  // SCSI target ID this disk was matched on in the guest
 	NBDPort          int    // port qemu-nbd is listening on
 	NBDPid           int    // PID of qemu-nbd daemon on proxy VM
 }
@@ -61,7 +61,6 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	}
 	return getter.GetVCenterClient(), nil
 }
-
 
 // attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
 //
@@ -202,23 +201,40 @@ func getDiskKeys(ctx context.Context, vmObj *object.VirtualMachine) (map[int32]b
 	return keys, nil
 }
 
-// identifyBlockDevices matches proxy VM NAA WWIDs to vCenter disk UUIDs by device key,
-// populating transfer[i].BlockDevice and WWID. Retries up to hotAddIdentifyRetries times.
+// identifyBlockDevices matches proxy VM disks to vCenter disk devices by SCSI
+// target ID rather than NAA WWID (see readGuestSCSIAddresses for why: WWID
+// depends on the controller's VPD page 0x83 passthrough, which LSI Logic
+// Parallel/SAS controllers don't reliably provide, while H:C:T:L addressing
+// comes from the guest kernel's SCSI midlayer and is present regardless of
+// controller emulation). Populates transfer[i].BlockDevice and SCSITarget.
+// Retries up to hotAddIdentifyRetries times.
 func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxissh.Client,
 	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
 ) error {
-	// Get per-device-key UUIDs from vCenter for this proxy VM.
-	keyToUUID, err := migobj.getProxyDiskUUIDs(ctx, proxyVMObj)
+	// Get per-device-key SCSI unit numbers from vCenter for this proxy VM. A
+	// disk's UnitNumber *is* its SCSI target ID on its controller's bus (vSphere
+	// convention: unit 7 is reserved for the controller itself, on both the
+	// vCenter and guest sides, so no offset is needed here).
+	keyToUnit, err := migobj.getProxyDiskAddresses(ctx, proxyVMObj)
 	if err != nil {
-		return errors.Wrap(err, "failed to get proxy VM disk UUIDs from vCenter")
+		return errors.Wrap(err, "failed to get proxy VM disk addresses from vCenter")
 	}
 
 	for attempt := 1; attempt <= hotAddIdentifyRetries; attempt++ {
-		guestMap, err := readGuestWWIDs(sshClient)
+		guestAddrs, err := readGuestSCSIAddresses(sshClient)
 		if err != nil {
-			migobj.logMessage(fmt.Sprintf("WWID read attempt %d/%d failed: %v", attempt, hotAddIdentifyRetries, err))
+			migobj.logMessage(fmt.Sprintf("SCSI address read attempt %d/%d failed: %v", attempt, hotAddIdentifyRetries, err))
 			time.Sleep(hotAddIdentifyRetryWait)
 			continue
+		}
+
+		// Index by target ID. Collisions (two different guest SCSI hosts
+		// exposing the same target) are only possible if the Proxy VM has more
+		// than one active hot-add-eligible controller -- rare, but logged
+		// rather than silently mismatched.
+		targetToDevs := make(map[int32][]string)
+		for _, a := range guestAddrs {
+			targetToDevs[a.Target] = append(targetToDevs[a.Target], a.Device)
 		}
 
 		allMatched := true
@@ -226,19 +242,25 @@ func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxi
 			if transfers[i].BlockDevice != "" {
 				continue // already identified
 			}
-			normUUID, ok := keyToUUID[transfers[i].DiskKey]
+			unit, ok := keyToUnit[transfers[i].DiskKey]
 			if !ok {
-				migobj.logMessage(fmt.Sprintf("Warning: no UUID found for proxy disk key %d (transfer %d)", transfers[i].DiskKey, i))
+				migobj.logMessage(fmt.Sprintf("Warning: no unit number found for proxy disk key %d (transfer %d)", transfers[i].DiskKey, i))
 				allMatched = false
 				continue
 			}
-			dev, ok := guestMap[normUUID]
-			if !ok {
+			devs, ok := targetToDevs[unit]
+			if !ok || len(devs) == 0 {
 				allMatched = false
 				continue
 			}
-			transfers[i].BlockDevice = "/dev/" + dev
-			transfers[i].WWID = normUUID
+			if len(devs) > 1 {
+				migobj.logMessage(fmt.Sprintf(
+					"Warning: SCSI target %d is ambiguous across guest controllers (candidates: %s) -- "+
+						"Proxy VM appears to have more than one active SCSI controller; using %s",
+					unit, strings.Join(devs, ", "), devs[0]))
+			}
+			transfers[i].BlockDevice = "/dev/" + devs[0]
+			transfers[i].SCSITarget = unit
 		}
 
 		if allMatched {
@@ -250,53 +272,89 @@ func (migobj *Migrate) identifyBlockDevices(ctx context.Context, sshClient *esxi
 	return errors.New("could not match all proxy VM disks to block devices after retries")
 }
 
-// getProxyDiskUUIDs returns a map of vCenter device key → normalised UUID for all
-// VirtualDisk devices on the proxy VM.
-func (migobj *Migrate) getProxyDiskUUIDs(ctx context.Context, proxyVMObj *object.VirtualMachine) (map[int32]string, error) {
+// getProxyDiskAddresses returns a map of vCenter device key → SCSI UnitNumber
+// for all VirtualDisk devices on the proxy VM.
+func (migobj *Migrate) getProxyDiskAddresses(ctx context.Context, proxyVMObj *object.VirtualMachine) (map[int32]int32, error) {
 	var props mo.VirtualMachine
 	if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &props); err != nil {
 		return nil, err
 	}
-	result := make(map[int32]string)
+	result := make(map[int32]int32)
 	for _, dev := range props.Config.Hardware.Device {
 		vDisk, ok := dev.(*govmomitypes.VirtualDisk)
 		if !ok {
 			continue
 		}
-		backing, ok := vDisk.Backing.(*govmomitypes.VirtualDiskFlatVer2BackingInfo)
-		if !ok {
+		vd := vDisk.GetVirtualDevice()
+		if vd.UnitNumber == nil {
 			continue
 		}
-		if backing.Uuid == "" {
-			continue
-		}
-		key := dev.GetVirtualDevice().Key
-		norm := strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(backing.Uuid, "-", ""), " ", ""))
-		result[key] = norm
+		result[vd.Key] = *vd.UnitNumber
 	}
 	return result, nil
 }
 
-// readGuestWWIDs SSHes into the proxy VM and returns a map of normalised NAA UUID
-// to block device name (e.g. "sdb").
-func readGuestWWIDs(sshClient *esxissh.Client) (map[string]string, error) {
-	cmd := `for d in /sys/block/sd*; do w=$(cat "$d/device/wwid" 2>/dev/null); case "$w" in naa.*) echo "$(basename $d)|${w#naa.}";; esac; done`
+// scsiAddress is one guest block device's SCSI target ID, as read from the
+// kernel's own SCSI midlayer (not vendor VPD data).
+type scsiAddress struct {
+	Device string // e.g. "sdb"
+	Target int32
+}
+
+// bootControllerDrivers are guest SCSI-host drivers that belong to the Proxy
+// VM's own boot chain (its OS disk, CD-ROM, or USB), never to a hot-added
+// migration disk. Anything else reported by /sys/class/scsi_host -- pvscsi,
+// mptspi, mptsas, BusLogic, etc. -- is treated as a candidate hot-add bus.
+// A blacklist is used instead of a controller-name whitelist so an LSI Logic
+// variant we haven't seen yet still gets matched instead of silently ignored.
+var bootControllerDrivers = map[string]bool{
+	"ahci":        true,
+	"ata_piix":    true,
+	"usb-storage": true,
+}
+
+// readGuestSCSIAddresses SSHes into the proxy VM and returns the SCSI target ID
+// of every /sys/block/sdX device that sits behind a non-boot (i.e. potentially
+// hot-add) SCSI controller. This deliberately avoids /sys/block/sdX/device/wwid:
+// that value depends on the controller emulation correctly passing through
+// SCSI VPD page 0x83, which PVSCSI does but LSI Logic Parallel/SAS do not
+// reliably -- see VJAILB-232. H:C:T:L addressing (host:channel:target:lun) is
+// assigned by the guest kernel itself and is present for every controller type.
+func readGuestSCSIAddresses(sshClient *esxissh.Client) ([]scsiAddress, error) {
+	// Kept as a single line (matching the previous readGuestWWIDs command shape)
+	// since ExecuteCommand's exec channel is not guaranteed to preserve embedded
+	// newlines the same way an interactive shell would.
+	cmd := `for d in /sys/block/sd*; do dev=$(basename "$d"); addr=$(readlink -f "$d/device" 2>/dev/null) || continue; hctl=$(basename "$addr"); host=${hctl%%:*}; proc=$(cat "/sys/class/scsi_host/host${host}/proc_name" 2>/dev/null); echo "$dev|$hctl|$proc"; done`
 	out, err := sshClient.ExecuteCommand(cmd)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]string)
+
+	var addrs []scsiAddress
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		parts := strings.SplitN(line, "|", 2)
-		if len(parts) != 2 {
+		if line == "" {
 			continue
 		}
-		dev := strings.TrimSpace(parts[0])
-		rawWWID := strings.TrimSpace(parts[1])
-		norm := strings.ToLower(strings.ReplaceAll(rawWWID, "-", ""))
-		result[norm] = dev
+		parts := strings.SplitN(line, "|", 3)
+		if len(parts) != 3 {
+			continue
+		}
+		dev, hctl, proc := parts[0], parts[1], parts[2]
+		if bootControllerDrivers[proc] {
+			continue // Proxy VM's own boot/OS controller, not a hot-add target
+		}
+		// hctl is "host:channel:target:lun".
+		hctlParts := strings.Split(hctl, ":")
+		if len(hctlParts) != 4 {
+			continue
+		}
+		target, err := strconv.ParseInt(hctlParts[2], 10, 32)
+		if err != nil {
+			continue
+		}
+		addrs = append(addrs, scsiAddress{Device: dev, Target: int32(target)})
 	}
-	return result, nil
+	return addrs, nil
 }
 
 // findFreePorts reads /proc/net/tcp once and returns count free ports in [rangeMin, rangeMax].
@@ -583,7 +641,7 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 
 	migobj.adjustProxyDiskCount(ctx, len(transfers))
 
-	// 7. Identify block devices on the Proxy VM by matching NAA WWIDs.
+	// 7. Identify block devices on the Proxy VM by matching SCSI target IDs.
 	migobj.logMessage(constants.EventMessageHotAddIdentify)
 	if err := migobj.identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj); err != nil {
 		return errors.Wrap(err, "failed to identify block devices on Proxy VM")
