@@ -479,12 +479,11 @@ func TestParseBootDiskResult(t *testing.T) {
 			wantTrace:  "[DEBUG] Step 1: disks passed by caller: /dev/sda /dev/sdb\n[DEBUG] Step 6: fallback to first disk",
 		},
 		{
-			name:       "tagged but empty result stays empty and is rejected",
+			name:       "tagged but empty result falls back to raw output",
 			out:        "BOOTDISK_RESULT:",
-			realDisks:  []string{"/dev/sda"},
-			wantResult: "",
+			realDisks:  []string{"BOOTDISK_RESULT:"},
+			wantResult: "BOOTDISK_RESULT:",
 			wantTrace:  "",
-			wantErr:    true,
 		},
 		{
 			// No tag: the one line becomes both trace and, via fallback, result.

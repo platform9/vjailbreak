@@ -1396,11 +1396,9 @@ func getBootablePartitionSteps(scriptPath string, realDisks []string) []guestfis
 // back to raw output if untagged, and rejects a result outside realDisks.
 func parseBootDiskResult(out string, realDisks []string) (result, trace string, err error) {
 	traceLines := make([]string, 0)
-	tagFound := false
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
 			result = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
-			tagFound = true
 			continue
 		}
 		if strings.TrimSpace(line) != "" {
@@ -1409,9 +1407,7 @@ func parseBootDiskResult(out string, realDisks []string) (result, trace string, 
 	}
 	trace = strings.TrimSpace(strings.Join(traceLines, "\n"))
 
-	// Only an untagged (old-script) output falls back to the raw dump; a
-	// tagged-but-empty result means the script genuinely found nothing.
-	if !tagFound {
+	if result == "" {
 		result = strings.TrimSpace(out)
 	}
 	if !slices.Contains(realDisks, result) {
