@@ -123,6 +123,24 @@ func (r *ProxyVMReconciler) reconcileNormal(ctx context.Context, proxyVM *vjailb
 	}
 	ctxlog.Info("Discovered Proxy VM IP", "ip", state.ip)
 
+	// Gate onboarding on the Proxy VM having a PVSCSI controller before doing
+	// anything else (including the disk.EnableUUID reboot below) -- this is a
+	// pure vCenter read, no SSH or reboot needed, so it's the cheapest possible
+	// place to reject a misconfigured or BYO Proxy VM. See hasParaVirtualController.
+	pvscsiPresent, otherCtrlType, ctrlErr := hasParaVirtualController(ctx, state.vmObj)
+	if ctrlErr != nil {
+		return r.failVerification(ctx, proxyVM, fmt.Sprintf("failed to inspect Proxy VM disk controllers: %v", ctrlErr))
+	}
+	if !pvscsiPresent {
+		msg := "no VMware Paravirtual (PVSCSI) SCSI controller found on this Proxy VM"
+		if otherCtrlType != "" {
+			msg += fmt.Sprintf(" (found %s instead)", otherCtrlType)
+		}
+		msg += " — Hot-Add copy requires PVSCSI for reliable disk identification in the guest; " +
+			"add a VMware Paravirtual controller to this VM in vCenter and re-run onboarding"
+		return r.failVerification(ctx, proxyVM, msg)
+	}
+
 	if !state.uuidSet {
 		return r.setDiskEnableUUIDAndReboot(ctx, proxyVM, state.vmObj)
 	}
@@ -318,6 +336,36 @@ func (r *ProxyVMReconciler) failVerification(ctx context.Context, proxyVM *vjail
 		return ctrl.Result{}, errors.Wrap(err, "failed to update ProxyVM status")
 	}
 	return ctrl.Result{RequeueAfter: 10 * time.Minute}, nil
+}
+
+// hasParaVirtualController reports whether the Proxy VM has at least one VMware
+// Paravirtual (PVSCSI) SCSI controller. Hot-Add copy attaches migration disks to
+// whatever SCSI controller vCenter's device list returns first; LSI Logic
+// Parallel/SAS and BusLogic controllers don't reliably pass SCSI VPD page 0x83
+// (WWID) through to the guest the way PVSCSI does, which silently breaks disk
+// identification during every migration through this Proxy VM (see VJAILB-232).
+// Gating onboarding on this catches a misconfigured or BYO Proxy VM before it's
+// ever selectable for a migration, instead of failing deep into HotAddCopyDisks
+// after the source VM has already been powered off and snapshotted.
+func hasParaVirtualController(ctx context.Context, vmObj *object.VirtualMachine) (bool, string, error) {
+	deviceList, err := vmObj.Device(ctx)
+	if err != nil {
+		return false, "", err
+	}
+	pvscsiPresent, otherControllerType := classifyProxyControllers(deviceList)
+	return pvscsiPresent, otherControllerType, nil
+}
+
+func classifyProxyControllers(deviceList object.VirtualDeviceList) (pvscsiPresent bool, otherControllerType string) {
+	for _, dev := range deviceList {
+		if _, ok := dev.(*govmomitypes.ParaVirtualSCSIController); ok {
+			return true, ""
+		}
+		if _, ok := dev.(govmomitypes.BaseVirtualSCSIController); ok {
+			otherControllerType = fmt.Sprintf("%T", dev)
+		}
+	}
+	return false, otherControllerType
 }
 
 // isDiskEnableUUIDSet reports whether disk.enableUUID is set to TRUE in the VM's ExtraConfig.
