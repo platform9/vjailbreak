@@ -148,41 +148,13 @@ If no issues found: write only the verdict paragraph. A clean PR needs no findin
 - Code suggestions: fenced Go/bash blocks
 - Each finding: one clear location, one clear problem, one concrete fix
 
-## Step 5: Generate Posting Artifacts
+## Step 5: Generate send_comments.sh
 
-Produce two files: `findings.json` (powers the viewer's "Post to GitHub" UI) and `send_comments.sh` (fallback shell script).
-
-### findings.json
-
-This is read by the eval viewer to render per-finding checkboxes. Build it from your findings:
-
-```json
-{
-  "pr": <number>,
-  "repo": "platform9/vjailbreak",
-  "verdict_flag": "--comment",
-  "summary_body": "PR #<number> review — <title>\n\nVerdict: APPROVE / REQUEST CHANGES\n\n<summary paragraph>",
-  "findings": [
-    {
-      "title": "Finding 1 · MINOR · path/to/file.go:739",
-      "body": "`path/to/file.go:739` — <short title>\n\n<full explanation>\n\nFix: <concrete action>"
-    },
-    {
-      "title": "Finding 2 · MISSING TEST · path/to/other_test.go",
-      "body": "..."
-    }
-  ]
-}
-```
-
-Set `verdict_flag` to `"--request-changes"` only for Critical violations or blocking logic bugs.
-
-### send_comments.sh (fallback)
+Produce `send_comments.sh` — the project's own eval viewer (see Step 6) parses this directly to render one checkbox per block plus a "Post Selected to GitHub" button. The format matters: `PR=`/`REPO=`/`VERDICT=` lines, then one `# ─── Title ───` comment line immediately followed by a `gh pr review`/`gh pr comment` heredoc block per item.
 
 ```bash
 #!/bin/bash
 # Review script for PR #<number>
-# Fallback if the viewer UI is unavailable. Delete any labeled block to skip it.
 
 PR=<number>
 REPO=platform9/vjailbreak
@@ -207,25 +179,25 @@ EOF
 )"
 ```
 
+`PR=` must be a bare number (no quotes), `REPO=` bare (no quotes), `VERDICT=` double-quoted — the parser (`.claude/eval-viewer/generate_review.py::parse_send_comments`) matches these exact shapes.
+
 ## Step 6: Save Outputs and Launch Eval Viewer
 
-Save the review outputs to the workspace and open the eval viewer in the browser.
+The eval viewer lives in **this repo**, at `.claude/eval-viewer/` — not in any shared plugin — so it can't be clobbered by a plugin update and its "Post to GitHub" checkboxes are guaranteed to exist. Save the review outputs to a workspace under this skill's own directory and launch it.
 
 ```bash
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+
 # Delete previous runs for this PR, create fresh single run directory
-WORKSPACE="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/vjailbreak/skills/vjailbreak-pr-review-workspace"
+WORKSPACE="$REPO_ROOT/.claude/skills/vjailbreak-pr-review/workspace"
 rm -rf "$WORKSPACE/pr-<number>"
 RUN_DIR="$WORKSPACE/pr-<number>/run/outputs"
 mkdir -p "$RUN_DIR"
 
-# Write all three output files
+# Write both output files
 cat > "$RUN_DIR/review.md" << 'MDEOF'
 <review.md content>
 MDEOF
-
-cat > "$RUN_DIR/findings.json" << 'JSONEOF'
-<findings.json content>
-JSONEOF
 
 cat > "$RUN_DIR/send_comments.sh" << 'SHEOF'
 <send_comments.sh content>
@@ -238,12 +210,10 @@ cat > "$(dirname $RUN_DIR)/eval_metadata.json" << 'JSONEOF'
 JSONEOF
 
 # Launch eval viewer (opens browser automatically)
-EVAL_VIEWER="$HOME/.claude/plugins/marketplaces/claude-plugins-official/plugins/skill-creator/skills/skill-creator"
-cd "$EVAL_VIEWER"
-python3 eval-viewer/generate_review.py "$WORKSPACE" --skill-name vjailbreak-pr-review &
+python3 "$REPO_ROOT/.claude/eval-viewer/generate_review.py" "$WORKSPACE" --skill-name vjailbreak-pr-review &
 ```
 
-The viewer starts a local HTTP server and opens `http://localhost:3117` in the browser automatically. The **Post to GitHub** section shows checkboxes for the summary and each finding — check the ones you want, then click **Post Selected to GitHub**. The `send_comments.sh` is a fallback if the server is unavailable.
+The viewer starts a local HTTP server and opens `http://localhost:3117` automatically. It parses `send_comments.sh` into blocks and renders one checkbox per block (all **checked by default** — uncheck any you don't want posted) under a collapsible "Post to GitHub" section, with a **Post Selected to GitHub** button. Clicking it `POST`s the checked blocks' `{type, body}` plus `pr`/`repo`/`verdict` to `/api/post-comments` on the local server, which runs `gh pr comment` / `gh pr review` per item and reports ✓/✗ inline.
 
 ## Reference: Module Paths
 

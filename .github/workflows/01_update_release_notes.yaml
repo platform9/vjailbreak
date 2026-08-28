@@ -147,50 +147,15 @@ jobs:
 
       - name: Archive and Delete Old Release Notes
         if: steps.process_release.outputs.processed_release == 'true'
-        run: |
-          echo "Archiving and cleaning old release notes..."
-          mapfile -t ALL_VERSIONS < <(find docs/src/content/docs/release_docs -name "v*.md" -printf "%f\n" | sed -e 's/^v//' -e 's/\.md$//' | sort -V)
-          mapfile -t TOP_5_ARRAY < <(printf '%s\n' "${ALL_VERSIONS[@]}" | tail -n 5)
-
-          if [ ${#TOP_5_ARRAY[@]} -eq 0 ]; then exit 0; fi
-
-          echo "Keeping Top 5 versions:"
-          printf 'v%s\n' "${TOP_5_ARRAY[@]}"
-
-          for v in "${ALL_VERSIONS[@]}"; do
-            IS_IN_TOP_5=false
-            for top_v in "${TOP_5_ARRAY[@]}"; do
-              if [[ "$v" == "$top_v" ]]; then IS_IN_TOP_5=true; break; fi
-            done
-            if ! $IS_IN_TOP_5; then
-              FILE_TO_PROCESS="docs/src/content/docs/release_docs/v${v}.md"
-              if [ -f "$FILE_TO_PROCESS" ]; then
-                echo "Archiving and deleting: v${v}.md"
-                awk 'BEGIN { in_yaml=0 } /^---$/ { in_yaml = !in_yaml; next } in_yaml { if ($1 == "title:") { sub(/^title:[[:space:]]*v/, "## v"); print; }; next; } { sub(/^##/, "###"); print }' "$FILE_TO_PROCESS" >> docs/src/content/docs/archives/release_notes.md
-                rm "$FILE_TO_PROCESS"
-              fi
-            fi
-          done
+        uses: platform9/vjailbreak/.github/actions/archive-old-release-notes@main
 
       - name: Create PR with changes
         if: steps.process_release.outputs.processed_release == 'true'
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "GitHub Actions Bot"
-          
-          TIMESTAMP=$(date +%s)
-          NEW_BRANCH="update-release-docs-$TIMESTAMP"
-          RELEASE_TAG="${{ steps.process_release.outputs.release_tag }}"
-          
-          git checkout -b "$NEW_BRANCH"
-          git add docs/
-          
-          if ! git diff --cached --quiet; then
-            git commit -m "docs: Update for release $RELEASE_TAG"
-            git push origin "$NEW_BRANCH"
-            gh pr create --base gh-pages --head "$NEW_BRANCH" --title "docs: Update for release $RELEASE_TAG" --body "This PR was automatically generated."
-          else
-            echo "No changes were detected to create a pull request."
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: platform9/vjailbreak/.github/actions/create-docs-pr@main
+        with:
+          branch-prefix: update-release-docs
+          commit-message: "docs: Update for release ${{ steps.process_release.outputs.release_tag }}"
+          pr-title: "docs: Update for release ${{ steps.process_release.outputs.release_tag }}"
+          pr-body: "This PR was automatically generated."
+          retry: 'false'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

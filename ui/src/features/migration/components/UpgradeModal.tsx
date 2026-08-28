@@ -290,6 +290,9 @@ export const UpgradeModal = ({ show, onClose }) => {
               disabled={areVersionsLoading || upgradeMutation.isPending || busy}
               displayEmpty
               size="small"
+              renderValue={(value) =>
+                (value as string) || (areVersionsLoading ? 'Loading versions...' : 'Select a version...')
+              }
             >
               <MenuItem value="">
                 {areVersionsLoading ? 'Loading versions...' : 'Select a version...'}

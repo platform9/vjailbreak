@@ -1,0 +1,31 @@
+name: 'Archive Old Release Notes'
+description: 'Archives release note docs older than the 5 most recent versions into a single archive file, deleting the originals.'
+runs:
+  using: composite
+  steps:
+    - name: Archive and Delete Old Release Notes
+      shell: bash
+      run: |
+        echo "Archiving and cleaning old release notes..."
+        mapfile -t ALL_VERSIONS < <(find docs/src/content/docs/release_docs -name "v*.md" -printf "%f\n" | sed -e 's/^v//' -e 's/\.md$//' | sort -V)
+        mapfile -t TOP_5_ARRAY < <(printf '%s\n' "${ALL_VERSIONS[@]}" | tail -n 5)
+
+        if [ ${#TOP_5_ARRAY[@]} -eq 0 ]; then exit 0; fi
+
+        echo "Keeping Top 5 versions:"
+        printf 'v%s\n' "${TOP_5_ARRAY[@]}"
+
+        for v in "${ALL_VERSIONS[@]}"; do
+          IS_IN_TOP_5=false
+          for top_v in "${TOP_5_ARRAY[@]}"; do
+            if [[ "$v" == "$top_v" ]]; then IS_IN_TOP_5=true; break; fi
+          done
+          if ! $IS_IN_TOP_5; then
+            FILE_TO_PROCESS="docs/src/content/docs/release_docs/v${v}.md"
+            if [ -f "$FILE_TO_PROCESS" ]; then
+              echo "Archiving and deleting: v${v}.md"
+              awk 'BEGIN { in_yaml=0 } /^---$/ { in_yaml = !in_yaml; next } in_yaml { if ($1 == "title:") { sub(/^title:[[:space:]]*v/, "## v"); print; }; next; } { sub(/^##/, "###"); print }' "$FILE_TO_PROCESS" >> docs/src/content/docs/archives/release_notes.md
+              rm "$FILE_TO_PROCESS"
+            fi
+          fi
+        done

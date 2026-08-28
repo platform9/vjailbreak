@@ -298,6 +298,21 @@ const (
 	// waiting for the ACPI shutdown to take effect.
 	LDMShutdownPollInterval = 10 * time.Second
 
+	// UpgradeDeploymentWaitTimeout bounds the wait for a vjailbreak deployment to
+	// become ready, or to scale to zero, during an upgrade or rollback.
+	UpgradeDeploymentWaitTimeout = 5 * time.Minute
+
+	// UpgradeDeploymentPollInterval is how often that readiness is re-checked.
+	UpgradeDeploymentPollInterval = 10 * time.Second
+
+	// UpgradeCleanupDrainTimeout bounds the wait for the credential finalizers to
+	// finish removing the resources they own after pre-upgrade cleanup.
+	UpgradeCleanupDrainTimeout = 3 * time.Minute
+
+	// UpgradeCleanupDrainPollInterval is how often the remaining resources are
+	// re-counted while waiting for that cascade.
+	UpgradeCleanupDrainPollInterval = 5 * time.Second
+
 	// LDMProbeDetachTimeout bounds the hot-detach of the probe on the "keep on SATA"
 	// path. A guest that never loaded viostor may never acknowledge the unplug, which
 	// is the usual reason for choosing this answer, so expiry is not an error.
@@ -387,6 +402,10 @@ const (
 	HotplugCPUMaxKey    = "HOTPLUG_CPU_MAX"
 	HotplugMemoryMaxKey = "HOTPLUG_MEMORY_MAX"
 
+	// TargetFlavorIDKey is the migration ConfigMap key holding the OpenStack
+	// flavor ID the VM will be created with. Read back by v2v-helper.
+	TargetFlavorIDKey = "TARGET_FLAVOR_ID"
+
 	// Number of intervals to wait for the volume to become available
 	MaxIntervalCount = 60
 
@@ -422,11 +441,11 @@ const (
 	// let a reconcile that landed before the gate event was created resolve the phase to
 	// Succeeded, and nothing woke the controller afterwards to correct it.
 	EventMessageLDMGuestCreatedOnSATA = "VM with SATA created successfully"
-	EventMessageMigrationFailed                   = "Trying to perform cleanup"
-	EventMessageCopyingDisk                       = "Copying disk"
-	EventMessageFailed                            = "Failed to"
-	EventMessageWarningPrefix                     = "Warning:"
-	EventDisconnect                               = "Disconnected network interfaces"
+	EventMessageMigrationFailed       = "Trying to perform cleanup"
+	EventMessageCopyingDisk           = "Copying disk"
+	EventMessageFailed                = "Failed to"
+	EventMessageWarningPrefix         = "Warning:"
+	EventDisconnect                   = "Disconnected network interfaces"
 	// EventMessageDataCopied is sent by v2v-helper when data-only mode completes disk copy/conversion.
 	EventMessageDataCopied = "DataOnly mode: disk copy and conversion complete, skipping VM creation"
 
@@ -856,4 +875,53 @@ const (
 var (
 	// ProxyVMRequiredComponents lists the binaries that must be present on the Proxy VM
 	ProxyVMRequiredComponents = []string{"qemu-nbd"}
+)
+
+// Guestfish batching constants (v2v-helper/virtv2v): candidate files, section
+// markers, and marker templates used to batch several guestfish/guestmount
+// commands into one appliance boot. Internal to that package.
+const (
+	MkinitrdLVMWrapperPath = "/home/fedora/mkinitrd-lvm-wrapper.sh"
+
+	MkinitrdCheckMarker     = "---VJB-MKINITRD---"
+	DracutUsrBinCheckMarker = "---VJB-DRACUT-USRBIN---"
+	DracutSbinCheckMarker   = "---VJB-DRACUT-SBIN---"
+	MkinitrdOrigCheckMarker = "---VJB-MKINITRD-ORIG---"
+
+	PartitionDevMarkerTemplate  = "---VJB-PART-%d-DEV---"
+	PartitionNumMarkerTemplate  = "---VJB-PART-%d-NUM---"
+	PartitionBootMarkerTemplate = "---VJB-PART-%d-BOOT---"
+	PartitionIdxMarkerTemplate  = "---VJB-PART-%d-IDX---"
+	InterfaceFileMarkerTemplate = "---VJB-IFCFG-%d---"
+
+	// GuestfishOutput* select RunGuestfishScript's output handling: lowercased
+	// for a fail-fast chain, raw/combined-raw for a tolerant batch read back
+	// with splitByMarker (combined-raw also folds a failed step's error text
+	// into the output - see GetOsReleaseAllVolumes).
+	GuestfishOutputLowercased  = "lowercased"
+	GuestfishOutputRaw         = "raw"
+	GuestfishOutputCombinedRaw = "combined_raw"
+)
+
+var (
+	// OSReleaseCandidateFiles is where GetOsRelease/GetOsReleaseAllVolumes
+	// look for the guest's OS release info, most-specific first.
+	OSReleaseCandidateFiles = []string{
+		"/etc/os-release",     // Modern systems (Ubuntu 16+, RHEL 7+, SUSE 12+)
+		"/etc/redhat-release", // RHEL/CentOS legacy
+		"/etc/SuSE-release",   // SLES 11 and older
+	}
+
+	// OSReleaseMarkers are OSReleaseCandidateFiles's section markers, same order.
+	OSReleaseMarkers = []string{
+		"---VJB-OSREL-0---",
+		"---VJB-OSREL-1---",
+		"---VJB-OSREL-2---",
+	}
+
+	// FixLegacyMkinitrdCheckMarkers collects the four mkinitrd/dracut markers
+	// for splitByMarker.
+	FixLegacyMkinitrdCheckMarkers = []string{
+		MkinitrdCheckMarker, DracutUsrBinCheckMarker, DracutSbinCheckMarker, MkinitrdOrigCheckMarker,
+	}
 )

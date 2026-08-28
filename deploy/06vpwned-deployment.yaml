@@ -20,8 +20,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
@@ -40,7 +38,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.9
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -49,6 +47,8 @@ spec:
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
+          appArmorProfile:
+            type: Unconfined
           capabilities:
             add:
             - DAC_OVERRIDE

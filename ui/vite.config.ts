@@ -22,7 +22,12 @@ export default defineConfig(({ mode }) => {
       // For dev mode: proxy api requests with the /dev-api prefix to the target server.
       proxy: {
         "/dev-api": {
-          target: `${env.VITE_API_HOST}`,
+          // Without a fallback an unset VITE_API_HOST becomes the literal string
+          // "undefined", and the proxy then tries to resolve a host by that name. On a
+          // developer machine that fails instantly; on CI it goes through the search
+          // domain and stalls for seconds on every request the specs do not stub, which
+          // made the E2E suite ~12x slower there. A dead local port refuses immediately.
+          target: env.VITE_API_HOST || "http://127.0.0.1:9",
           changeOrigin: true,
           secure: false, // Allow self-signed certificates for HTTPS
           ws: true, // Enable WebSocket support for Kubernetes exec API

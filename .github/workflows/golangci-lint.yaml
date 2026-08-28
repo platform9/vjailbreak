@@ -5,6 +5,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   # Optional: allow read access to pull request. Use with `only-new-issues` option.
@@ -20,6 +24,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.24.x'
+          cache-dependency-path: k8s/migration/go.sum
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:

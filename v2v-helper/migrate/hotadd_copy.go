@@ -34,6 +34,14 @@ const (
 	hotAddIdentifyRetryWait = 5 * time.Second
 	hotAddNBDCopyRetries    = 3
 	hotAddNBDCopyRetryWait  = 10 * time.Second
+
+	// maxSCSIControllerUnits is the unit-number space findPreferredDiskController
+	// scans per controller (0-15, unit 7 reserved), the classic 15-target SCSI
+	// limit. PVSCSI can address more units on newer hardware versions, but that
+	// depends on VM hardware version and guest driver support we can't assume
+	// for every Proxy VM, so this stays at the conservative, universally-safe
+	// value rather than the higher figure some PVSCSI configurations support.
+	maxSCSIControllerUnits = 16
 )
 
 // hotAddDiskTransfer holds per-disk state for the Hot-Add copy process.
@@ -61,7 +69,6 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 	}
 	return getter.GetVCenterClient(), nil
 }
-
 
 // attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
 //
@@ -153,7 +160,7 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to get proxy VM device list")
 	}
-	controller, err := deviceList.FindDiskController("")
+	controller, err := findPreferredDiskController(deviceList)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to find available disk controller on proxy VM")
 	}
@@ -185,6 +192,61 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 		}
 	}
 	return 0, fmt.Errorf("could not determine device key for newly attached disk %s", vmdkPath)
+}
+
+// findPreferredDiskController returns a VMware Paravirtual (PVSCSI) SCSI
+// controller that has a free unit-number slot, if the Proxy VM has one.
+// PVSCSI reliably passes SCSI VPD page 0x83 (WWID) through to the guest,
+// which readGuestWWIDs depends on to identify hot-added disks; LSI Logic
+// Parallel/SAS and BusLogic controllers don't reliably do this (see
+// VJAILB-232). deviceList.FindDiskController("") has no controller-type
+// preference and will happily hand back a non-PVSCSI controller even when a
+// PVSCSI one is also present and has room -- which is exactly what happens
+// once a Proxy VM has more than one SCSI controller. This does not create
+// any device; it only chooses among controllers already on the VM, so it
+// needs no permission beyond the read+AddDevice this function already used.
+// Falls back to FindDiskController("") only if no PVSCSI controller has
+// room -- the ProxyVM onboarding gate (proxyvm_controller.go) should prevent
+// a Proxy VM without one from ever being usable, but this keeps the old
+// behavior as a safety net rather than a hard failure.
+func findPreferredDiskController(deviceList object.VirtualDeviceList) (govmomitypes.BaseVirtualController, error) {
+	// Count occupied unit numbers per controller key so "has a PVSCSI
+	// controller" doesn't wrongly match one that's already full.
+	usedUnits := make(map[int32]map[int32]bool)
+	for _, dev := range deviceList {
+		vd := dev.GetVirtualDevice()
+		if vd.ControllerKey == 0 || vd.UnitNumber == nil {
+			continue
+		}
+		if usedUnits[vd.ControllerKey] == nil {
+			usedUnits[vd.ControllerKey] = make(map[int32]bool)
+		}
+		usedUnits[vd.ControllerKey][*vd.UnitNumber] = true
+	}
+
+	for _, dev := range deviceList {
+		pvscsi, ok := dev.(*govmomitypes.ParaVirtualSCSIController)
+		if !ok {
+			continue
+		}
+		key := pvscsi.GetVirtualDevice().Key
+		full := true
+		for unit := int32(0); unit < maxSCSIControllerUnits; unit++ {
+			if unit == 7 { // reserved for the controller itself
+				continue
+			}
+			if !usedUnits[key][unit] {
+				full = false
+				break
+			}
+		}
+		if !full {
+			return pvscsi, nil
+		}
+	}
+
+	// No PVSCSI controller with room -- fall back to whatever's available.
+	return deviceList.FindDiskController("")
 }
 
 // getDiskKeys returns a set of VirtualDisk device keys currently on a VM.

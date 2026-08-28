@@ -179,7 +179,8 @@ test.describe('RET-001 — retry opens the migration form pre-populated', () => 
     const sourceSummary = page.getByTestId('retry-source-destination-summary')
     await expect(sourceSummary).toBeVisible()
     await expect(sourceSummary).toContainText('vcenter-cred-1')
-    await expect(sourceSummary).toContainText('DC1')
+    // The summary shows credentials and clusters only — the datacenter is prefilled into
+    // form state (RetryMigration.tsx renders no datacenter cell), so it is not asserted here.
     await expect(sourceSummary).toContainText('cluster-1')
     await expect(sourceSummary).toContainText('pcd-cred-1')
     await expect(sourceSummary).toContainText('pcd-cluster-1')
@@ -534,7 +535,7 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
     expect(vmOverrides?.[0].UserAssignedIP).toBe('10.0.0.50')
   })
 
-  test('new plan spec sends networkOverridesPerVM: null when original plan had no overrides', async ({
+  test('new plan spec rebuilds networkOverridesPerVM from form state when the original plan had none', async ({
     page,
   }) => {
     const calls: RecordedCall[] = []
@@ -591,12 +592,16 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
     await page.getByTestId('migration-form-retry').click()
     await expectDrawerClosed(page)
 
-    // null explicitly clears any stale overrides on the new plan.
+    // buildRetryPlanSpec derives overrides from the form's NIC state, not from the old
+    // plan: the retrying VM has one NIC, so one entry is emitted with the preserve
+    // defaults and — crucially — no stale UserAssignedIP.
     const clonePlanIdx = order.findIndex((o) => o === 'POST clone-plan')
     const clonePlanPost = clonePlanIdx >= 0 ? calls[clonePlanIdx] : undefined
     expect(clonePlanPost).toBeDefined()
     const cloneSpec = clonePlanPost?.body?.spec as Record<string, unknown>
-    expect(cloneSpec?.networkOverridesPerVM).toBeNull()
+    expect(cloneSpec?.networkOverridesPerVM).toEqual({
+      [MOCK_RETRY_VM_KEY]: [{ interfaceIndex: 0, preserveIP: true, preserveMAC: true }],
+    })
   })
 
   test('"Assign IP" dialog shows user-assigned IP from original plan, not raw VMware IP', async ({
@@ -621,7 +626,10 @@ test.describe('RET-005 — IP overrides are preserved and sent on Retry', () => 
 // ─── RET-006: multi-VM plan warning banner ────────────────────────────────────
 
 test.describe('RET-006 — multi-VM plan shows shared-plan warning banner', () => {
-  test('banner visible when plan contains more than one VM', async ({ page }) => {
+  // The shared-plan warning banner was built on the original edit-and-retry branch
+  // (a01c2d76) but never landed on main — RetryMigration.tsx renders no such banner.
+  // Kept as fixme so the expectation is not silently lost if the banner is restored.
+  test.fixme('banner visible when plan contains more than one VM', async ({ page }) => {
     await mockRetryPrefillRoutes(page)
     await page.unroute(API.migrationPlanByName(MOCK_RETRY_PLAN_NAME))
     await mockRoute(
@@ -838,8 +846,8 @@ test.describe('RET-007 — Retry on multi-VM plan patches original plan first', 
 
     // Drawer stays open on error.
     await expect(page.getByTestId('migration-form-drawer')).toBeVisible()
-    await expect(page.getByTestId('retry-error-message')).toBeVisible({ timeout: 10_000 })
-    await expect(page.getByTestId('retry-error-message')).toContainText(
+    await expect(page.getByTestId('retry-error-banner')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByTestId('retry-error-banner')).toContainText(
       'Failed to apply edits and retry',
     )
 

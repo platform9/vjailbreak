@@ -23,7 +23,11 @@ const mockPodResolution = (podRef: string | undefined, podNames: string[]) => {
 
 describe('migration pod label patching', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    // resetAllMocks, not clearAllMocks: clearAllMocks only wipes recorded calls and leaves
+    // the mockResolvedValueOnce queue behind. Tests that throw before the pod list is
+    // fetched consume just one of their two queued values, and the leftover is then served
+    // to the next test as its getMigration response.
+    vi.resetAllMocks()
     mockedAxios.patch.mockResolvedValue(undefined)
   })
 

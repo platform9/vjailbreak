@@ -35,6 +35,9 @@ on:
         type: boolean
         default: false
 
+permissions:
+  contents: read
+
 env:
   PACKER_VERSION: "latest"
   QCOW2_IMG: ${{ vars.REGISTRY || 'quay.io' }}/${{ vars.REPO || 'platform9' }}/vjailbreak
@@ -55,6 +58,9 @@ env:
 jobs:
   determine-release:
     runs-on: ubuntu-latest
+    concurrency:
+      group: ${{ github.workflow }}-determine-release-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
     outputs:
       is_release: ${{ env.release_found }}
       is_nightly: ${{ github.event.inputs.is_nightly }}
@@ -65,6 +71,7 @@ jobs:
       qcow2_img: ${{ steps.set_env.outputs.qcow2_img }}
       vpwned_img: ${{ steps.set_env.outputs.vpwned_img }}
       ai_img: ${{ steps.set_env.outputs.ai_img }}
+      ui_changed: ${{ steps.ui_changes.outputs.ui_changed }}
 
     steps:
       - name: Checkout repository
@@ -72,6 +79,40 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch || github.ref }}
           fetch-depth: 0
+
+      # Gates the Playwright E2E job: it only runs when the change actually touches the UI.
+      # PRs and branch pushes are diffed; release / manual / nightly runs always validate.
+      - name: Check for UI changes
+        id: ui_changes
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request)
+              BASE="${{ github.event.pull_request.base.sha }}"
+              HEAD="${{ github.event.pull_request.head.sha }}"
+              git fetch --no-tags origin "$BASE" "$HEAD" 2>/dev/null || true
+              CHANGED=$(git diff --name-only "$BASE" "$HEAD" || echo "ui/")
+              ;;
+            push)
+              BEFORE="${{ github.event.before }}"
+              if [[ -z "$BEFORE" || "$BEFORE" == "0000000000000000000000000000000000000000" ]]; then
+                CHANGED="ui/"
+              else
+                CHANGED=$(git diff --name-only "$BEFORE" "${{ github.sha }}" || echo "ui/")
+              fi
+              ;;
+            *)
+              CHANGED="ui/"
+              ;;
+          esac
+
+          # Changes to this workflow count too, so edits to the gate exercise the gate.
+          if grep -qE '^(ui/|\.github/workflows/packer\.yml$)' <<< "$CHANGED"; then
+            echo "ui_changed=true" >> $GITHUB_OUTPUT
+            echo "UI changes detected - Playwright E2E will run."
+          else
+            echo "ui_changed=false" >> $GITHUB_OUTPUT
+            echo "No UI changes - Playwright E2E will be skipped."
+          fi
 
       - name: Check PR Title
         id: check_pr
@@ -153,9 +194,129 @@ jobs:
           echo "ai_img=${{ env.AI_IMG }}:${TAG}" >> $GITHUB_OUTPUT
           echo "Final tag generated: ${TAG}"
 
-  build-ui:
+  # Vitest covers the unit layer the browser tests cannot reach: pure helpers, reducers and
+  # hooks.
+  ui-unit:
+    name: UI unit tests (vitest)
     runs-on: ubuntu-latest
     needs: determine-release
+    if: needs.determine-release.outputs.ui_changed == 'true'
+    timeout-minutes: 10
+    concurrency:
+      group: ${{ github.workflow }}-ui-unit-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: ui
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: ui/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      # Discovers every *.test.ts / *.test.tsx under ui/src automatically - a new unit test
+      # file needs no workflow change.
+      - name: Run unit tests
+        run: yarn test
+
+  ui-e2e:
+    name: Playwright E2E (${{ matrix.shard }}/8)
+    runs-on: ubuntu-latest
+    needs: determine-release
+    if: needs.determine-release.outputs.ui_changed == 'true'
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+    concurrency:
+      group: ${{ github.workflow }}-ui-e2e-${{ matrix.shard }}-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
+    defaults:
+      run:
+        working-directory: ui
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: ui/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Typecheck E2E specs
+        run: npx tsc -p e2e/tsconfig.json --noEmit
+
+      - name: Resolve Playwright version
+        id: pw_version
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        id: pw_cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw_version.outputs.version }}
+
+      # On a cache hit only the OS-level libs are needed; the browser binaries are restored.
+      - name: Install Playwright browsers
+        run: |
+          if [[ "${{ steps.pw_cache.outputs.cache-hit }}" == "true" ]]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
+
+      # playwright.config.ts builds and serves the bundle itself (webServer -> pw:serve),
+      # and every spec stubs its backend calls with page.route(), so no vCenter /
+      # OpenStack / Kubernetes access is needed. A single failing spec fails this shard,
+      # which fails the ui-e2e dependency as a whole.
+      - name: Run Playwright E2E tests
+        run: yarn pw:run --shard=${{ matrix.shard }}/8
+        env:
+          CI: true
+
+      # Artifact names must be unique per shard or the uploads collide.
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: ui/playwright-report/
+          retention-days: 7
+
+  build-ui:
+    runs-on: ubuntu-latest
+    needs: [determine-release, ui-unit, ui-e2e]
+    # Both test jobs are skipped on non-UI changes, which must not block the image build;
+    # a failed or cancelled run must.
+    if: |
+      always() &&
+      needs.determine-release.result == 'success' &&
+      (needs.ui-unit.result == 'success' || needs.ui-unit.result == 'skipped') &&
+      (needs.ui-e2e.result == 'success' || needs.ui-e2e.result == 'skipped')
+    concurrency:
+      group: ${{ github.workflow }}-build-ui-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -187,6 +348,9 @@ jobs:
   build-v2v-helper:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-v2v-helper-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -221,6 +385,9 @@ jobs:
   build-controller:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-controller-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -232,6 +399,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: 'k8s/migration/go.mod'
+          cache-dependency-path: 'k8s/migration/go.sum'
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -258,6 +426,9 @@ jobs:
   build-vpwned:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-vpwned-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -289,6 +460,9 @@ jobs:
   build-vjailbreak-ai:
     runs-on: ubuntu-latest
     needs: determine-release
+    concurrency:
+      group: ${{ github.workflow }}-build-vjailbreak-ai-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: true
 
     steps:
       - name: Checkout repository
@@ -320,9 +494,13 @@ jobs:
   push-images:
     runs-on: ubuntu-latest
     needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai]
+    concurrency:
+      group: ${{ github.workflow }}-push-images-${{ github.event_name }}-${{ github.ref }}
+      cancel-in-progress: false
     if: |
+      !cancelled() &&
       needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
+      needs.build-ui.result == 'success' &&
       (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
       (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
       (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
@@ -419,15 +597,12 @@ jobs:
         
   post-build:
     runs-on: ubuntu-latest
-    needs: [determine-release, build-ui, build-v2v-helper, build-controller, build-vpwned, build-vjailbreak-ai, push-images]
+    # push-images already gates on every build job, so re-checking them here would only
+    # duplicate that. determine-release stays for its image-tag outputs.
+    needs: [determine-release, push-images]
     if: |
-      needs.determine-release.result == 'success' &&
-      (needs.build-ui.result == 'success' || needs.build-ui.result == 'skipped') &&
-      (needs.build-v2v-helper.result == 'success' || needs.build-v2v-helper.result == 'skipped') &&
-      (needs.build-controller.result == 'success' || needs.build-controller.result == 'skipped') &&
-      (needs.build-vpwned.result == 'success' || needs.build-vpwned.result == 'skipped') &&
-      (needs.build-vjailbreak-ai.result == 'success' || needs.build-vjailbreak-ai.result == 'skipped') &&
-      (needs.push-images.result == 'success')
+      !cancelled() &&
+      needs.push-images.result == 'success'
 
     steps:
 
@@ -576,6 +751,7 @@ jobs:
         with:
           name: vjailbreak-qcow2
           path: ./vjailbreak_qcow2/vjailbreak-image.qcow2
+          retention-days: 1
 
       - name: Set AWS credentials based on build type
         id: set-creds
@@ -645,6 +821,7 @@ jobs:
         with:
           name: s3-urls
           path: s3-urls.txt
+          retention-days: 1
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -657,3 +834,4 @@ jobs:
             image_builder/deploy/version-config.yaml
             image_builder/deploy/version-checker.yaml
             image_builder/deploy/vjailbreak-settings.yaml
+          retention-days: 7

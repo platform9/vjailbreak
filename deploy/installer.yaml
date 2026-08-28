@@ -3300,6 +3300,14 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackName:
+                description: |-
+                  OpenstackName is the name of the VM as it exists in OpenStack/PCD.
+                  For the master node, this is fetched from the OpenStack server object.
+                  For worker (agent) nodes, this is the name the VM was created with,
+                  derived from the master node's OpenstackName so agents are identifiable
+                  as belonging to their primary vjailbreak VM.
+                type: string
               openstackUUID:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
@@ -5212,7 +5220,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.4.9
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -5299,8 +5307,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
@@ -5319,7 +5325,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.9
+        image: quay.io/platform9/vjailbreak-vpwned:main
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -5328,6 +5334,8 @@ spec:
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
+          appArmorProfile:
+            type: Unconfined
           capabilities:
             add:
             - DAC_OVERRIDE
@@ -5448,7 +5456,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.9
+          image: quay.io/platform9/vjailbreak-ui:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -5737,7 +5745,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:v0.4.9
+          image: quay.io/platform9/vjailbreak-ai:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

@@ -46,6 +46,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -529,4 +530,161 @@ func quoteArg(s string) string {
 	}
 	b.WriteByte('"')
 	return b.String()
+}
+
+// Multi-step guestfish scripts: batch several commands into one guestfish
+// invocation so several appliance boots collapse into one. See guestfishStep,
+// runGuestfishScript, and splitByMarker below.
+
+// guestfishStep is one command in a multi-step guestfish script. Marker ==
+// "" is fail-fast (aborts the rest on failure); Marker != "" is tolerant
+// (wrapped in "echo <marker>" + guestfish's "-" prefix) - see splitByMarker.
+type guestfishStep struct {
+	Command string
+	Args    []string
+	Marker  string
+}
+
+// buildScriptLines renders steps into the guestfish script body appended
+// after mountScript's mount preamble.
+func buildScriptLines(steps []guestfishStep) string {
+	var b strings.Builder
+	for _, step := range steps {
+		if step.Marker != "" {
+			fmt.Fprintf(&b, "echo %s\n", step.Marker)
+			b.WriteString("- ")
+		}
+		b.WriteString(guestfishLine(step.Command, step.Args...))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// describeSteps renders steps for a log line, the multi-step equivalent of
+// the single guestfishLine(command, args...) callers already log today.
+func describeSteps(steps []guestfishStep) string {
+	parts := make([]string, 0, len(steps))
+	for _, step := range steps {
+		parts = append(parts, guestfishLine(step.Command, step.Args...))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// prepareGuestfishScript is prepareGuestfishCommand's multi-step sibling: it
+// resolves the same mount plan and builds one guestfish invocation that
+// mounts it and then runs every step in steps, instead of a single command.
+func prepareGuestfishScript(disks []vm.VMDisk, write bool, steps ...guestfishStep) (*exec.Cmd, error) {
+	plan, err := resolveMountPlan(disks)
+	if err != nil {
+		return nil, err
+	}
+
+	option := "--ro"
+	if write {
+		option = "--rw"
+	}
+	cmd := exec.Command("guestfish", option)
+	for _, disk := range disks {
+		cmd.Args = append(cmd.Args, "-a", disk.Path)
+	}
+	// Commands go on stdin rather than after "--", same reason as
+	// prepareGuestfishCommand: the mount preamble has to be prepended, and a
+	// failed non-root mount has to be tolerated with guestfish's "-" prefix.
+	cmd.Stdin = strings.NewReader(mountScript(plan, write) + buildScriptLines(steps))
+	return cmd, nil
+}
+
+// runGuestfishScript backs RunGuestfishScript's switch: prepare, boot, run,
+// return raw output - one boot regardless of step count. combined folds
+// each step's own error text into the output (see GetOsReleaseAllVolumes).
+func runGuestfishScript(disks []vm.VMDisk, write, combined bool, steps ...guestfishStep) (string, error) {
+	cmd, err := prepareGuestfishScript(disks, write, steps...)
+	if err != nil {
+		return "", fmt.Errorf("failed to prepare guestfish script: %w", err)
+	}
+
+	log.Printf("Executing %s -- %s", cmd.String(), describeSteps(steps))
+
+	if combined {
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		err = cmd.Run()
+		if err != nil {
+			return "", fmt.Errorf("failed to run guestfish script: %v: %s", err, strings.TrimSpace(buf.String()))
+		}
+		return buf.String(), nil
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	err = cmd.Run()
+	if stderrBuf.Len() > 0 {
+		log.Printf("guestfish stderr (script): %s", strings.TrimSpace(stderrBuf.String()))
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to run guestfish script: %v: %s", err, strings.TrimSpace(stderrBuf.String()))
+	}
+	return stdoutBuf.String(), nil
+}
+
+// RunGuestfishScript is the single entry point for a multi-step guestfish
+// script, one appliance boot regardless of step count. outputMode (see
+// constants.GuestfishOutput* for what each one means) picks how the result is handled.
+func RunGuestfishScript(disks []vm.VMDisk, write bool, outputMode string, steps ...guestfishStep) (string, error) {
+	os.Setenv("LIBGUESTFS_BACKEND", "direct")
+	switch outputMode {
+	case constants.GuestfishOutputLowercased:
+		out, err := runGuestfishScript(disks, write, false, steps...)
+		if err != nil {
+			return "", err
+		}
+		return strings.ToLower(out), nil
+	case constants.GuestfishOutputRaw:
+		return runGuestfishScript(disks, write, false, steps...)
+	case constants.GuestfishOutputCombinedRaw:
+		return runGuestfishScript(disks, write, true, steps...)
+	default:
+		return "", fmt.Errorf("RunGuestfishScript: unknown output mode %q", outputMode)
+	}
+}
+
+// splitByMarker splits combined guestfish script output into per-step text
+// blocks (see guestfishStep), keyed by markers. A marker with no output
+// still gets an entry mapped to "" - distinct from never appearing at all.
+func splitByMarker(out string, markers []string) map[string]string {
+	known := make(map[string]bool, len(markers))
+	for _, m := range markers {
+		known[m] = true
+	}
+
+	sections := make(map[string]string)
+	var current string
+	var buf []string
+
+	flush := func() {
+		if current != "" {
+			sections[current] = strings.TrimSpace(strings.Join(buf, "\n"))
+		}
+		buf = nil
+	}
+
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if known[trimmed] {
+			flush()
+			current = trimmed
+			continue
+		}
+		if current != "" {
+			buf = append(buf, trimmed)
+		}
+	}
+	flush()
+
+	return sections
 }
