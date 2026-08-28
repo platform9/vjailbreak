@@ -13,6 +13,15 @@ fi
 
 bootdisk=""
 
+# True if $1 is one of $disks (or $disks is empty - nothing to scope against).
+in_disk_list() {
+  [ -z "$disks" ] && return 0
+  for d in $disks; do
+    [ "$d" = "$1" ] && return 0
+  done
+  return 1
+}
+
 # Step 2: GRUB MBR signature or bios_grub partition
 for disk in $disks; do
   if dd if="$disk" bs=512 count=1 2>/dev/null | grep -aq 'GRUB'; then
@@ -37,6 +46,10 @@ if [ -z "$bootdisk" ]; then
   echo "[DEBUG] Step 3: boot_entry=$boot_entry boot_uuid=$boot_uuid"
   if [ -n "$boot_uuid" ] && ! echo "$boot_uuid" | grep -q '^/dev/'; then
     bootdisk=$(blkid 2>/dev/null | grep "$boot_uuid" | awk -F: '{sub(/[0-9][0-9]*$/, "", $1); print $1; exit}')
+    if [ -n "$bootdisk" ] && ! in_disk_list "$bootdisk"; then
+      echo "[DEBUG] Step 3: resolved $bootdisk is outside \$disks, discarding"
+      bootdisk=""
+    fi
     echo "[DEBUG] Step 3: resolved bootdisk=$bootdisk"
   fi
 fi
@@ -56,6 +69,10 @@ if [ -z "$bootdisk" ]; then
     fi
   else
     bootdisk=$(echo "$root_dev" | sed 's/[0-9][0-9]*$//')
+  fi
+  if [ -n "$bootdisk" ] && ! in_disk_list "$bootdisk"; then
+    echo "[DEBUG] Step 4: resolved $bootdisk is outside \$disks, discarding"
+    bootdisk=""
   fi
   echo "[DEBUG] Step 4: resolved bootdisk=$bootdisk"
 fi
