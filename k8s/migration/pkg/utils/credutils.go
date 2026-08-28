@@ -20,6 +20,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/pkg/errors"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -1746,7 +1747,7 @@ func getCinderVolumeBackendPools(ctx context.Context, openstackClients *OpenStac
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to list all storage backend pools")
 	}
-	pools, err := schedulerstats.ExtractStoragePools(allStoragePoolPages)
+	pools, err := extractStoragePools(allStoragePoolPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract all storage backend pools")
 	}
@@ -2138,7 +2139,66 @@ func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1
 	}
 }
 
+// storagePoolSummary decodes only the schedulerstats pool fields this package
+// actually needs. Some vendor Cinder drivers (e.g. Hitachi Vantara) report
+// capabilities.location_info as a nested JSON object rather than the plain
+// string schedulerstats.Capabilities expects; decoding the full gophercloud
+// type then fails for every pool in the scheduler-stats response, not just
+// the offending one. Decoding this narrower shape sidesteps that.
+type storagePoolSummary struct {
+	Name         string `json:"name"`
+	Capabilities struct {
+		VendorName        string `json:"vendor_name"`
+		DriverVersion     string `json:"driver_version"`
+		VolumeBackendName string `json:"volume_backend_name"`
+	} `json:"capabilities"`
+}
+
+// extractStoragePools decodes a schedulerstats.List page into storagePoolSummary
+// instead of gophercloud's schedulerstats.ExtractStoragePools, so a vendor-specific
+// capabilities shape on one pool can't break extraction for the rest (see
+// storagePoolSummary).
+func extractStoragePools(p pagination.Page) ([]storagePoolSummary, error) {
+	var s struct {
+		Pools []storagePoolSummary `json:"pools"`
+	}
+	err := p.(schedulerstats.StoragePoolPage).ExtractInto(&s)
+	return s.Pools, err
+}
+
 // GetBackendPools discovers and returns storage backend pools from OpenStack Cinder
+// resolveVolumeTypeForPool resolves the Cinder volume type name for a pool.
+//
+// backendToVolumeType is keyed by the driver-reported volume_backend_name
+// capability (see buildBackendToVolumeTypeMap) — the same value Cinder
+// itself matches against a volume type's extra_specs.volume_backend_name
+// when scheduling. That is the correct join key, and it can differ from the
+// cinder.conf backend-section name parsed out of the pool's
+// "host@backend#pool" string (e.g. a backend section named
+// "hitachi-primary" whose driver reports volume_backend_name
+// "hitach-primary") — joining on the parsed section name in that case
+// silently resolves to the wrong volume type.
+//
+// volumeBackendNameCapability is the pool's own volume_backend_name
+// capability; parsedBackendName is the parsed backend-section name, used as
+// the join key only when the driver doesn't report the capability. This is
+// best-effort: when neither lookup matches (e.g. the Cinder volume-types API
+// call failed, or no volume type maps to this backend), volumeType is left
+// blank rather than falling back to the pool-name "#"-suffix, since that
+// suffix is not actually a volume type name and can be silently wrong (see
+// the Hitachi case above). fromAPI reports whether the result came from the
+// authoritative Cinder API lookup, for caller logging.
+func resolveVolumeTypeForPool(backendToVolumeType map[string]string, volumeBackendNameCapability, parsedBackendName string) (volumeType string, fromAPI bool, key string) {
+	key = volumeBackendNameCapability
+	if key == "" {
+		key = parsedBackendName
+	}
+	if vtName, ok := backendToVolumeType[key]; ok {
+		return vtName, true, key
+	}
+	return "", false, key
+}
+
 func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Discovering backend pools from OpenStack Cinder")
@@ -2176,7 +2236,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 		return nil, errors.Wrap(err, "failed to list backend pools")
 	}
 
-	backendPools, err := schedulerstats.ExtractStoragePools(poolPages)
+	backendPools, err := extractStoragePools(poolPages)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract backend pools")
 	}
@@ -2196,7 +2256,7 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 	for _, pool := range backendPools {
 		vendor := pool.Capabilities.VendorName
 		driver := pool.Capabilities.DriverVersion
-		poolVolumeType, backendName := parsePoolName(pool.Name)
+		_, backendName := parsePoolName(pool.Name)
 
 		// Get Cinder host from volume services API (preferred) or fall back to pool name parsing
 		var cinderHost string
@@ -2209,14 +2269,11 @@ func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcred
 			ctxlog.Info("Using Cinder host from pool name", "backend", backendName, "host", cinderHost)
 		}
 
-		// Use the authoritative volume type from Cinder volume types API
-		// Fall back to pool name parsing if not found
-		volumeType := poolVolumeType
-		if vtName, ok := backendToVolumeType[backendName]; ok {
-			volumeType = vtName
-			ctxlog.Info("Using volume type from Cinder volume types API", "backend", backendName, "volumeType", volumeType)
+		volumeType, fromAPI, volumeBackendNameKey := resolveVolumeTypeForPool(backendToVolumeType, pool.Capabilities.VolumeBackendName, backendName)
+		if fromAPI {
+			ctxlog.Info("Using volume type from Cinder volume types API", "backend", backendName, "volumeBackendName", volumeBackendNameKey, "volumeType", volumeType)
 		} else {
-			ctxlog.Info("Volume type not found in Cinder API, using pool name parsing", "backend", backendName, "volumeType", volumeType)
+			ctxlog.Info("Volume type not found in Cinder API, leaving blank (best effort)", "backend", backendName, "volumeBackendName", volumeBackendNameKey)
 		}
 
 		backendMap[backendName] = map[string]string{
@@ -2346,7 +2403,7 @@ func getCinderVolumeServiceHosts(ctx context.Context, cinderClient *gophercloud.
 }
 
 // GetArrayVendor normalizes and returns the storage array vendor name from a vendor string
-// Supports Pure Storage and NetApp arrays (issue #1421)
+// Supports Pure Storage, NetApp, and Hitachi Vantara arrays (issue #1421)
 func GetArrayVendor(vendor string) string {
 	// Convert vendor to lowercase
 	vendor = strings.ToLower(vendor)
@@ -2356,6 +2413,9 @@ func GetArrayVendor(vendor string) string {
 	}
 	if strings.Contains(vendor, "netapp") {
 		return "netapp"
+	}
+	if strings.Contains(vendor, "hitachi") {
+		return "vantara"
 	}
 	return "unsupported"
 }

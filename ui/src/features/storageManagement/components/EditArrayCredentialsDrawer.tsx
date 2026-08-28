@@ -38,6 +38,8 @@ interface FormData {
   skipSslVerification: boolean
   netAppSvm?: string
   netAppFlexVol?: string
+  vantaraPoolId?: string
+  vantaraRestPort?: string
 }
 
 type ValidationStatus = 'idle' | 'validating' | 'success' | 'failed'
@@ -70,7 +72,9 @@ export default function EditArrayCredentialsDrawer({
       password: '',
       skipSslVerification: false,
       netAppSvm: credential.spec?.netAppConfig?.svm || '',
-      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || ''
+      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || '',
+      vantaraPoolId: credential.spec?.vantaraConfig?.poolId || '',
+      vantaraRestPort: credential.spec?.vantaraConfig?.restPort || ''
     }
   })
 
@@ -91,8 +95,10 @@ export default function EditArrayCredentialsDrawer({
       password: '',
       skipSslVerification: false,
       netAppSvm: credential.spec?.netAppConfig?.svm || '',
-      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || ''
-    })
+      netAppFlexVol: credential.spec?.netAppConfig?.flexVol || '',
+      vantaraPoolId: credential.spec?.vantaraConfig?.poolId || '',
+      vantaraRestPort: credential.spec?.vantaraConfig?.restPort || ''
+})
   }, [credential, reset])
 
   const handleClose = () => {
@@ -203,6 +209,9 @@ export default function EditArrayCredentialsDrawer({
         },
         data.vendorType === 'netapp'
           ? { svm: data.netAppSvm ?? '', flexVol: data.netAppFlexVol ?? '' }
+          : undefined,
+        data.vendorType === 'vantara'
+          ? { poolId: data.vantaraPoolId ?? '', restPort: data.vantaraRestPort ?? '' }
           : undefined,
         namespace
       )

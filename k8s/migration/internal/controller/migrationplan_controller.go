@@ -39,6 +39,7 @@ import (
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	netappsdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/netapp"
+	vantarasdk "github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage/vantara"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 
@@ -1868,6 +1869,10 @@ func (r *MigrationPlanReconciler) setMigrationEnv(
 			configMapData["NETAPP_SVM"] = arraycreds.Spec.NetAppConfig.SVM
 			configMapData["NETAPP_FLEXVOL"] = arraycreds.Spec.NetAppConfig.FlexVol
 		}
+		if arraycreds.Spec.VendorType == vantarasdk.VendorName && arraycreds.Spec.VantaraConfig != nil {
+			configMapData["VANTARA_POOL_ID"] = arraycreds.Spec.VantaraConfig.PoolID
+			configMapData["VANTARA_REST_PORT"] = arraycreds.Spec.VantaraConfig.RESTPort
+		}
 	} else if migrationtemplate.Spec.StorageCopyMethod == constants.HotAddCopyMethod && proxyVM != nil {
 		configMapData["STORAGE_COPY_METHOD"] = constants.HotAddCopyMethod
 		configMapData["PROXY_VM_IP"] = proxyVM.Status.IPAddress
@@ -2358,9 +2363,11 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		if storageCopyMethodRequiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2427,6 +2434,14 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
+}
+
+// storageCopyMethodRequiresVDDK reports whether a migration's data copy path
+// goes through virt-v2v/VDDK. StorageAcceleratedCopy (XCOPY/array LUN copy)
+// and HotAdd (proxy-VM disk attach) copy disks without VDDK, so the VDDK
+// directory requirement doesn't apply to them.
+func storageCopyMethodRequiresVDDK(storageCopyMethod string) bool {
+	return storageCopyMethod != StorageCopyMethod && storageCopyMethod != constants.HotAddCopyMethod
 }
 
 func (r *MigrationPlanReconciler) validateVDDKPresence(

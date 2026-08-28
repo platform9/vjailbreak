@@ -11,11 +11,11 @@ import (
 
 	cindervolumes "github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/pkg/errors"
+	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
-	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	"github.com/vmware/govmomi/object"
@@ -150,18 +150,34 @@ func (migobj *Migrate) StorageAcceleratedCopyCopyDisks(ctx context.Context, vmin
 // copyDiskViaStorageAcceleratedCopy copies a single disk using StorageAcceleratedCopy XCOPY
 func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, esxiClient *esxissh.Client,
 	idx int, vminfo *vm.VMInfo, hostIP string,
-) (storage.Volume, error) {
+) (_ storage.Volume, retErr error) {
 	startTime := time.Now()
 
 	vmDisk := vminfo.VMDisks[idx]
 
 	defer func() {
-		migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY completed in %s (total: %s) for disk %s",
-			time.Since(startTime).Round(time.Second), time.Since(startTime).Round(time.Second), vmDisk.Name))
+		elapsed := time.Since(startTime).Round(time.Second)
+		if retErr != nil {
+			migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY failed after %s for disk %s: %v",
+				elapsed, vmDisk.Name, retErr))
+		} else {
+			migobj.logMessage(fmt.Sprintf("StorageAcceleratedCopy XCOPY completed in %s for disk %s",
+				elapsed, vmDisk.Name))
+		}
 		migobj.StorageProvider.Disconnect()
 	}()
 	// Step 1: Initialize storage provider
-	migobj.InitializeStorageProvider(ctx)
+	if err := migobj.InitializeStorageProvider(ctx); err != nil {
+		return storage.Volume{}, errors.Wrap(err, "failed to initialize storage provider")
+	}
+
+	// Load the ArrayCreds for this disk's datastore up front: its MappingMode
+	// decides how the target LUN is exposed to the ESXi host, and
+	// manageVolumeToCinder needs the same object later (single fetch).
+	arrayCreds, err := migobj.resolveArrayCreds(ctx, vmDisk)
+	if err != nil {
+		return storage.Volume{}, errors.Wrapf(err, "failed to resolve array creds for disk %s", vmDisk.Name)
+	}
 
 	// Step 2: Get all ESXi host HBA adapters (IQN for iSCSI, fc.WWNN:WWPN for FC)
 	hostAdapters, err := esxiClient.GetAllHostAdapters()
@@ -170,10 +186,28 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	}
 	migobj.logMessage(fmt.Sprintf("ESXi host adapters: %v", hostAdapters))
 
-	// Step 3: Map host adapters to initiator group on the storage array
+	// Step 3: Select the mapping path (vendor-native vs Cinder fallback) and
+	// map the host adapters to an initiator group / connector.
+	mapper, mapperDesc, err := selectMapper(migobj.StorageProvider, migobj.Openstackclients, arrayCreds.Spec.MappingMode, hostIP)
+	if err != nil {
+		return storage.Volume{}, errors.Wrap(err, "failed to select LUN mapper")
+	}
+	migobj.logMessage(fmt.Sprintf("selectMapper: using %s", mapperDesc))
+
+	// Check to get poolId for vantara backed systems. vantara provider implements CinderBackendPoolAware
+	// hence this if will be true for vantara.
+	if hinter, ok := migobj.StorageProvider.(storage.CinderBackendPoolAware); ok {
+		if hint := cinderPoolHintFromArrayCreds(arrayCreds); hint != "" {
+			if err := hinter.ApplyCinderPoolHint(ctx, hint); err != nil {
+				return storage.Volume{}, errors.Wrapf(err, "failed to apply Cinder backend pool hint %q", hint)
+			}
+			migobj.logMessage(fmt.Sprintf("Applied Cinder backend pool hint %q to storage provider", hint))
+		}
+	}
+
 	initiatorGroup := "vjailbreak-xcopy"
 	migobj.logMessage(fmt.Sprintf("Creating/updating initiator group: %s", initiatorGroup))
-	mappingContext, err := migobj.StorageProvider.CreateOrUpdateInitiatorGroup(initiatorGroup, hostAdapters)
+	mappingContext, err := mapper.CreateOrUpdateInitiatorGroup(ctx, initiatorGroup, hostAdapters)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to create initiator group %s", initiatorGroup)
 	}
@@ -196,7 +230,7 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	// Step 5: Cinder manage the volume FIRST
 	// This renames the volume on Pure to volume-<cinder-id>-cinder
 	migobj.logMessage(fmt.Sprintf("Cinder managing the volume %s", targetVolume.Name))
-	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume.Name, vmDisk)
+	cinderVolumeId, err := migobj.manageVolumeToCinder(ctx, targetVolume, arrayCreds)
 	if err != nil {
 		return storage.Volume{}, errors.Wrapf(err, "failed to Cinder manage volume %s", targetVolume.Name)
 	}
@@ -221,13 +255,14 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 	migobj.logMessage(fmt.Sprintf("Mapping target volume %s to ESXi host", cinderVolumeName))
 	targetVol := storage.Volume{
 		Name: cinderVolumeName, // Use the Cinder-renamed volume name
+		Id:   targetVolume.Id,  // vendor volume/LDEV id; unaffected by the Cinder rename
 		NAA:  targetVolume.NAA,
 		Size: targetVolume.Size,
 		OpenstackVol: storage.OpenstackVolume{
 			ID: cinderVolumeId,
 		},
 	}
-	_, err = migobj.StorageProvider.MapVolumeToGroup(initiatorGroup, targetVol, mappingContext)
+	_, err = mapper.MapVolumeToGroup(ctx, initiatorGroup, targetVol, mappingContext)
 	if err != nil {
 		// Accept the operation when the array tells us the LUN is already
 		// mapped (idempotent retry); surface every other error so we fail
@@ -240,13 +275,30 @@ func (migobj *Migrate) copyDiskViaStorageAcceleratedCopy(ctx context.Context, es
 		}
 	}
 
-	// Cleanup function to unmap after copy
+	// Cleanup function to unmap after copy. Runs under a fresh timeout
+	// context: on failure paths the migration ctx may already be canceled,
+	// and the unmap must still execute.
 	defer func() {
 		migobj.logMessage("Cleaning up volume mappings")
-		if err := migobj.StorageProvider.UnmapVolumeFromGroup(initiatorGroup, targetVol, mappingContext); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		if err := mapper.UnmapVolumeFromGroup(cleanupCtx, initiatorGroup, targetVol, mappingContext); err != nil {
+			migobj.logMessage(fmt.Sprintf("Warning: Failed to unmap target volume: %v", err))
 		}
 	}()
+
+	// Some providers (e.g. Hitachi Vantara on some arrays/firmware) don't know
+	// the volume's NAA until after it's mapped to a host - CreateVolume leaves
+	// it empty and the provider implements storage.PostMappingNAAResolver to
+	// resolve it now that mapping is done.
+	if resolver, ok := migobj.StorageProvider.(storage.PostMappingNAAResolver); ok {
+		migobj.logMessage(fmt.Sprintf("Resolving NAA for volume %s after mapping", targetVol.Name))
+		naa, err := resolver.ResolveVolumeNAA(ctx, targetVol)
+		if err != nil {
+			return storage.Volume{}, errors.Wrapf(err, "failed to resolve NAA for volume %s after mapping", targetVol.Name)
+		}
+		targetVolume.NAA = naa
+	}
 
 	// Step 6: Rescan ESXi storage and wait for target volume to appear
 	migobj.logMessage(fmt.Sprintf("Waiting for target volume %s to appear on ESXi", targetVolume.NAA))
@@ -380,15 +432,15 @@ func (migobj *Migrate) getHostIPAddress(ctx context.Context, host *object.HostSy
 	return "", fmt.Errorf("no management IP found for host")
 }
 
-// manageVolumeToCinder manages an existing storage array volume into Cinder
-// Uses the ManageExistingVolume function which matches the tested RDM controller pattern
-func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName string, vmDisk vm.VMDisk) (string, error) {
-	migobj.logMessage(fmt.Sprintf("Managing volume %s into Cinder", volumeName))
-
+// resolveArrayCreds looks up the ArrayCreds object backing the datastore of
+// the given disk via the ArrayCredsMapping CR. Hoisted out of
+// manageVolumeToCinder so callers can read spec.MappingMode before any
+// mapping call and reuse the same object without a second fetch.
+func (migobj *Migrate) resolveArrayCreds(ctx context.Context, vmDisk vm.VMDisk) (vjailbreakv1alpha1.ArrayCreds, error) {
 	// Get array creds mapping to find the correct ArrayCreds for this datastore
 	arrayCredsMapping, err := k8sutils.GetArrayCredsMapping(ctx, migobj.K8sClient, migobj.ArrayCredsMapping)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get array creds mapping")
+		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds mapping")
 	}
 
 	dataStoreName := vmDisk.Datastore
@@ -401,13 +453,22 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 	}
 
 	if arrayCredsName == "" {
-		return "", fmt.Errorf("no array creds found for datastore %s", dataStoreName)
+		return vjailbreakv1alpha1.ArrayCreds{}, fmt.Errorf("no array creds found for datastore %s", dataStoreName)
 	}
 
 	arrayCreds, err := k8sutils.GetArrayCreds(ctx, migobj.K8sClient, arrayCredsName)
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get array creds")
+		return vjailbreakv1alpha1.ArrayCreds{}, errors.Wrap(err, "failed to get array creds")
 	}
+
+	return arrayCreds, nil
+}
+
+// manageVolumeToCinder manages an existing storage array volume into Cinder
+// Uses the ManageExistingVolume function which matches the tested RDM controller pattern
+func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, targetVolume storage.Volume, arrayCreds vjailbreakv1alpha1.ArrayCreds) (string, error) {
+	volumeName := targetVolume.Name
+	migobj.logMessage(fmt.Sprintf("Managing volume %s into Cinder", volumeName))
 
 	// Build the Cinder host string - prefer autodiscovery
 	backendName := arrayCreds.Spec.OpenStackMapping.CinderBackendName
@@ -433,9 +494,15 @@ func (migobj *Migrate) manageVolumeToCinder(ctx context.Context, volumeName stri
 
 	volumeType := arrayCreds.Spec.OpenStackMapping.VolumeType
 
-	// Volume reference for storage array - use source-name
+	// Volume reference for storage array. Default is source-name; providers
+	// whose Cinder driver needs a different reference (e.g. Hitachi HBSD
+	// resolves source-id = LDEV id) override it via CinderManageRefBuilder.
 	volumeRef := map[string]interface{}{
 		"source-name": volumeName,
+	}
+	if builder, ok := migobj.StorageProvider.(storage.CinderManageRefBuilder); ok {
+		volumeRef = builder.BuildCinderManageRef(targetVolume)
+		migobj.logMessage(fmt.Sprintf("Using provider-specific Cinder manage ref: %v", volumeRef))
 	}
 
 	migobj.logMessage(fmt.Sprintf("Importing volume to Cinder: host=%s, type=%s, ref=%v", cinderHost, volumeType, volumeRef))
@@ -483,7 +550,7 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 		return "", errors.Wrap(err, "failed to get Cinder volume services")
 	}
 
-	// Type assert to the concrete struct slice from utils package
+	// Type assert to the concrete struct slice from openstack package
 	serviceList, ok := servicesInterface.([]openstack.CinderVolumeService)
 	if !ok {
 		return "", fmt.Errorf("unexpected type from GetCinderVolumeServices: %T", servicesInterface)
@@ -508,4 +575,20 @@ func (migobj *Migrate) autodiscoverCinderHost(ctx context.Context, backendName s
 	}
 
 	return "", fmt.Errorf("no active Cinder volume service found for backend: %s", backendName)
+}
+
+// cinderPoolHintFromArrayCreds extracts the Cinder backend's pool for this
+// array from the ArrayCreds OpenStack mapping: the dedicated
+// CinderBackendPool field first, else the "#pool" suffix of an explicitly
+// configured CinderHost ("host@backend#pool"). Returns "" when the mapping
+// carries no pool information (e.g. autodiscovered service hosts).
+func cinderPoolHintFromArrayCreds(arrayCreds vjailbreakv1alpha1.ArrayCreds) string {
+	if pool := strings.TrimSpace(arrayCreds.Spec.OpenStackMapping.CinderBackendPool); pool != "" {
+		return pool
+	}
+	host := arrayCreds.Spec.OpenStackMapping.CinderHost
+	if idx := strings.LastIndex(host, "#"); idx >= 0 && idx+1 < len(host) {
+		return strings.TrimSpace(host[idx+1:])
+	}
+	return ""
 }

@@ -73,6 +73,10 @@ export const createArrayCredsWithSecret = async (
     svm?: string
     flexVol?: string
   },
+  vantaraConfig?: {
+    poolId?: string
+    restPort?: string
+  },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/arraycreds`
@@ -112,6 +116,12 @@ export const createArrayCredsWithSecret = async (
     credBody.spec.netAppConfig = {}
     if (netAppConfig.svm) credBody.spec.netAppConfig.svm = netAppConfig.svm
     if (netAppConfig.flexVol) credBody.spec.netAppConfig.flexVol = netAppConfig.flexVol
+  }
+
+  if (vendorType === 'vantara' && vantaraConfig && (vantaraConfig.poolId || vantaraConfig.restPort)) {
+    credBody.spec.vantaraConfig = {}
+    if (vantaraConfig.poolId) credBody.spec.vantaraConfig.poolId = vantaraConfig.poolId
+    if (vantaraConfig.restPort) credBody.spec.vantaraConfig.restPort = vantaraConfig.restPort
   }
 
   const response = await axios.post<ArrayCreds>({
@@ -154,6 +164,10 @@ export const updateArrayCredsWithSecret = async (
     svm?: string
     flexVol?: string
   },
+  vantaraConfig?: {
+    poolId?: string
+    restPort?: string
+  },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
   const endpoint = `${VJAILBREAK_API_BASE_PATH}/namespaces/${namespace}/arraycreds/${name}`
@@ -187,6 +201,12 @@ export const updateArrayCredsWithSecret = async (
     patchBody.spec.netAppConfig = {}
     if (netAppConfig.svm) patchBody.spec.netAppConfig.svm = netAppConfig.svm
     if (netAppConfig.flexVol) patchBody.spec.netAppConfig.flexVol = netAppConfig.flexVol
+  }
+
+  if (vendorType === 'vantara' && vantaraConfig && (vantaraConfig.poolId || vantaraConfig.restPort)) {
+    patchBody.spec.vantaraConfig = {}
+    if (vantaraConfig.poolId) patchBody.spec.vantaraConfig.poolId = vantaraConfig.poolId
+    if (vantaraConfig.restPort) patchBody.spec.vantaraConfig.restPort = vantaraConfig.restPort
   }
 
   const response = await axios.patch<ArrayCreds>({

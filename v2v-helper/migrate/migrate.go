@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -20,7 +21,6 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -72,8 +72,11 @@ type Migrate struct {
 	// NetApp-only. Left empty for non-NetApp vendors; when empty for NetApp
 	// the provider falls back to auto-detection from existing LUNs or a
 	// single-SVM/single-FlexVol auto-pick.
-	NetAppSVM         string
-	NetAppFlexVol     string
+	NetAppSVM     string
+	NetAppFlexVol string
+	// Hitachi Vantara-specific targeting. Empty for non-Vantara arrays.
+	VantaraPoolID     string
+	VantaraRESTPort   string
 	StorageProvider   storage.StorageProvider
 	ESXiSSHPrivateKey []byte
 	ESXiSSHSecretName string // Name of the Kubernetes secret containing ESXi SSH private key

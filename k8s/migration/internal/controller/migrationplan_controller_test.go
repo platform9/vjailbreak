@@ -651,6 +651,31 @@ func TestDataCopiedIsTerminalInTriggerMigration(t *testing.T) {
 	}
 }
 
+// TestStorageCopyMethodRequiresVDDK verifies that StorageAcceleratedCopy (XCOPY)
+// and HotAdd (proxy-VM disk attach) skip the VDDK presence check, since neither
+// copies disk data through virt-v2v/VDDK, while the default VDDK-based path
+// still requires it.
+func TestStorageCopyMethodRequiresVDDK(t *testing.T) {
+	tests := []struct {
+		name              string
+		storageCopyMethod string
+		want              bool
+	}{
+		{"empty (default cold/hot VDDK copy)", "", true},
+		{"normal", "normal", true},
+		{"StorageAcceleratedCopy", StorageCopyMethod, false},
+		{"HotAdd", constants.HotAddCopyMethod, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := storageCopyMethodRequiresVDDK(tt.storageCopyMethod); got != tt.want {
+				t.Errorf("storageCopyMethodRequiresVDDK(%q) = %v, want %v", tt.storageCopyMethod, got, tt.want)
+			}
+		})
+	}
+}
+
 // TestSetMigrationSpecificFields_DataOnly verifies that setMigrationSpecificFields
 // writes DATA_ONLY into the configmap for both true and false cases.
 func TestSetMigrationSpecificFields_DataOnly(t *testing.T) {

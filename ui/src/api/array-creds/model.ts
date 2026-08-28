@@ -50,6 +50,11 @@ export interface NetAppConfig {
   flexVol?: string
 }
 
+export interface VantaraConfig {
+  poolId?: string
+  restPort?: string
+}
+
 export interface ArrayCredsSpec {
   vendorType: string
   secretRef?: {
@@ -58,6 +63,7 @@ export interface ArrayCredsSpec {
   openstackMapping?: OpenstackMapping
   autoDiscovered?: boolean
   netAppConfig?: NetAppConfig
+  vantaraConfig?: VantaraConfig
 }
 
 export interface BackendTarget {
@@ -90,6 +96,7 @@ export const ARRAY_CREDS_PHASE_NEEDS_BACKEND_SELECTION = 'NeedsBackendSelection'
 export const ARRAY_VENDOR_TYPES = [
   { value: 'pure', label: 'Pure Storage' },
   { value: 'netapp', label: 'NetApp Storage' },
+  { value: 'vantara', label: 'Hitachi Vantara' },
   { value: 'unsupported', label: 'N/A' }
 ] as const
 

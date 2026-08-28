@@ -34,6 +34,22 @@ type StorageProvider interface {
 	// GetAllVolumeNAAs retrieves NAA identifiers for all volumes on the array
 	GetAllVolumeNAAs() ([]string, error)
 
+	// ResolveCinderVolumeToLUN resolves a persistent volume name to a storage Volume/LUN.
+	ResolveCinderVolumeToLUN(volumeName string) (Volume, error)
+
+	// WhoAmI returns the provider name
+	WhoAmI() string
+}
+
+// VendorMapper is the optional vendor-native LUN-mapping surface. Providers
+// that expose target LUNs to the ESXi host through the array's own API
+// (host objects, initiator groups, LUN maps) implement it in addition to
+// StorageProvider; Pure and NetApp satisfy it as-is. Providers without it
+// rely on the Cinder os-initialize_connection fallback selected in
+// v2v-helper (see sdk/storage/cinder). Callers type-assert:
+//
+//	mapper, ok := provider.(VendorMapper)
+type VendorMapper interface {
 	// CreateOrUpdateInitiatorGroup creates or updates an initiator group with the provided HBA identifiers.
 	// Returns a MappingContext that contains provider-specific information needed for mapping.
 	CreateOrUpdateInitiatorGroup(initiatorGroupName string, hbaIdentifiers []string) (MappingContext, error)
@@ -47,12 +63,41 @@ type StorageProvider interface {
 
 	// GetMappedGroups retrieves the initiator groups a target volume is currently mapped to.
 	GetMappedGroups(targetVolume Volume, context MappingContext) ([]string, error)
+}
 
-	// ResolveCinderVolumeToLUN resolves a persistent volume name to a storage Volume/LUN.
-	ResolveCinderVolumeToLUN(volumeName string) (Volume, error)
+// CinderManageRefBuilder is an optional interface for providers whose Cinder
+// driver needs a non-default reference for the manageable_volumes (manage
+// existing) API. Without it, callers default to {"source-name": <name>}.
+// Example: Hitachi's HBSD driver resolves {"source-id": <LDEV id>}
+// unambiguously, while its source-name lookup requires dash-free labels.
+type CinderManageRefBuilder interface {
+	// BuildCinderManageRef returns the existing-volume reference passed to
+	// Cinder's os-volume-manage API for the given vendor volume.
+	BuildCinderManageRef(vol Volume) map[string]interface{}
+}
 
-	// WhoAmI returns the provider name
-	WhoAmI() string
+// CinderBackendPoolAware is an optional interface for providers that can
+// derive their volume-placement target (e.g. Hitachi's DP pool) from the
+// Cinder backend mapping already configured on the ArrayCreds. Callers pass
+// the backend's pool component — the openstackMapping.cinderBackendPool
+// field or the "#pool" suffix of a "host@backend#pool" Cinder host string —
+// and the provider resolves it against the array. Providers must treat an
+// explicitly configured placement option as taking precedence over the hint.
+type CinderBackendPoolAware interface {
+	ApplyCinderPoolHint(ctx context.Context, poolHint string) error
+}
+
+// PostMappingNAAResolver is an optional interface for providers whose NAA/WWN
+// identifier is not known at CreateVolume time and only becomes available
+// after the volume is mapped to a host (e.g. some Hitachi Vantara arrays
+// don't populate an LDEV's naaId until it has an assigned server). This is
+// the exception, not the rule: providers like Pure and NetApp derive NAA
+// deterministically from a volume attribute (e.g. serial number) at creation
+// time, independent of host mapping, and do not need this interface.
+// Callers must invoke ResolveVolumeNAA after LUN mapping succeeds and use
+// its result in place of the (possibly empty) Volume.NAA from CreateVolume.
+type PostMappingNAAResolver interface {
+	ResolveVolumeNAA(ctx context.Context, vol Volume) (string, error)
 }
 
 // MappingContext holds context information for volume mapping
