@@ -588,7 +588,7 @@ func TestBuildPlan(t *testing.T) {
 		// inspect-os returns the same device path twice.
 		const ldm = "/dev/mapper/ldm_vol_WIN-3RP74FF6NOG-Dg0_Volume1"
 
-		plan, err := planFromProbe([]string{ldm, ldm}, map[string]string{ldm: "1234abcd"}, nil)
+		plan, err := buildPlan([]string{ldm, ldm}, map[string]string{ldm: "1234abcd"}, nil)
 
 		assert.NoError(t, err)
 		assert.Equal(t, ldm, plan.Root)

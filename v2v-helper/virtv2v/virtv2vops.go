@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1377,38 +1378,95 @@ func FixLegacyMkinitrd(disks []vm.VMDisk) error {
 	return nil
 }
 
-// getBootablePartitionSteps builds the upload+chmod+sh sequence
-// RunGetBootablePartitionScript runs in one appliance boot instead of
-// three.
-func getBootablePartitionSteps(scriptPath string) []guestfishStep {
+// getBootablePartitionSteps passes realDisks to the script as args, so its
+// heuristics never see the appliance's own disk; nil/empty falls back to no args.
+func getBootablePartitionSteps(scriptPath string, realDisks []string) []guestfishStep {
+	shCommand := "/tmp/get-bootable-partition.sh"
+	if len(realDisks) > 0 {
+		shCommand = shCommand + " " + strings.Join(realDisks, " ")
+	}
 	return []guestfishStep{
 		{Command: "upload", Args: []string{scriptPath, "/tmp/get-bootable-partition.sh"}},
 		{Command: "chmod", Args: []string{"0755", "/tmp/get-bootable-partition.sh"}},
-		{Command: "sh", Args: []string{"/tmp/get-bootable-partition.sh"}},
+		{Command: "sh", Args: []string{shCommand}},
 	}
 }
 
-func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
-	// Script should be available in the container at /home/fedora/
-	scriptPath := "/home/fedora/get-bootable-partition.sh"
+// parseBootDiskResult splits stdout into BOOTDISK_RESULT and trace, falling
+// back to raw output if untagged, and rejects a result outside realDisks.
+func parseBootDiskResult(out string, realDisks []string) (result, trace string, err error) {
+	traceLines := make([]string, 0)
+	tagFound := false
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "BOOTDISK_RESULT:") {
+			result = strings.TrimSpace(strings.TrimPrefix(line, "BOOTDISK_RESULT:"))
+			tagFound = true
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			traceLines = append(traceLines, line)
+		}
+	}
+	trace = strings.TrimSpace(strings.Join(traceLines, "\n"))
 
-	// Check if script exists in the container
+	// Only an untagged (old-script) output falls back to the raw dump; a
+	// tagged-but-empty result means the script genuinely found nothing.
+	if !tagFound {
+		result = strings.TrimSpace(out)
+	}
+	if !slices.Contains(realDisks, result) {
+		err = fmt.Errorf("get-bootable-partition.sh returned %q, which is not one of the real attached disks %v; refusing to use it", result, realDisks)
+	}
+	return result, trace, err
+}
+
+func RunGetBootablePartitionScript(disks []vm.VMDisk) (string, error) {
+	scriptPath := "/home/fedora/get-bootable-partition.sh"
 	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("get-bootable-partition.sh script not found at %s", scriptPath)
 	}
 
-	// Upload, chmod, and run in one boot instead of three: no step carries
-	// a Marker, so a failure aborts the rest. The script's debug trace goes
-	// to stderr, only the real answer to stdout, used as-is (uncased).
-	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath)...)
+	// list-devices excludes the appliance's own disk (unlike the script's raw
+	// scan); pass it to the script so it can never pick that disk as bootable.
+	realDisksStr, listErr := RunCommandInGuestAllVolumes(disks, "list-devices", false)
+	if listErr != nil {
+		return "", fmt.Errorf("failed to list real guest devices via list-devices: %v: %s", listErr, strings.TrimSpace(realDisksStr))
+	}
+	realDisks := strings.Fields(strings.TrimSpace(realDisksStr))
+	if len(realDisks) == 0 {
+		return "", errors.New("list-devices returned no attached disks")
+	}
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh: real attached disks per list-devices (appliance disk excluded, -a order): %v", realDisks)); logErr != nil {
+		log.Printf("WARNING: failed to persist list-devices to migration log: %v", logErr)
+	}
+
+	out, err := RunGuestfishScript(disks, true, constants.GuestfishOutputRaw, getBootablePartitionSteps(scriptPath, realDisks)...)
 	if err != nil {
 		return "", fmt.Errorf("failed to run get-bootable-partition.sh: %w", err)
 	}
 
-	log.Printf("Successfully executed get-bootable-partition.sh")
-	log.Printf("Script output: %s", strings.TrimSpace(out))
+	resultLine, trace, parseErr := parseBootDiskResult(out, realDisks)
+	if trace == "" {
+		trace = "(no debug output captured - either the deployed get-bootable-partition.sh predates step logging, or it produced none)"
+	}
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh trace:\n%s", trace)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh trace to migration log: %v", logErr)
+	}
 
-	return strings.TrimSpace(out), nil
+	// No tagged line found (older/untagged build); already fell back to raw output.
+	if !strings.Contains(out, "BOOTDISK_RESULT:") {
+		log.Printf("WARNING: get-bootable-partition.sh output had no BOOTDISK_RESULT: line; falling back to raw output as result: %q", resultLine)
+	}
+
+	if logErr := utils.PrintLog(fmt.Sprintf("get-bootable-partition.sh result: %q", resultLine)); logErr != nil {
+		log.Printf("WARNING: failed to persist get-bootable-partition.sh result to migration log: %v", logErr)
+	}
+
+	if parseErr != nil {
+		return "", parseErr
+	}
+
+	return resultLine, nil
 }
 
 // RunNetworkPersistence mounts the disk locally and runs the network persistence script
