@@ -483,11 +483,9 @@ func (migobj *Migrate) adjustProxyDiskCount(ctx context.Context, delta int) {
 	migobj.logMessage(fmt.Sprintf("Warning: gave up updating ProxyVM %s disk count after conflicts", migobj.ProxyVMName))
 }
 
-// cleanupHotAdd kills NBD daemons, detaches proxy VM disks, and removes the snapshot.
-// Individual failures are logged without aborting the cleanup sequence.
-func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Client,
-	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
-) {
+// killNBDDaemons kills each transfer's qemu-nbd process on the Proxy VM via SSH.
+// Failures are logged without aborting.
+func (migobj *Migrate) killNBDDaemons(sshClient *esxissh.Client, transfers []hotAddDiskTransfer) {
 	for _, t := range transfers {
 		if t.NBDPid <= 0 {
 			continue
@@ -496,28 +494,41 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 			utils.PrintLog(fmt.Sprintf("Warning: failed to kill qemu-nbd PID %d: %v", t.NBDPid, err))
 		}
 	}
+}
 
-	// Detach disks from proxy VM (keepFiles=true — we must NOT delete the frozen VMDK).
-	if proxyVMObj != nil {
-		var vmProps mo.VirtualMachine
-		if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &vmProps); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: failed to read proxy VM devices during cleanup: %v", err))
-		} else {
-			for _, t := range transfers {
-				if t.DiskKey == 0 {
-					continue
+// detachProxyDisks removes each transfer's disk from the Proxy VM (keepFiles=true —
+// we must NOT delete the frozen VMDK). Failures are logged without aborting.
+func (migobj *Migrate) detachProxyDisks(ctx context.Context, proxyVMObj *object.VirtualMachine, transfers []hotAddDiskTransfer) {
+	if proxyVMObj == nil {
+		return
+	}
+	var vmProps mo.VirtualMachine
+	if err := proxyVMObj.Properties(ctx, proxyVMObj.Reference(), []string{"config.hardware.device"}, &vmProps); err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: failed to read proxy VM devices during cleanup: %v", err))
+		return
+	}
+	for _, t := range transfers {
+		if t.DiskKey == 0 {
+			continue
+		}
+		for _, dev := range vmProps.Config.Hardware.Device {
+			if dev.GetVirtualDevice().Key == t.DiskKey {
+				if err := proxyVMObj.RemoveDevice(ctx, true, dev); err != nil {
+					utils.PrintLog(fmt.Sprintf("Warning: failed to detach disk key %d from proxy VM: %v", t.DiskKey, err))
 				}
-				for _, dev := range vmProps.Config.Hardware.Device {
-					if dev.GetVirtualDevice().Key == t.DiskKey {
-						if err := proxyVMObj.RemoveDevice(ctx, true, dev); err != nil {
-							utils.PrintLog(fmt.Sprintf("Warning: failed to detach disk key %d from proxy VM: %v", t.DiskKey, err))
-						}
-						break
-					}
-				}
+				break
 			}
 		}
 	}
+}
+
+// cleanupHotAdd kills NBD daemons, detaches proxy VM disks, and removes the snapshot.
+// Individual failures are logged without aborting the cleanup sequence.
+func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Client,
+	transfers []hotAddDiskTransfer, proxyVMObj *object.VirtualMachine,
+) {
+	migobj.killNBDDaemons(sshClient, transfers)
+	migobj.detachProxyDisks(ctx, proxyVMObj, transfers)
 
 	// Remove the source VM snapshot.
 	if err := migobj.VMops.DeleteSnapshot(hotAddSnapName); err != nil {
