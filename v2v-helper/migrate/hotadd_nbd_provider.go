@@ -4,6 +4,7 @@ package migrate
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/pkg/errors"
@@ -20,6 +21,11 @@ import (
 // StopNBDServer make, so one wedged call can't hang forever even though the
 // session's own context has no deadline.
 const hotAddCopyTimeout = 5 * time.Minute
+
+const (
+	hotAddStartRetries   = 3
+	hotAddStartRetryWait = 10 * time.Second
+)
 
 // hotAddSession is the Proxy VM connection shared by every disk's hotAddNBDServer for
 // one migration. NewHotAddSession opens it once; Close tears it down once, at the end.
@@ -89,10 +95,41 @@ func NewHotAddNBDServer(migobj *Migrate, session *hotAddSession) nbd.NBDOperatio
 }
 
 // StartNBDServer attaches the frozen VMDK at file to the Proxy VM, identifies its
-// block device, and starts qemu-nbd on it. vm/server/username/password/thumbprint/
+// block device, and starts qemu-nbd on it, retrying the whole sequence up to
+// hotAddStartRetries times on failure. vm/server/username/password/thumbprint/
 // snapref are VDDK-specific and unused here -- file already names the exact frozen
 // VMDK to attach.
 func (h *hotAddNBDServer) StartNBDServer(_ *object.VirtualMachine, _, _, _, _, _, file string, progchan chan string) error {
+	var lastErr error
+	for attempt := 1; attempt <= hotAddStartRetries; attempt++ {
+		if attempt > 1 {
+			utils.PrintLog(fmt.Sprintf("Hot-Add: retrying NBD server start (attempt %d/%d) after: %v", attempt, hotAddStartRetries, lastErr))
+			select {
+			case <-h.session.ctx.Done():
+				return h.session.ctx.Err()
+			case <-time.After(hotAddStartRetryWait):
+			}
+		}
+
+		if err := h.startNBDServerOnce(file, progchan); err != nil {
+			lastErr = err
+			// Clear out whatever this attempt managed to attach/allocate before the
+			// next attempt runs -- otherwise a failure partway through (e.g. identify
+			// or port-allocate failing after attach already succeeded) would leave the
+			// next attempt trying to attach the same frozen VMDK a second time.
+			teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+			h.teardown(teardownCtx)
+			cancel()
+			continue
+		}
+		return nil
+	}
+	return errors.Wrapf(lastErr, "failed to start Hot-Add NBD server after %d attempts", hotAddStartRetries)
+}
+
+// startNBDServerOnce is StartNBDServer's single-attempt body, split out so
+// StartNBDServer can retry it as a unit.
+func (h *hotAddNBDServer) startNBDServerOnce(file string, progchan chan string) error {
 	ctx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
 	defer cancel()
 
