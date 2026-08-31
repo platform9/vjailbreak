@@ -1959,6 +1959,16 @@ metadata:
     controller-gen.kubebuilder.io/version: v0.17.1
   name: openstackcreds.vjailbreak.k8s.pf9.io
 spec:
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          name: migration-webhook-service
+          namespace: migration-system
+          path: /convert
+      conversionReviewVersions:
+      - v1
   group: vjailbreak.k8s.pf9.io
   names:
     kind: OpenstackCreds
@@ -5177,6 +5187,22 @@ spec:
     app: vpwned-sdk
   type: ClusterIP
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-webhook-service
+  namespace: migration-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5204,6 +5230,32 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: migration-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-openstackcreds
+  failurePolicy: Fail
+  name: vopenstackcreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - openstackcreds
+  sideEffects: None
 
 ---
 apiVersion: v1
