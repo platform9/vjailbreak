@@ -38,6 +38,7 @@ import { useRollingFormSubmit } from '../hooks/useRollingFormSubmit'
 import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useRollingFormSync } from '../hooks/useRollingFormSync'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 
 // Import CDS icons
 import '@cds/core/icon/register.js'
@@ -483,6 +484,13 @@ export default function RollingMigrationFormDrawer({
     [setTouchedSections]
   )
 
+  // Gates submission per copy method; `undefined` while loading or on error never blocks.
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const vddkUploaded =
+    vddkStatusQuery.isLoading || vddkStatusQuery.isError
+      ? undefined
+      : vddkStatusQuery.data?.uploaded === true
+
   const {
     vmIpValidationError,
     esxHostConfigValidationError,
@@ -495,6 +503,7 @@ export default function RollingMigrationFormDrawer({
     isSubmitDisabled,
     sectionNavItems
   } = useRollingFormValidation({
+    vddkUploaded,
     selectedVMs,
     vmsWithAssignments,
     orderedESXHosts,

@@ -690,3 +690,45 @@ func TestLDMHeldPhase(t *testing.T) {
 		}
 	})
 }
+
+func TestCopyMethodRequiresVDDK(t *testing.T) {
+	tests := []struct {
+		name              string
+		storageCopyMethod string
+		want              bool
+	}{
+		{
+			name:              "empty defaults to the normal path, which drives nbdkit's vddk plugin",
+			storageCopyMethod: "",
+			want:              true,
+		},
+		{
+			name:              "normal needs VDDK",
+			storageCopyMethod: "normal",
+			want:              true,
+		},
+		{
+			name:              "StorageAcceleratedCopy clones via vmkfstools on the ESXi host",
+			storageCopyMethod: constants.StorageCopyMethod,
+			want:              false,
+		},
+		{
+			name:              "HotAdd serves with qemu-nbd on the proxy VM",
+			storageCopyMethod: constants.HotAddCopyMethod,
+			want:              false,
+		},
+		{
+			name:              "unrecognised method falls back to requiring VDDK",
+			storageCopyMethod: "SomeFutureMethod",
+			want:              true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := CopyMethodRequiresVDDK(tt.storageCopyMethod); got != tt.want {
+				t.Errorf("CopyMethodRequiresVDDK(%q) = %v, want %v", tt.storageCopyMethod, got, tt.want)
+			}
+		})
+	}
+}

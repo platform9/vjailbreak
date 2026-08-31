@@ -43,6 +43,7 @@ import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
 import { useSettingsConfigMapQuery } from 'src/hooks/api/useSettingsConfigMapQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import { useRetryPrefill } from '../hooks/useRetryPrefill'
 import { useRetrySubmit } from '../hooks/useRetrySubmit'
 import { Banner } from 'src/components'
@@ -393,6 +394,12 @@ export default function MigrationFormDrawer({
     })
   }, [open])
 
+  // Gates submission per copy method; `undefined` while loading or on error never blocks.
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const vddkUploaded = vddkStatusQuery.isLoading || vddkStatusQuery.isError
+    ? undefined
+    : vddkStatusQuery.data?.uploaded === true
+
   const {
     availableVmwareNetworks,
     availableVmwareDatastores,
@@ -415,7 +422,8 @@ export default function MigrationFormDrawer({
     openstackCredentials,
     touchedSections,
     templateMode: isTemplateMode,
-    clusterVms
+    clusterVms,
+    vddkUploaded
   })
 
   // Subnet compatibility between selected VM IPs and mapped target networks.

@@ -8,6 +8,7 @@ import { OpenstackCreds, PCDNetworkInfo } from 'src/api/openstack-creds/model'
 import { isNilOrEmpty } from 'src/utils'
 import type { SectionNavItem } from 'src/components'
 import { CUTOVER_TYPES } from '../constants'
+import { blocksOnMissingVddk, MISSING_VDDK_MESSAGE } from '../utils/vddkRequirement'
 import type { FormValues, FieldErrors, SelectedMigrationOptionsType } from '../types'
 import type { VmData } from '../api/migration-templates/model'
 
@@ -37,6 +38,8 @@ interface UseFormValidationParams {
   templateMode?: boolean
   // Every VM in the selected source cluster. Only read in template mode.
   clusterVms?: VmData[]
+  // VDDK upload status; `undefined` means unknown and never blocks.
+  vddkUploaded?: boolean
 }
 
 interface UseFormValidationResult {
@@ -65,6 +68,8 @@ interface UseFormValidationResult {
   hasAnyMigrationOptionSelected: boolean
   areSelectedMigrationOptionsConfigured: boolean
   sectionNavItems: SectionNavItem[]
+  // Set when the selected copy method needs VDDK but it is not uploaded.
+  vddkRequirementError: string
 }
 
 export function useFormValidation({
@@ -77,7 +82,8 @@ export function useFormValidation({
   openstackCredentials,
   touchedSections,
   templateMode = false,
-  clusterVms
+  clusterVms,
+  vddkUploaded
 }: UseFormValidationParams): UseFormValidationResult {
   // A migration maps the networks/datastores of the VMs actually selected. A template has
   // no VM selection, so it maps the union across the whole source cluster instead — a
@@ -209,8 +215,14 @@ export function useFormValidation({
             (datastore) => !params.storageMappings?.some((mapping) => mapping.source === datastore)
           )
 
+  // Only the "normal" copy method opens VDDK, so the other methods must not be blocked on it.
+  const vddkRequirementError = blocksOnMissingVddk(params.storageCopyMethod, vddkUploaded)
+    ? MISSING_VDDK_MESSAGE
+    : ''
+
   const disableSubmit =
     !vmwareCredsValidated ||
+    Boolean(vddkRequirementError) ||
     !openstackCredsValidated ||
     isNilOrEmpty(params.vms) ||
     (networkMappingRequired && isNilOrEmpty(params.networkMappings)) ||
@@ -326,7 +338,10 @@ export function useFormValidation({
     fieldErrors['vms'] || vmValidation.hasError || rdmValidation.hasConfigError
   )
 
-  const step3HasErrors = Boolean(fieldErrors['networksMapping'] || fieldErrors['storageMapping'])
+  // The copy method is chosen in step 3, so its VDDK requirement is a step 3 error.
+  const step3HasErrors = Boolean(
+    fieldErrors['networksMapping'] || fieldErrors['storageMapping'] || vddkRequirementError
+  )
 
   const step4Complete = Boolean(
     (params.securityGroups && params.securityGroups.length > 0) ||
@@ -561,6 +576,7 @@ export function useFormValidation({
     unmappedStorageCount,
     hasAnyMigrationOptionSelected,
     areSelectedMigrationOptionsConfigured,
-    sectionNavItems
+    sectionNavItems,
+    vddkRequirementError
   }
 }

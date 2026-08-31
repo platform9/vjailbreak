@@ -3,6 +3,7 @@ import { GridRowSelectionModel } from '@mui/x-data-grid'
 import { vmHasInterface } from 'src/features/migration/utils/vmNetworking'
 import { BMConfig } from 'src/api/bmconfig/model'
 import { CUTOVER_TYPES } from '../constants'
+import { blocksOnMissingVddk } from '../utils/vddkRequirement'
 import type { VM, ESXHost, FieldErrors, SelectedMigrationOptionsType, RollingFormParams } from '../types'
 import type { SectionNavItem } from 'src/components'
 
@@ -28,6 +29,8 @@ interface UseRollingFormValidationParams {
   }
   params: RollingFormParams
   fieldErrors: FieldErrors
+  // VDDK upload status; `undefined` means unknown and never blocks.
+  vddkUploaded?: boolean
 }
 
 export function useRollingFormValidation({
@@ -42,7 +45,8 @@ export function useRollingFormValidation({
   selectedMigrationOptions,
   touchedSections,
   params,
-  fieldErrors
+  fieldErrors,
+  vddkUploaded
 }: UseRollingFormValidationParams) {
   const [vmIpValidationError, setVmIpValidationError] = useState<string>('')
   const [esxHostConfigValidationError, setEsxHostConfigValidationError] = useState<string>('')
@@ -127,6 +131,9 @@ export function useRollingFormValidation({
 
     const basicRequirementsMissing =
       !params.vmwareCluster || !params.pcdCluster || !selectedMaasConfig || !selectedVMs.length || submitting
+
+    // Only the "normal" copy method opens VDDK, so the other methods must not be blocked on it.
+    const vddkMissingForCopyMethod = blocksOnMissingVddk(params.storageCopyMethod, vddkUploaded)
 
     const storageMappingComplete =
       params.storageCopyMethod === 'HotAdd'
@@ -218,6 +225,7 @@ export function useRollingFormValidation({
 
     return (
       basicRequirementsMissing ||
+      vddkMissingForCopyMethod ||
       !mappingsValid ||
       !migrationOptionValidated ||
       !esxHostConfigValid ||
@@ -236,6 +244,7 @@ export function useRollingFormValidation({
     params,
     fieldErrors,
     orderedESXHosts,
+    vddkUploaded,
     vmIpValidation.hasError,
     esxHostConfigValidation.hasError,
     osValidation.hasError

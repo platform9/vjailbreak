@@ -467,3 +467,13 @@ func CreateStorageAcceleratedCopyCondition(migration *vjailbreakv1alpha1.Migrati
 	}
 	return existingConditions
 }
+
+// CopyMethodRequiresVDDK reports whether a storageCopyMethod opens VDDK; only the default path does.
+func CopyMethodRequiresVDDK(storageCopyMethod string) bool {
+	switch storageCopyMethod {
+	case constants.StorageCopyMethod, constants.HotAddCopyMethod:
+		return false
+	default:
+		return true
+	}
+}

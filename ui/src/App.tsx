@@ -16,7 +16,6 @@ import GlobalSettingsPage from './features/globalSettings/pages/GlobalSettingsPa
 import StorageManagementPage from './features/storageManagement/pages/StorageManagementPage'
 import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import ImageProfilesPage from './features/imageProfiles/pages/ImageProfilesPage'
-import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 import {
@@ -52,7 +51,7 @@ const AppContent = styled('div')(({ theme }) => ({
 
 const GETTING_STARTED_DISMISSED_KEY = 'getting-started-dismissed'
 
-type GuideMode = 'vddk' | 'credentials' | null
+type GuideMode = 'credentials' | null
 
 function useHasAnyCredentials() {
   const {
@@ -89,30 +88,13 @@ function useHasAnyCredentials() {
 
 function DashboardIndexRedirect() {
   const { hasVmwareCredentials, hasPcdCredentials, isLoading, isError } = useHasAnyCredentials()
-  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
-  const vddkLoading = vddkStatusQuery.isLoading
-  const vddkError = vddkStatusQuery.isError
-  const vddkUploaded = vddkStatusQuery.data?.uploaded === true
 
   const hasAllCredentials = hasVmwareCredentials && hasPcdCredentials
 
-  if (isLoading || vddkLoading) return null
+  if (isLoading) return null
   if (isError) return <Navigate to="/dashboard/migrations" replace />
 
-  // If the status endpoint fails, don't hard-block navigation.
-  // Fall back to migrations/credentials behavior based on credentials only.
-  if (vddkError) {
-    return hasAllCredentials ? (
-      <Navigate to="/dashboard/migrations" replace />
-    ) : (
-      <Navigate to="/dashboard/credentials/vm" replace />
-    )
-  }
-
-  if (!vddkUploaded) {
-    return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
-  }
-
+  // VDDK is not gated here: the copy method is unknown at this point, so the migration form enforces it.
   return hasAllCredentials ? (
     <Navigate to="/dashboard/migrations" replace />
   ) : (
@@ -146,36 +128,18 @@ function App() {
     hasPcdCredentials,
     isLoading: credsLoading
   } = useHasAnyCredentials()
-  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
-  const vddkLoading = vddkStatusQuery.isLoading
-  const vddkError = vddkStatusQuery.isError
-  const vddkUploaded = vddkStatusQuery.data?.uploaded === true
-
   const missingVmwareCredentials = !hasVmwareCredentials
   const missingPcdCredentials = !hasPcdCredentials
   const missingCredentials = missingVmwareCredentials || missingPcdCredentials
-  const missingVddk = !vddkUploaded
-  const shouldShowGuide = missingCredentials || missingVddk
+  const shouldShowGuide = missingCredentials
 
+  // VDDK is not part of onboarding: only the "normal" copy method needs it.
   const guideMode: GuideMode = useMemo(() => {
-    if (missingVddk) return 'vddk'
     if (missingCredentials) return 'credentials'
     return null
-  }, [missingCredentials, missingVddk])
+  }, [missingCredentials])
 
   const guideConfig = useMemo(() => {
-    if (guideMode === 'vddk') {
-      return {
-        path: '/dashboard/global-settings',
-        target: '[data-tour="vddk-dropzone"]',
-        placement: 'right' as const,
-        spotlightPadding: 10,
-        content:
-          'Upload the VMware VDDK library from Global Settings (VDDK Upload tab). This is mandatory before adding credentials.',
-        navState: { tab: 'vddk' as const }
-      }
-    }
-
     if (guideMode === 'credentials') {
       if (missingVmwareCredentials) {
         return {
@@ -276,17 +240,11 @@ function App() {
   }, [guideConfig.target, isOnExpectedPage])
 
   useEffect(() => {
-    if (credsLoading || vddkLoading) return
+    if (credsLoading) return
     const dismissed = localStorage.getItem(GETTING_STARTED_DISMISSED_KEY) === 'true'
 
     if (!shouldShowGuide) {
       setJoyrideSnoozed(false)
-      setJoyrideRun(false)
-      return
-    }
-
-    // If we can't determine VDDK status, don't force redirects/popups.
-    if (vddkError) {
       setJoyrideRun(false)
       return
     }
@@ -296,22 +254,7 @@ function App() {
       return
     }
 
-    // Redirect + popup logic:
-    // 1) VDDK missing: force user to Global Settings -> VDDK tab
-    // 2) Else credentials missing: force user to Credentials page
-    if (guideMode === 'vddk' && guideConfig.path === '/dashboard/global-settings') {
-      if (location.pathname !== guideConfig.path) {
-        navigate(guideConfig.path, { replace: true, state: guideConfig.navState })
-      } else {
-        const currentTab = (location.state as any)?.tab
-        if (currentTab !== 'vddk') {
-          navigate(location.pathname, { replace: true, state: guideConfig.navState })
-        }
-      }
-      setJoyrideRun(true)
-      return
-    }
-
+    // Credentials missing: send the user to the Credentials page.
     if (guideMode === 'credentials' && guideConfig.path) {
       if (location.pathname !== guideConfig.path) {
         navigate(guideConfig.path, { replace: true })
@@ -323,12 +266,9 @@ function App() {
     setJoyrideRun(false)
   }, [
     credsLoading,
-    vddkLoading,
-    vddkError,
     location.pathname,
     joyrideSnoozed,
     guideMode,
-    guideConfig.navState,
     guideConfig.path,
     navigate,
     shouldShowGuide

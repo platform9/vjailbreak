@@ -21,8 +21,10 @@ import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
 import { useProxyVMsQuery } from 'src/hooks/api/useProxyVMsQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import type { NetworkAndStorageMappingStepProps } from '../types'
 import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
+import { copyMethodRequiresVddk } from '../utils/vddkRequirement'
 
 export type { ResourceMap, StorageCopyMethod } from '../types'
 
@@ -73,6 +75,14 @@ export default function NetworkAndStorageMappingStep({
     () => allProxyVMs.filter((vm) => vm.status?.validationStatus === 'Ready'),
     [allProxyVMs]
   )
+
+  // Only the "normal" copy path opens VDDK; a pending or failed status query shows nothing.
+  const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
+  const vddkMissing =
+    !vddkStatusQuery.isLoading &&
+    !vddkStatusQuery.isError &&
+    vddkStatusQuery.data?.uploaded !== true
+  const showVddkRequirement = vddkMissing && copyMethodRequiresVddk(storageCopyMethod)
 
   // Filter to only validated array credentials
   const validatedArrayCreds = useMemo(
@@ -301,6 +311,22 @@ export default function NetworkAndStorageMappingStep({
                   ))}
                 </RadioGroup>
               </Box>
+
+              {showVddkRequirement && (
+                <Alert severity="error" sx={{ mb: 2 }} data-testid="vddk-required-alert">
+                  This data copy method needs the VMware VDDK library, which has not been
+                  uploaded. Upload it from{' '}
+                  <Link
+                    href="/dashboard/global-settings"
+                    underline="hover"
+                    data-testid="vddk-required-link"
+                  >
+                    Global Settings → VDDK Upload
+                  </Link>
+                  , or choose vJailbreak Accelerated Copy or Storage Accelerated Copy, which do
+                  not use VDDK.
+                </Alert>
+              )}
 
               {storageCopyMethod === 'normal' ? (
                 <>

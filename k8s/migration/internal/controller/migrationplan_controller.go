@@ -1160,6 +1160,37 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+// vddkVolumeMounts returns the VDDK mount only for copy methods that open it; the hostPath is type Directory.
+func vddkVolumeMounts(storageCopyMethod string) []corev1.VolumeMount {
+	if !utils.CopyMethodRequiresVDDK(storageCopyMethod) {
+		return []corev1.VolumeMount{}
+	}
+	return []corev1.VolumeMount{
+		{
+			Name:      "vddk",
+			MountPath: "/home/fedora/vmware-vix-disklib-distrib",
+		},
+	}
+}
+
+// vddkVolumes returns the volume backing vddkVolumeMounts; a mount with no volume fails admission.
+func vddkVolumes(storageCopyMethod string) []corev1.Volume {
+	if !utils.CopyMethodRequiresVDDK(storageCopyMethod) {
+		return []corev1.Volume{}
+	}
+	return []corev1.Volume{
+		{
+			Name: "vddk",
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: "/home/ubuntu/vmware-vix-disklib-distrib",
+					Type: utils.NewHostPathType("Directory"),
+				},
+			},
+		},
+	}
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1169,6 +1200,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	vmwareSecretRef string,
 	openstackSecretRef string,
 	arrayCredsSecretRef string,
+	storageCopyMethod string,
 ) error {
 	vmwarecreds, err := utils.GetVMwareCredsNameFromMigrationPlan(ctx, r.Client, migrationplan)
 	if err != nil {
@@ -1296,33 +1328,29 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									})
 									return envFrom
 								}(),
-								VolumeMounts: []corev1.VolumeMount{
-									{
-										Name:      "vddk",
-										MountPath: "/home/fedora/vmware-vix-disklib-distrib",
-									},
-									{
+								VolumeMounts: append(vddkVolumeMounts(storageCopyMethod),
+									corev1.VolumeMount{
 										Name:      "dev",
 										MountPath: "/dev",
 									},
-									{
+									corev1.VolumeMount{
 										Name:      "firstboot",
 										MountPath: "/home/fedora/scripts",
 									},
-									{
+									corev1.VolumeMount{
 										Name:      "logs",
 										MountPath: "/var/log/pf9",
 									},
-									{
+									corev1.VolumeMount{
 										Name:      "virtio-driver",
 										MountPath: "/home/fedora/virtio-win",
 									},
-									{
+									corev1.VolumeMount{
 										Name:      "ssh-key",
 										MountPath: "/home/fedora/.ssh",
 										ReadOnly:  true,
 									},
-								},
+								),
 								Resources: corev1.ResourceRequirements{
 									Requests: corev1.ResourceList{
 										corev1.ResourceCPU:              resource.MustParse(vjailbreakSettings.V2VHelperPodCPURequest),
@@ -1337,17 +1365,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								},
 							},
 						},
-						Volumes: []corev1.Volume{
-							{
-								Name: "vddk",
-								VolumeSource: corev1.VolumeSource{
-									HostPath: &corev1.HostPathVolumeSource{
-										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-										Type: utils.NewHostPathType("Directory"),
-									},
-								},
-							},
-							{
+						Volumes: append(vddkVolumes(storageCopyMethod),
+							corev1.Volume{
 								Name: "dev",
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
@@ -1356,7 +1375,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
-							{
+							corev1.Volume{
 								Name: "firstboot",
 								VolumeSource: corev1.VolumeSource{
 									ConfigMap: &corev1.ConfigMapVolumeSource{
@@ -1366,7 +1385,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
-							{
+							corev1.Volume{
 								Name: "logs",
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
@@ -1375,7 +1394,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
-							{
+							corev1.Volume{
 								Name: "virtio-driver",
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
@@ -1384,7 +1403,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
-							{
+							corev1.Volume{
 								Name: "ssh-key",
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
@@ -1393,7 +1412,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 									},
 								},
 							},
-						},
+						),
 					},
 				},
 			},
@@ -2358,9 +2377,18 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		// Gating a copy method that never opens VDDK would stall it on an unused library.
+		if utils.CopyMethodRequiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
+		} else {
+			ctxlog.Info("Skipping VDDK presence check: copy method does not use VDDK",
+				"vm", vm, "storageCopyMethod", migrationtemplate.Spec.StorageCopyMethod)
+			if err = r.clearVDDKCheckCondition(ctx, migrationobj); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2375,7 +2403,8 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 			fbcm.Name,
 			vmwcreds.Spec.SecretRef.Name,
 			openstackcreds.Spec.SecretRef.Name,
-			arraycredsSecretRef)
+			arraycredsSecretRef,
+			migrationtemplate.Spec.StorageCopyMethod)
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("failed to create Job for VM %s", vm))
 		}
@@ -2440,35 +2469,15 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 		whoami = currentUser.Username
 	}
 
-	oldConditions := migrationobj.Status.Conditions
-
-	files, err := os.ReadDir(VDDKDirectory)
-	if err != nil {
-		logger.Error(err, "VDDK directory could not be read")
-
-		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
-		setCondition := corev1.PodCondition{
-			Type:               "VDDKCheck",
-			Status:             corev1.ConditionFalse,
-			Reason:             "VDDKDirectoryMissing",
-			Message:            "VDDK directory is missing. Please create and upload the required files.",
-			LastTransitionTime: metav1.Now(),
+	files, readErr := os.ReadDir(VDDKDirectory)
+	if readErr != nil {
+		logger.Error(readErr, "VDDK directory could not be read")
+		if err := r.setVDDKCheckFailed(ctx, migrationobj,
+			"VDDKDirectoryMissing",
+			"VDDK directory is missing. Please create and upload the required files."); err != nil {
+			return err
 		}
-
-		newConditions := []corev1.PodCondition{}
-		for _, c := range migrationobj.Status.Conditions {
-			if c.Type != "VDDKCheck" {
-				newConditions = append(newConditions, c)
-			}
-		}
-		newConditions = append(newConditions, setCondition)
-		migrationobj.Status.Conditions = newConditions
-
-		if err = r.Status().Update(ctx, migrationobj); err != nil {
-			return errors.Wrap(err, "failed to update migration status after missing VDDK dir")
-		}
-
-		return errors.Wrap(err, "VDDK_MISSING: directory could not be read")
+		return errors.Wrap(readErr, "VDDK_MISSING: directory could not be read")
 	}
 
 	if len(files) == 0 {
@@ -2476,51 +2485,80 @@ func (r *MigrationPlanReconciler) validateVDDKPresence(
 			"path", VDDKDirectory,
 			"whoami", whoami)
 
-		migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
-		migrationobj.Status.Conditions = append(migrationobj.Status.Conditions, corev1.PodCondition{
-			Type:               "VDDKCheck",
-			Status:             corev1.ConditionFalse,
-			Reason:             "VDDKDirectoryEmpty",
-			Message:            "VDDK directory is empty. Please upload the required files.",
-			LastTransitionTime: metav1.Now(),
-		})
-
-		if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
-			if err = r.Status().Update(ctx, migrationobj); err != nil {
-				return errors.Wrap(err, "failed to update migration status after empty VDDK dir")
-			}
+		if err := r.setVDDKCheckFailed(ctx, migrationobj,
+			"VDDKDirectoryEmpty",
+			"VDDK directory is empty. Please upload the required files."); err != nil {
+			return err
 		}
-
-		return errors.Wrap(err, "VDDK_MISSING: directory is empty")
+		return errors.New("VDDK_MISSING: directory is empty")
 	}
 
-	// Clear previous VDDKCheck condition if directory is valid
-	cleanedConditions := []corev1.PodCondition{}
-	for _, c := range migrationobj.Status.Conditions {
-		if c.Type != "VDDKCheck" {
-			cleanedConditions = append(cleanedConditions, c)
-		}
+	return r.clearVDDKCheckCondition(ctx, migrationobj)
+}
+
+// setVDDKCheckFailed parks the Migration in Pending and records why the VDDK check failed.
+func (r *MigrationPlanReconciler) setVDDKCheckFailed(
+	ctx context.Context,
+	migrationobj *vjailbreakv1alpha1.Migration,
+	reason, message string,
+) error {
+	oldConditions := migrationobj.Status.Conditions
+
+	migrationobj.Status.Phase = vjailbreakv1alpha1.VMMigrationPhasePending
+	migrationobj.Status.Conditions = append(withoutVDDKCheckCondition(oldConditions), corev1.PodCondition{
+		Type:               "VDDKCheck",
+		Status:             corev1.ConditionFalse,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	})
+
+	if reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
+		return nil
 	}
-
-	// Only update conditions if they changed - don't force phase to Pending
-	// Let the Migration controller manage phase progression naturally
-	if !reflect.DeepEqual(migrationobj.Status.Conditions, oldConditions) {
-		err = retry.RetryOnConflict(retry.DefaultRetry, func() error {
-			currentMigration := &vjailbreakv1alpha1.Migration{}
-			if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
-				return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
-			}
-
-			// Only update conditions, don't modify the phase
-			currentMigration.Status.Conditions = cleanedConditions
-
-			return r.Status().Update(ctx, currentMigration)
-		})
-		if err != nil {
-			return errors.Wrap(err, "failed to update migration status after validating VDDK presence")
-		}
+	if err := r.Status().Update(ctx, migrationobj); err != nil {
+		return errors.Wrapf(err, "failed to update migration status after failed VDDK check (%s)", reason)
 	}
 	return nil
+}
+
+// clearVDDKCheckCondition drops a stale VDDKCheck condition; the Migration controller owns the phase.
+func (r *MigrationPlanReconciler) clearVDDKCheckCondition(
+	ctx context.Context,
+	migrationobj *vjailbreakv1alpha1.Migration,
+) error {
+	cleanedConditions := withoutVDDKCheckCondition(migrationobj.Status.Conditions)
+	if reflect.DeepEqual(cleanedConditions, migrationobj.Status.Conditions) {
+		return nil
+	}
+
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		currentMigration := &vjailbreakv1alpha1.Migration{}
+		if getErr := r.Get(ctx, types.NamespacedName{Name: migrationobj.Name, Namespace: migrationobj.Namespace}, currentMigration); getErr != nil {
+			return fmt.Errorf("failed to get Migration %s/%s during retry: %w", migrationobj.Namespace, migrationobj.Name, getErr)
+		}
+
+		// Only update conditions, don't modify the phase
+		currentMigration.Status.Conditions = withoutVDDKCheckCondition(currentMigration.Status.Conditions)
+
+		return r.Status().Update(ctx, currentMigration)
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to clear VDDKCheck condition")
+	}
+	migrationobj.Status.Conditions = cleanedConditions
+	return nil
+}
+
+// withoutVDDKCheckCondition returns conditions with any VDDKCheck entry removed.
+func withoutVDDKCheckCondition(conditions []corev1.PodCondition) []corev1.PodCondition {
+	cleaned := []corev1.PodCondition{}
+	for _, c := range conditions {
+		if c.Type != "VDDKCheck" {
+			cleaned = append(cleaned, c)
+		}
+	}
+	return cleaned
 }
 
 // MergeLabels combines two label maps into a single map, with values from b overriding values from a if keys conflict.

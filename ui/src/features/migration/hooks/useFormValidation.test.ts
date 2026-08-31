@@ -213,3 +213,53 @@ describe('useFormValidation - template authoring mode', () => {
     expect(result.current.isStep3Complete).toBe(false)
   })
 })
+
+// Only the "normal" copy path opens VDDK, so the other methods must not be blocked on it.
+describe('useFormValidation - VDDK requirement by copy method', () => {
+  const renderWithVddk = (
+    storageCopyMethod: FormValues['storageCopyMethod'],
+    vddkUploaded: boolean | undefined
+  ) =>
+    renderHook(() =>
+      useFormValidation({
+        params: { storageCopyMethod },
+        fieldErrors: {},
+        selectedMigrationOptions: baseSelectedMigrationOptions,
+        vmwareCredsValidated: true,
+        openstackCredsValidated: true,
+        rdmDisks: [],
+        openstackCredentials: undefined,
+        touchedSections: { options: false, tagsMetadata: false },
+        vddkUploaded
+      })
+    )
+
+  it('raises the requirement for the normal copy method when VDDK is missing', () => {
+    const { result } = renderWithVddk('normal', false)
+    expect(result.current.vddkRequirementError).not.toBe('')
+    expect(result.current.disableSubmit).toBe(true)
+    expect(result.current.step3HasErrors).toBe(true)
+  })
+
+  it('does not raise it for StorageAcceleratedCopy when VDDK is missing', () => {
+    const { result } = renderWithVddk('StorageAcceleratedCopy', false)
+    expect(result.current.vddkRequirementError).toBe('')
+    expect(result.current.step3HasErrors).toBe(false)
+  })
+
+  it('does not raise it for HotAdd when VDDK is missing', () => {
+    const { result } = renderWithVddk('HotAdd', false)
+    expect(result.current.vddkRequirementError).toBe('')
+    expect(result.current.step3HasErrors).toBe(false)
+  })
+
+  it('does not raise it for the normal method once VDDK is uploaded', () => {
+    const { result } = renderWithVddk('normal', true)
+    expect(result.current.vddkRequirementError).toBe('')
+  })
+
+  it('fails open while the VDDK status is unknown', () => {
+    const { result } = renderWithVddk('normal', undefined)
+    expect(result.current.vddkRequirementError).toBe('')
+  })
+})
