@@ -15,6 +15,7 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	esxissh "github.com/platform9/vjailbreak/v2v-helper/esxi-ssh"
+	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	k8sutils "github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
@@ -405,13 +406,22 @@ func (migobj *Migrate) findFreePorts(sshClient *esxissh.Client, rangeMin, rangeM
 // Polls /proc/net/tcp until the port is bound before returning.
 func (migobj *Migrate) serveViaNBD(sshClient *esxissh.Client, blockDevice string, port int) (int, error) {
 	portHex := strings.ToUpper(fmt.Sprintf("%04x", port))
+	// --shared must cover every concurrent connection nbd.CopyChangedBlocks can open to
+	// this qemu-nbd instance. qemu-nbd defaults to --shared=1 (a single client), but
+	// CopyChangedBlocks's handle pool (nbd.HandlePoolSize) opens that many libnbd
+	// connections up front, sequentially, each a blocking ConnectUri with no timeout.
+	// The full-disk copy (CopyDisk, which shells out to nbdcopy with one connection)
+	// never exercises this, so it's easy to miss -- but the first incremental round
+	// hangs forever on the second connection, with no error and no log output, since
+	// qemu-nbd never frees a client slot for it. Sizing this to HandlePoolSize exactly
+	// matches the real peak concurrency (Acquire() already caps usage at pool size).
 	cmd := fmt.Sprintf(
-		`nohup qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --persistent %s </dev/null >/dev/null 2>&1 & `+
+		`nohup qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --persistent --shared=%d %s </dev/null >/dev/null 2>&1 & `+
 			`pid=$!; i=0; `+
 			`while [ $i -lt 20 ] && ! grep -q ":%s " /proc/net/tcp /proc/net/tcp6 2>/dev/null; `+
 			`do i=$((i+1)); sleep 0.25; done; `+
 			`echo $pid`,
-		port, blockDevice, portHex,
+		port, nbd.HandlePoolSize, blockDevice, portHex,
 	)
 	out, err := sshClient.ExecuteCommand(cmd)
 	if err != nil {
