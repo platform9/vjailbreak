@@ -36,12 +36,8 @@ const (
 	hotAddNBDCopyRetries    = 3
 	hotAddNBDCopyRetryWait  = 10 * time.Second
 
-	// maxSCSIControllerUnits is the unit-number space findPreferredDiskController
-	// scans per controller (0-15, unit 7 reserved), the classic 15-target SCSI
-	// limit. PVSCSI can address more units on newer hardware versions, but that
-	// depends on VM hardware version and guest driver support we can't assume
-	// for every Proxy VM, so this stays at the conservative, universally-safe
-	// value rather than the higher figure some PVSCSI configurations support.
+	// maxSCSIControllerUnits is the classic 15-target SCSI limit per controller
+	// (0-15, unit 7 reserved) -- conservative, but safe for any Proxy VM.
 	maxSCSIControllerUnits = 16
 )
 
@@ -72,13 +68,8 @@ func (migobj *Migrate) getVCenterClient() (*vcenter.VCenterClient, error) {
 }
 
 // attachAllDisks attaches every frozen disk in transfers to the Proxy VM.
-//
-// Multiple migrations can share one Proxy VM. attachDiskToProxy computes a
-// free controller/unit-number slot from a snapshot of the VM's device list,
-// then submits a ReconfigVM_Task -- not atomic, so concurrent callers can
-// compute the same slot and one fails with "Invalid configuration for device
-// 'N'." utils.WaitForProxyVMLock/ReleaseProxyVMLock serialize this against
-// vpwned-sdk's in-memory lock, held only for this function.
+// Attach is not atomic (compute slot, then ReconfigVM_Task), so concurrent
+// migrations sharing a Proxy VM are serialized via WaitForProxyVMLock.
 func (migobj *Migrate) attachAllDisks(ctx context.Context, migrationName string,
 	proxyVMObj *object.VirtualMachine, transfers []hotAddDiskTransfer,
 ) error {
@@ -195,21 +186,10 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 	return 0, fmt.Errorf("could not determine device key for newly attached disk %s", vmdkPath)
 }
 
-// findPreferredDiskController returns a VMware Paravirtual (PVSCSI) SCSI
-// controller that has a free unit-number slot, if the Proxy VM has one.
-// PVSCSI reliably passes SCSI VPD page 0x83 (WWID) through to the guest,
-// which readGuestWWIDs depends on to identify hot-added disks; LSI Logic
-// Parallel/SAS and BusLogic controllers don't reliably do this (see
-// VJAILB-232). deviceList.FindDiskController("") has no controller-type
-// preference and will happily hand back a non-PVSCSI controller even when a
-// PVSCSI one is also present and has room -- which is exactly what happens
-// once a Proxy VM has more than one SCSI controller. This does not create
-// any device; it only chooses among controllers already on the VM, so it
-// needs no permission beyond the read+AddDevice this function already used.
-// Falls back to FindDiskController("") only if no PVSCSI controller has
-// room -- the ProxyVM onboarding gate (proxyvm_controller.go) should prevent
-// a Proxy VM without one from ever being usable, but this keeps the old
-// behavior as a safety net rather than a hard failure.
+// findPreferredDiskController prefers a PVSCSI controller with a free slot --
+// PVSCSI reliably passes WWIDs through to the guest (readGuestWWIDs depends on
+// this), LSI/BusLogic don't (VJAILB-232). Falls back to any controller with
+// room if no PVSCSI one is available.
 func findPreferredDiskController(deviceList object.VirtualDeviceList) (govmomitypes.BaseVirtualController, error) {
 	// Count occupied unit numbers per controller key so "has a PVSCSI
 	// controller" doesn't wrongly match one that's already full.
@@ -406,15 +386,9 @@ func (migobj *Migrate) findFreePorts(sshClient *esxissh.Client, rangeMin, rangeM
 // Polls /proc/net/tcp until the port is bound before returning.
 func (migobj *Migrate) serveViaNBD(sshClient *esxissh.Client, blockDevice string, port int) (int, error) {
 	portHex := strings.ToUpper(fmt.Sprintf("%04x", port))
-	// --shared must cover every concurrent connection nbd.CopyChangedBlocks can open to
-	// this qemu-nbd instance. qemu-nbd defaults to --shared=1 (a single client), but
-	// CopyChangedBlocks's handle pool (nbd.HandlePoolSize) opens that many libnbd
-	// connections up front, sequentially, each a blocking ConnectUri with no timeout.
-	// The full-disk copy (CopyDisk, which shells out to nbdcopy with one connection)
-	// never exercises this, so it's easy to miss -- but the first incremental round
-	// hangs forever on the second connection, with no error and no log output, since
-	// qemu-nbd never frees a client slot for it. Sizing this to HandlePoolSize exactly
-	// matches the real peak concurrency (Acquire() already caps usage at pool size).
+	// qemu-nbd defaults to a single client (--shared=1), but CopyChangedBlocks
+	// opens nbd.HandlePoolSize concurrent connections -- without --shared set to
+	// match, the second connection hangs forever waiting for a free client slot.
 	cmd := fmt.Sprintf(
 		`nohup qemu-nbd --format=raw --port=%d --bind=0.0.0.0 --persistent --shared=%d %s </dev/null >/dev/null 2>&1 & `+
 			`pid=$!; i=0; `+

@@ -282,6 +282,11 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 }
 
 func (nbdserver *NBDServer) StopNBDServer() error {
+	// Nil-safe: a mid-migration termination may call this on a disk whose
+	// StartNBDServer never ran, leaving cmd at its zero value. Nothing to kill.
+	if nbdserver.cmd == nil || nbdserver.cmd.Process == nil {
+		return nil
+	}
 	err := nbdserver.cmd.Process.Kill()
 	if err != nil {
 		return fmt.Errorf("failed to kill nbdkit: %v", err)
@@ -290,20 +295,6 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-// buildNbdcopyArgs constructs the argument list for the nbdcopy invocation
-// used by CopyDisk. It is a pure function (no exec, no I/O) specifically so
-// the --target-is-zero decision can be unit tested without shelling out.
-//
-// --target-is-zero tells nbdcopy to trust that the destination already reads
-// as all-zero, so it can skip writing any source region that is itself
-// zero/sparse. That assumption holds for a plain, freshly created Cinder
-// volume, but not for an encrypted one: encryption is applied transparently
-// at the QEMU layer, so a region that was never actually written through the
-// encryption engine does not decrypt back to zero on readback - it decrypts
-// to pseudo-random, key-derived noise. Skipping those regions produces a
-// disk that looks corrupted (missing partition table, unbootable) even
-// though the copy reported success. For encrypted destinations we must fall
-// back to a full, dense copy - slower, but correct.
 func buildNbdcopyArgs(sockUrl, dest string, destEncrypted bool) []string {
 	args := []string{"--progress=3"}
 	if !destEncrypted {

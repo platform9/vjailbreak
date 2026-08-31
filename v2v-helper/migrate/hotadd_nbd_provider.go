@@ -17,9 +17,7 @@ import (
 	"github.com/vmware/govmomi/vim25/types"
 )
 
-// hotAddCopyTimeout bounds each individual vCenter/SSH call StartNBDServer and
-// StopNBDServer make, so one wedged call can't hang forever even though the
-// session's own context has no deadline.
+// hotAddCopyTimeout bounds each vCenter/SSH call StartNBDServer makes.
 const hotAddCopyTimeout = 5 * time.Minute
 
 const (
@@ -27,12 +25,9 @@ const (
 	hotAddStartRetryWait = 10 * time.Second
 )
 
-// hotAddSession is the Proxy VM connection shared by every disk's hotAddNBDServer for
-// one migration. NewHotAddSession opens it once; Close tears it down once, at the end.
-// It retains the migration's own ctx -- storing a context is normally an anti-pattern,
-// but nbd.NBDOperations.StartNBDServer/StopNBDServer (shared with the VDDK
-// implementation) take none, so this is how their calls stay cancellable with the rest
-// of the migration instead of running on an unrelated context.Background().
+// hotAddSession is the Proxy VM connection shared by every disk's hotAddNBDServer
+// for one migration. ctx is retained so StartNBDServer/StopNBDServer stay
+// cancellable with the rest of the migration.
 type hotAddSession struct {
 	ctx        context.Context
 	sshClient  *esxissh.Client
@@ -40,9 +35,7 @@ type hotAddSession struct {
 }
 
 // NewHotAddSession opens the SSH connection to migobj's Proxy VM and looks up its
-// vCenter object, ready to be shared across one hotAddNBDServer per disk. ctx should
-// be the migration's own long-lived context -- it is retained on the session (see
-// hotAddSession) for StartNBDServer/StopNBDServer to derive their per-call contexts from.
+// vCenter object, to be shared across one hotAddNBDServer per disk.
 func (migobj *Migrate) NewHotAddSession(ctx context.Context) (*hotAddSession, error) {
 	sshKeyBytes, err := k8sutils.GetHotAddPrivateKey(ctx, migobj.K8sClient, migobj.ProxyVMK8sName)
 	if err != nil {
@@ -75,10 +68,9 @@ func (s *hotAddSession) Close() {
 	}
 }
 
-// hotAddNBDServer implements nbd.NBDOperations by serving the source VM's frozen
-// VMDK through the Proxy VM (SSH-attach + qemu-nbd) instead of local VDDK/nbdkit.
-// It embeds nbd.NBDServer to reuse CopyDisk/CopyChangedBlocks/GetProgress unchanged --
-// that engine already works identically against a TCP qemu-nbd source.
+// hotAddNBDServer implements nbd.NBDOperations over the Proxy VM (SSH-attach +
+// qemu-nbd) instead of local VDDK/nbdkit. It embeds nbd.NBDServer to reuse
+// CopyDisk/CopyChangedBlocks/GetProgress unchanged.
 type hotAddNBDServer struct {
 	nbd.NBDServer
 
@@ -96,9 +88,7 @@ func NewHotAddNBDServer(migobj *Migrate, session *hotAddSession) nbd.NBDOperatio
 
 // StartNBDServer attaches the frozen VMDK at file to the Proxy VM, identifies its
 // block device, and starts qemu-nbd on it, retrying the whole sequence up to
-// hotAddStartRetries times on failure. vm/server/username/password/thumbprint/
-// snapref are VDDK-specific and unused here -- file already names the exact frozen
-// VMDK to attach.
+// hotAddStartRetries times.
 func (h *hotAddNBDServer) StartNBDServer(_ *object.VirtualMachine, _, _, _, _, _, file string, progchan chan string) error {
 	var lastErr error
 	for attempt := 1; attempt <= hotAddStartRetries; attempt++ {
@@ -113,11 +103,8 @@ func (h *hotAddNBDServer) StartNBDServer(_ *object.VirtualMachine, _, _, _, _, _
 
 		if err := h.startNBDServerOnce(file, progchan); err != nil {
 			lastErr = err
-			// Clear out whatever this attempt managed to attach/allocate before the
-			// next attempt runs -- otherwise a failure partway through (e.g. identify
-			// or port-allocate failing after attach already succeeded) would leave the
-			// next attempt trying to attach the same frozen VMDK a second time.
-			teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+			// Reset before retrying so we don't attach the same VMDK twice.
+			teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
 			h.teardown(teardownCtx)
 			cancel()
 			continue
@@ -127,8 +114,7 @@ func (h *hotAddNBDServer) StartNBDServer(_ *object.VirtualMachine, _, _, _, _, _
 	return errors.Wrapf(lastErr, "failed to start Hot-Add NBD server after %d attempts", hotAddStartRetries)
 }
 
-// startNBDServerOnce is StartNBDServer's single-attempt body, split out so
-// StartNBDServer can retry it as a unit.
+// startNBDServerOnce is StartNBDServer's single-attempt body.
 func (h *hotAddNBDServer) startNBDServerOnce(file string, progchan chan string) error {
 	ctx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
 	defer cancel()
@@ -164,10 +150,8 @@ func (h *hotAddNBDServer) startNBDServerOnce(file string, progchan chan string) 
 	return nil
 }
 
-// teardown kills this round's qemu-nbd process and detaches its frozen VMDK from the
-// Proxy VM. Idempotent -- killNBDDaemons/detachProxyDisks already no-op once diskKey/
-// nbdPid are zeroed, and the disk-count decrement is skipped on a repeat call so it
-// can't double-decrement a Proxy VM shared with other migrations.
+// teardown kills this round's qemu-nbd process and detaches its frozen VMDK.
+// Idempotent -- safe to call repeatedly or with nothing attached.
 func (h *hotAddNBDServer) teardown(ctx context.Context) {
 	hadAttachment := h.diskKey != 0 || h.nbdPid != 0
 	transfers := []hotAddDiskTransfer{{DiskKey: h.diskKey, NBDPid: h.nbdPid}}
@@ -180,13 +164,12 @@ func (h *hotAddNBDServer) teardown(ctx context.Context) {
 	h.nbdPid = 0
 }
 
-// StopNBDServer tears down this round's attachment, leaving the Proxy VM ready for
-// the next round's StartNBDServer. CopyDisk/CopyChangedBlocks below already do this
-// right after copying, so by the time nbd_copy.go calls this it is usually a no-op --
-// kept because nbd.NBDOperations requires it and the final cleanup pass at the end of
-// LiveReplicateDisks calls it unconditionally on every disk.
+// StopNBDServer tears down this round's attachment. Uses context.Background(), not
+// h.session.ctx, because cleanup() (migrate.go) calls this after the migration's own
+// ctx is already cancelled -- deriving from it here would fail every SSH command
+// instantly and leave the disk/qemu-nbd stuck on the Proxy VM.
 func (h *hotAddNBDServer) StopNBDServer() error {
-	ctx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
 	defer cancel()
 	h.teardown(ctx)
 	return nil
@@ -194,16 +177,15 @@ func (h *hotAddNBDServer) StopNBDServer() error {
 
 func (h *hotAddNBDServer) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
 	copyErr := h.NBDServer.CopyDisk(ctx, dest, diskindex, destEncrypted)
-	teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
 	defer cancel()
 	h.teardown(teardownCtx)
 	return copyErr
 }
 
-// CopyChangedBlocks mirrors CopyDisk -- see its comment.
 func (h *hotAddNBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error {
 	copyErr := h.NBDServer.CopyChangedBlocks(ctx, changedAreas, path, destEncrypted)
-	teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
 	defer cancel()
 	h.teardown(teardownCtx)
 	return copyErr
