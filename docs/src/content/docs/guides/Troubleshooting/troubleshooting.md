@@ -12,6 +12,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 - [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
+- [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
 
 vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
@@ -160,3 +161,43 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   - The disk bus is fixed when the VM is created. If your vJailbreak VM is already deployed, setting the properties on the image is not enough — you must recreate the vJailbreak VM from the updated image.
   - Agent VMs created during [scale up](../../how-to/scaling/) use the same image, so set these properties before scaling up agents.
   - See also: [Known Limitations](../../../reference/known-limitations/#pci-slot-exhaustion-when-attaching-disks-with-virtio-blk).
+
+---
+
+## virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink
+
+- **Symptom**
+
+  A RHEL 7.x migration fails during `virt-v2v-in-place`, after disk copy and volume attach/detach have already succeeded. The migration log only shows:
+
+  ```text
+  failed to run virt-v2v-in-place: exit status 1
+  ```
+
+  The debug log under `/var/log/pf9/` (see [Debug Logs](debuglogs/)) shows the actual error:
+
+  ```text
+  virt-v2v-in-place: error: libguestfs error: command:
+  error opening /boot/grub/grub.cfg for read:
+  No such file or directory
+  ```
+
+- **Cause**
+
+  RHEL 7's `grubby`, used internally by `virt-v2v-in-place`, expects `/boot/grub/grub.cfg` to be a symlink to `/boot/grub2/grub.cfg`. On affected guests GRUB2 itself is configured correctly, but this compatibility symlink is missing, so `grubby`'s file open fails. This is unrelated to [SUSE Legacy GRUB 0.97](../../../reference/known-limitations/#suse-linux-sles-sled-with-legacy-grub-097), which requires a GRUB2 upgrade instead.
+
+- **Resolution**
+
+  Before migrating a BIOS RHEL 7 guest, confirm:
+
+  - `/boot/grub2/grub.cfg` exists and is non-empty (regenerate with `grub2-mkconfig -o /boot/grub2/grub.cfg` if not).
+  - `/boot/grub/grub.cfg` exists as a symlink to `../grub2/grub.cfg` (`mkdir -p /boot/grub && ln -sfn ../grub2/grub.cfg /boot/grub/grub.cfg` if missing).
+  - `/etc/grub2.cfg` and `/etc/grub.conf` resolve to the same file — recreate the same way if broken.
+
+  Then re-run the migration.
+
+- **Notes**
+
+  - Check ahead of a migration wave: `test -L /boot/grub/grub.cfg && echo OK || echo MISSING`.
+  - Observed on RHEL 7.9 (Maipo); other RHEL 7.x releases with the same layout may be affected.
+  - See also: [Known Limitations](../../../reference/known-limitations/#rhel-7-guests-missing-grub-compatibility-symlink).

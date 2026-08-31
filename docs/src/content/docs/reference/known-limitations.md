@@ -128,6 +128,18 @@ In such scenarios, we recommend upgrading to GRUB2.
 
 NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
 
+## RHEL 7 Guests Missing GRUB Compatibility Symlink
+
+Some RHEL 7.x guests are missing the `/boot/grub/grub.cfg` compatibility symlink that `grubby` (used internally by `virt-v2v-in-place`) expects to point at `/boot/grub2/grub.cfg`. GRUB2 itself is configured correctly — only this symlink is missing — and conversion fails with:
+
+```text
+libguestfs error: command:
+error opening /boot/grub/grub.cfg for read:
+No such file or directory
+```
+
+**Workaround**: Verify and, if needed, recreate the symlink before migrating. See [virt-v2v-in-place fails on RHEL 7](../../guides/troubleshooting/troubleshooting/#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink) for details.
+
 ## Hotplug Flavor Requirements
 
 OpenStack **hotplug** (live CPU/RAM resize without VM reboot) is supported post-migration, but only if the VM is migrated with a hotplug-capable flavor.
