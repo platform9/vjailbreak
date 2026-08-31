@@ -248,3 +248,52 @@ func TestCopyDiskProgressDrain(t *testing.T) {
 
 	assert.Equal(t, lines, got)
 }
+
+// TestGenerateHotAddNBDUrl verifies the nbd:// URL format Hot-Add points
+// NewTCPSourceServer at -- it must match what qemu-nbd on the Proxy VM binds
+// to (host:port, TCP, no path).
+func TestGenerateHotAddNBDUrl(t *testing.T) {
+	tests := []struct {
+		name string
+		host string
+		port int
+		want string
+	}{
+		{"ipv4 host", "10.0.0.5", 10809, "nbd://10.0.0.5:10809"},
+		{"hostname", "proxy-vm.local", 12345, "nbd://proxy-vm.local:12345"},
+		{"low port", "127.0.0.1", 1, "nbd://127.0.0.1:1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, generateHotAddNBDUrl(tt.host, tt.port))
+		})
+	}
+}
+
+// TestNewTCPSourceServer verifies NewTCPSourceServer wires the qemu-nbd
+// endpoint into sourceURL (which CopyDisk/CopyChangedBlocks/newHandlePool all
+// read from) and threads through the progress channel unchanged.
+func TestNewTCPSourceServer(t *testing.T) {
+	progchan := make(chan string, 1)
+	server := NewTCPSourceServer("192.168.1.10", 10809, progchan)
+
+	require.NotNil(t, server)
+	assert.Equal(t, "nbd://192.168.1.10:10809", server.sourceURL)
+	assert.Same(t, progchan, server.progresschan)
+	// A fresh source-server wrapper has never started a local process --
+	// StopNBDServer must be a safe no-op on it (see TestNBDServer_StopNBDServer_NilCmd).
+	assert.Nil(t, server.cmd)
+}
+
+// TestNBDServer_StopNBDServer_NilCmd is a regression test for the nil-safety
+// fix in StopNBDServer: a disk whose StartNBDServer never ran (cmd is still
+// the zero value from &NBDServer{}) must not panic when cleanup() calls
+// StopNBDServer on every migobj.Nbdops entry during a mid-migration
+// termination.
+func TestNBDServer_StopNBDServer_NilCmd(t *testing.T) {
+	server := &NBDServer{}
+	assert.NotPanics(t, func() {
+		err := server.StopNBDServer()
+		assert.NoError(t, err)
+	})
+}
