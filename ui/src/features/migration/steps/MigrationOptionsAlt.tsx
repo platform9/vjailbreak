@@ -95,7 +95,6 @@ export default function MigrationOptionsAlt({
   const { data: globalConfigMap } = useSettingsConfigMapQuery()
 
   const isStorageAcceleratedCopy = params?.storageCopyMethod === 'StorageAcceleratedCopy'
-  const isHotAdd = params?.storageCopyMethod === 'HotAdd'
 
   const hasWindowsVMSelected = useMemo(() => {
     if (!params?.vms || params.vms.length === 0) return false
@@ -215,13 +214,6 @@ export default function MigrationOptionsAlt({
     updateSelectedMigrationOptions
   ])
 
-  useEffect(() => {
-    if (!isHotAdd) return
-    if (params?.dataCopyMethod !== 'cold' && params?.dataCopyMethod !== 'mock') {
-      onChange('dataCopyMethod')('cold')
-    }
-  }, [isHotAdd, onChange])
-
   // Fallback to 'cold' here is fine for rendering (a harmless flash before the real
   // value lands), but treating "not yet resolved" as "genuinely cold" would be wrong
   // for the destructive clearing effect below.
@@ -310,12 +302,6 @@ export default function MigrationOptionsAlt({
               </SectionHeaderRow>
               <Divider />
 
-              {isHotAdd && selectedMigrationOptions.dataCopyMethod && (
-                <Alert severity="info" sx={{ mt: 1 }}>
-                  vJailbreak Accelerated Copy requires Cold or Mock copy. Other data copy methods
-                  are not available.
-                </Alert>
-              )}
               <OptionRow>
                 <OptionLeft>
                   <FormControlLabel
@@ -346,7 +332,7 @@ export default function MigrationOptionsAlt({
                 >
                   <Select
                     size="small"
-                    disabled={!selectedMigrationOptions.dataCopyMethod && !isHotAdd}
+                    disabled={!selectedMigrationOptions.dataCopyMethod}
                     labelId="source-item-label"
                     value={params?.dataCopyMethod || 'cold'}
                     onChange={(e) => {
@@ -358,11 +344,7 @@ export default function MigrationOptionsAlt({
                     fullWidth
                   >
                     {DATA_COPY_OPTIONS.map((item) => (
-                      <MenuItem
-                        key={item.value}
-                        value={item.value}
-                        disabled={isHotAdd && item.value !== 'cold' && item.value !== 'mock'}
-                      >
+                      <MenuItem key={item.value} value={item.value}>
                         {item.label}
                       </MenuItem>
                     ))}
