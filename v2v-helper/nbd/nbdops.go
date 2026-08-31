@@ -39,6 +39,7 @@ type NBDOperations interface {
 type NBDServer struct {
 	cmd          *exec.Cmd
 	tmp_dir      string
+	sourceURL    string
 	progresschan chan string
 	TotalSize    int64
 	StartTime    time.Time
@@ -273,6 +274,7 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	}
 	nbdserver.cmd = cmd
 	nbdserver.tmp_dir = tmp_dir
+	nbdserver.sourceURL = generateSockUrl(tmp_dir)
 	nbdserver.progresschan = progchan
 	return nil
 }
@@ -324,7 +326,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			"Disk %d destination volume is encrypted; disabling nbdcopy --target-is-zero and doing a full dense copy", diskindex))
 	}
 
-	args := buildNbdcopyArgs(generateSockUrl(nbdserver.tmp_dir), dest, destEncrypted)
+	args := buildNbdcopyArgs(nbdserver.sourceURL, dest, destEncrypted)
 	cmd := exec.CommandContext(ctx, "nbdcopy", args...)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
@@ -681,7 +683,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	coalesced := coalesceExtents(changedAreas.ChangedArea, int64(ExtentCoalesceGap))
 
 	// Build the handle pool that all workers will share.
-	pool, err := newHandlePool(HandlePoolSize, generateSockUrl(nbdserver.tmp_dir))
+	pool, err := newHandlePool(HandlePoolSize, nbdserver.sourceURL)
 	if err != nil {
 		return fmt.Errorf("failed to build handle pool: %v", err)
 	}
@@ -877,4 +879,8 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 func generateSockUrl(tmp_dir string) string {
 	return fmt.Sprintf("nbd+unix:///?socket=%s/nbdkit.sock", tmp_dir)
+}
+
+func generateHotAddNBDUrl(host string, port int) string {
+	return fmt.Sprintf("nbd://%s:%d", host, port)
 }
