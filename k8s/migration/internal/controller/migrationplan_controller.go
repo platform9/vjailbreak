@@ -2189,12 +2189,6 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// requiresVDDK reports whether the given MigrationTemplate storage copy method
-// needs the VDDK library. Only the default ("normal", i.e. empty/unset) CBT/NBD
-// copy method invokes nbdkit's vddk plugin against the ESXi/vCenter NFC service.
-// StorageAcceleratedCopy clones disks array-side via SSH+XCOPY, and HotAdd
-// ("vJailbreak Accelerated Copy") streams via qemu-nbd on the Proxy VM — neither
-// touches the VDDK library.
 func requiresVDDK(storageCopyMethod string) bool {
 	return storageCopyMethod != StorageCopyMethod && storageCopyMethod != constants.HotAddCopyMethod
 }
