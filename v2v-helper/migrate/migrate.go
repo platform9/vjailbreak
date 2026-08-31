@@ -294,21 +294,56 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
 		}
-		for idx, vmdisk := range vminfo.VMDisks {
-			path, err := migobj.AttachVolume(ctx, vmdisk)
-			if err != nil {
-				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
-					return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+
+		if migobj.MigrationType == "cold" {
+			// Cold never needs incremental sync, so it keeps the original one-shot
+			// power-off-then-copy path: attach destination volumes up front, then
+			// HotAddCopyDisks does a single pass with no CBT involved.
+			for idx, vmdisk := range vminfo.VMDisks {
+				path, err := migobj.AttachVolume(ctx, vmdisk)
+				if err != nil {
+					if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+						return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+					}
+					return errors.Wrap(err, "failed to attach volume for HotAdd migration")
 				}
-				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
+				vminfo.VMDisks[idx].Path = path
 			}
-			vminfo.VMDisks[idx].Path = path
-		}
-		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
-				return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+			if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to perform HotAdd disk copy")
 			}
-			return errors.Wrap(err, "failed to perform HotAdd disk copy")
+		} else {
+			// Hot/mock: share the same live-replicate loop normal-hot uses, backed by
+			// hotAddNBDServer instead of VDDK -- destination volumes are attached by
+			// LiveReplicateDisks itself, same as the normal-hot branch below.
+			if err := migobj.EnableCBTWrapper(); err != nil {
+				migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
+				return errors.Wrap(err, "CBT Failure")
+			}
+
+			session, err := migobj.NewHotAddSession(ctx)
+			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to open Hot-Add Proxy VM session: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after Hot-Add session failure: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to open Hot-Add Proxy VM session")
+			}
+			defer session.Close()
+
+			for range vminfo.VMDisks {
+				migobj.Nbdops = append(migobj.Nbdops, NewHotAddNBDServer(migobj, session))
+			}
+
+			vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
+			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to live replicate disks")
+			}
 		}
 
 	} else {
