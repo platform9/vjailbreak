@@ -177,16 +177,20 @@ func (h *hotAddNBDServer) StopNBDServer() error {
 
 func (h *hotAddNBDServer) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
 	copyErr := h.NBDServer.CopyDisk(ctx, dest, diskindex, destEncrypted)
-	teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
-	defer cancel()
-	h.teardown(teardownCtx)
+	if copyErr == nil {
+		teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
+		defer cancel()
+		h.teardown(teardownCtx)
+	}
 	return copyErr
 }
 
 func (h *hotAddNBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error {
 	copyErr := h.NBDServer.CopyChangedBlocks(ctx, changedAreas, path, destEncrypted)
-	teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
-	defer cancel()
-	h.teardown(teardownCtx)
+	if copyErr == nil {
+		teardownCtx, cancel := context.WithTimeout(context.Background(), hotAddCopyTimeout)
+		defer cancel()
+		h.teardown(teardownCtx)
+	}
 	return copyErr
 }
