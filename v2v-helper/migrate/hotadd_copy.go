@@ -535,8 +535,135 @@ func (migobj *Migrate) cleanupHotAdd(ctx context.Context, sshClient *esxissh.Cli
 	migobj.adjustProxyDiskCount(context.Background(), -attached)
 }
 
-// HotAddCopyDisks powers off the source VM, snapshots it, attaches frozen disks to
-// the Proxy VM, and transfers data via qemu-nbd+nbdcopy. Cleanup runs on return.
+// hotAddPreparedSource bundles the SSH connection, Proxy VM object, and
+// per-disk state that PrepareHotAddSource produces and ReleaseHotAddSource tears down.
+type hotAddPreparedSource struct {
+	sshClient  *esxissh.Client
+	proxyVMObj *object.VirtualMachine
+	transfers  []hotAddDiskTransfer
+}
+
+// PrepareHotAddSource snapshots the source VM, attaches its frozen disks to
+// the Proxy VM, and identifies their block devices. On error it cleans up after
+// itself -- the caller must only call ReleaseHotAddSource on a non-nil result.
+func (migobj *Migrate) PrepareHotAddSource(ctx context.Context, vminfo vm.VMInfo) (prepared *hotAddPreparedSource, err error) {
+	// Load the per-proxy-VM SSH private key from the k8s secret named
+	// "{proxyVMName}-hot-add-ssh-key", created during Proxy VM onboarding.
+	sshKeyBytes, err := k8sutils.GetHotAddPrivateKey(ctx, migobj.K8sClient, migobj.ProxyVMK8sName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get Hot-Add SSH private key")
+	}
+
+	// 1. Remove any pre-existing snapshot with the same name, then take a fresh one.
+	// VMops.TakeSnapshot uses quiesce=false which works for both cold (VM already
+	// powered off, quiescing is a no-op) and mock (VM on, crash-consistent is correct).
+	migobj.logMessage(constants.EventMessageHotAddSnapshotCreate)
+	if snapshots, err := migobj.VMops.ListSnapshots(); err == nil {
+		for _, snap := range snapshots {
+			if snap.Name == hotAddSnapName {
+				migobj.logMessage(fmt.Sprintf("Removing pre-existing snapshot '%s'", hotAddSnapName))
+				if delErr := migobj.VMops.DeleteSnapshot(hotAddSnapName); delErr != nil {
+					return nil, errors.Wrapf(delErr, "failed to remove pre-existing snapshot '%s'", hotAddSnapName)
+				}
+				break
+			}
+		}
+	}
+	if err := migobj.VMops.TakeSnapshot(hotAddSnapName); err != nil {
+		return nil, errors.Wrap(err, "failed to create source VM snapshot")
+	}
+
+	// 2. Enumerate frozen VMDKs from the snapshot backing.
+	transfers, err := migobj.getFrozenVMDKs(ctx, vminfo)
+	if err != nil {
+		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
+		return nil, errors.Wrap(err, "failed to enumerate frozen VMDKs")
+	}
+	for i := range transfers {
+		if i < len(vminfo.VMDisks) {
+			transfers[i].DestDevice = vminfo.VMDisks[i].Path
+		}
+	}
+
+	// 3. Open SSH connection to Proxy VM.
+	sshClient := esxissh.NewClientWithTimeout(30 * time.Second)
+	connectCtx, cancelConnect := context.WithTimeout(ctx, 60*time.Second)
+	defer cancelConnect()
+	if err := sshClient.Connect(connectCtx, migobj.ProxyVMIP, hotAddSSHUser, sshKeyBytes); err != nil {
+		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
+		return nil, errors.Wrapf(err, "SSH to Proxy VM %s failed", migobj.ProxyVMIP)
+	}
+
+	// 4. Find the Proxy VM object in vCenter.
+	proxyVMObj, err := migobj.Vcclient.GetVMByName(ctx, migobj.ProxyVMName)
+	if err != nil {
+		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
+		if discErr := sshClient.Disconnect(); discErr != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", discErr))
+		}
+		return nil, errors.Wrapf(err, "failed to locate Proxy VM '%s' in vCenter", migobj.ProxyVMName)
+	}
+
+	// Any failure from here needs the same cleanup ReleaseHotAddSource runs on success.
+	defer func() {
+		if err != nil {
+			migobj.logMessage(constants.EventMessageHotAddCleanup)
+			migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
+			if discErr := sshClient.Disconnect(); discErr != nil {
+				utils.PrintLog(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", discErr))
+			}
+		}
+	}()
+
+	// 5. Attach each frozen disk to the Proxy VM. Serialized across migrations
+	// sharing this Proxy VM via a short-lived lock held by vpwned-sdk — see
+	// attachAllDisks for why.
+	migrationName, err := utils.GetMigrationObjectName()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get migration object name")
+	}
+	if err := migobj.attachAllDisks(ctx, migrationName, proxyVMObj, transfers); err != nil {
+		return nil, err
+	}
+
+	migobj.adjustProxyDiskCount(ctx, len(transfers))
+
+	// 6. Identify block devices on the Proxy VM by matching NAA WWIDs.
+	migobj.logMessage(constants.EventMessageHotAddIdentify)
+	if err := migobj.identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj); err != nil {
+		return nil, errors.Wrap(err, "failed to identify block devices on Proxy VM")
+	}
+
+	// 7. Pre-allocate one NBD port per disk before launching goroutines so concurrent
+	//    workers don't race and pick the same port from /proc/net/tcp.
+	ports, err := migobj.findFreePorts(sshClient, constants.HotAddPortRangeMin, constants.HotAddPortRangeMax, len(transfers))
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to allocate NBD ports")
+	}
+	for i := range transfers {
+		transfers[i].NBDPort = ports[i]
+	}
+
+	return &hotAddPreparedSource{
+		sshClient:  sshClient,
+		proxyVMObj: proxyVMObj,
+		transfers:  transfers,
+	}, nil
+}
+
+// ReleaseHotAddSource tears down everything a successful PrepareHotAddSource created.
+func (migobj *Migrate) ReleaseHotAddSource(ctx context.Context, prepared *hotAddPreparedSource) {
+	if prepared == nil {
+		return
+	}
+	migobj.logMessage(constants.EventMessageHotAddCleanup)
+	migobj.cleanupHotAdd(ctx, prepared.sshClient, prepared.transfers, prepared.proxyVMObj)
+	if err := prepared.sshClient.Disconnect(); err != nil {
+		utils.PrintLog(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", err))
+	}
+}
+
+// HotAddCopyDisks powers off the source VM, then runs Prepare -> copy -> Release once.
 func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Starting Hot-Add disk copy")
 
@@ -544,14 +671,7 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		return errors.New("ProxyVMIP and ProxyVMName must be set for HotAdd copy method")
 	}
 
-	// Load the per-proxy-VM SSH private key from the k8s secret named
-	// "{proxyVMName}-hot-add-ssh-key", created during Proxy VM onboarding.
-	sshKeyBytes, err := k8sutils.GetHotAddPrivateKey(ctx, migobj.K8sClient, migobj.ProxyVMK8sName)
-	if err != nil {
-		return errors.Wrap(err, "failed to get Hot-Add SSH private key")
-	}
-
-	// 1. Power off the source VM — skipped for mock migrations.
+	// Power off the source VM — skipped for mock migrations.
 	if migobj.MigrationType == "mock" {
 		migobj.logMessage("Mock migration detected, skipping VM power off")
 	} else {
@@ -573,95 +693,16 @@ func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) er
 		}
 	}
 
-	// 2. Remove any pre-existing snapshot with the same name, then take a fresh one.
-	// VMops.TakeSnapshot uses quiesce=false which works for both cold (VM already
-	// powered off, quiescing is a no-op) and mock (VM on, crash-consistent is correct).
-	migobj.logMessage(constants.EventMessageHotAddSnapshotCreate)
-	if snapshots, err := migobj.VMops.ListSnapshots(); err == nil {
-		for _, snap := range snapshots {
-			if snap.Name == hotAddSnapName {
-				migobj.logMessage(fmt.Sprintf("Removing pre-existing snapshot '%s'", hotAddSnapName))
-				if delErr := migobj.VMops.DeleteSnapshot(hotAddSnapName); delErr != nil {
-					return errors.Wrapf(delErr, "failed to remove pre-existing snapshot '%s'", hotAddSnapName)
-				}
-				break
-			}
-		}
-	}
-	if err := migobj.VMops.TakeSnapshot(hotAddSnapName); err != nil {
-		return errors.Wrap(err, "failed to create source VM snapshot")
-	}
-
-	// 3. Enumerate frozen VMDKs from the snapshot backing.
-	transfers, err := migobj.getFrozenVMDKs(ctx, vminfo)
+	prepared, err := migobj.PrepareHotAddSource(ctx, vminfo)
 	if err != nil {
-		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
-		return errors.Wrap(err, "failed to enumerate frozen VMDKs")
-	}
-	for i := range transfers {
-		if i < len(vminfo.VMDisks) {
-			transfers[i].DestDevice = vminfo.VMDisks[i].Path
-		}
-	}
-
-	// 4. Open SSH connection to Proxy VM.
-	sshClient := esxissh.NewClientWithTimeout(30 * time.Second)
-	connectCtx, cancelConnect := context.WithTimeout(ctx, 60*time.Second)
-	defer cancelConnect()
-	if err := sshClient.Connect(connectCtx, migobj.ProxyVMIP, hotAddSSHUser, sshKeyBytes); err != nil {
-		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
-		return errors.Wrapf(err, "SSH to Proxy VM %s failed", migobj.ProxyVMIP)
-	}
-	defer func() {
-		if err := sshClient.Disconnect(); err != nil {
-			utils.PrintLog(fmt.Sprintf("Warning: failed to disconnect SSH client: %v", err))
-		}
-	}()
-
-	// 5. Find the Proxy VM object in vCenter.
-	proxyVMObj, err := migobj.Vcclient.GetVMByName(ctx, migobj.ProxyVMName)
-	if err != nil {
-		_ = migobj.VMops.DeleteSnapshot(hotAddSnapName)
-		return errors.Wrapf(err, "failed to locate Proxy VM '%s' in vCenter", migobj.ProxyVMName)
-	}
-
-	// Cleanup is deferred here so all resources are released on any return path.
-	// context.Background() ensures govmomi calls succeed even if parent ctx is cancelled.
-	defer func() {
-		migobj.logMessage(constants.EventMessageHotAddCleanup)
-		migobj.cleanupHotAdd(context.Background(), sshClient, transfers, proxyVMObj)
-	}()
-
-	// 6. Attach each frozen disk to the Proxy VM. Serialized across migrations
-	// sharing this Proxy VM via a short-lived lock held by vpwned-sdk — see
-	// attachAllDisks for why.
-	migrationName, err := utils.GetMigrationObjectName()
-	if err != nil {
-		return errors.Wrap(err, "failed to get migration object name")
-	}
-	if err := migobj.attachAllDisks(ctx, migrationName, proxyVMObj, transfers); err != nil {
 		return err
 	}
+	defer migobj.ReleaseHotAddSource(context.Background(), prepared)
 
-	migobj.adjustProxyDiskCount(ctx, len(transfers))
+	transfers := prepared.transfers
+	sshClient := prepared.sshClient
 
-	// 7. Identify block devices on the Proxy VM by matching NAA WWIDs.
-	migobj.logMessage(constants.EventMessageHotAddIdentify)
-	if err := migobj.identifyBlockDevices(ctx, sshClient, transfers, proxyVMObj); err != nil {
-		return errors.Wrap(err, "failed to identify block devices on Proxy VM")
-	}
-
-	// 8. Pre-allocate one NBD port per disk before launching goroutines so concurrent
-	//    workers don't race and pick the same port from /proc/net/tcp.
-	ports, err := migobj.findFreePorts(sshClient, constants.HotAddPortRangeMin, constants.HotAddPortRangeMax, len(transfers))
-	if err != nil {
-		return errors.Wrap(err, "failed to allocate NBD ports")
-	}
-	for i := range transfers {
-		transfers[i].NBDPort = ports[i]
-	}
-
-	// 9. Copy all disks concurrently — each disk gets its own NBD server and nbdcopy.
+	// Copy all disks concurrently — each disk gets its own NBD server and nbdcopy.
 	overallStart := time.Now()
 	errCh := make(chan error, len(transfers))
 	var wg sync.WaitGroup
