@@ -13,6 +13,7 @@ import (
 	k8sutils "github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/vmware/govmomi/object"
+	"github.com/vmware/govmomi/vim25/types"
 )
 
 // hotAddCopyTimeout bounds each individual vCenter/SSH call StartNBDServer and
@@ -126,17 +127,47 @@ func (h *hotAddNBDServer) StartNBDServer(_ *object.VirtualMachine, _, _, _, _, _
 	return nil
 }
 
-// StopNBDServer kills this round's qemu-nbd process and detaches its frozen VMDK
-// from the Proxy VM, leaving the Proxy VM ready for the next round's StartNBDServer.
-func (h *hotAddNBDServer) StopNBDServer() error {
-	ctx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
-	defer cancel()
-
+// teardown kills this round's qemu-nbd process and detaches its frozen VMDK from the
+// Proxy VM. Idempotent -- killNBDDaemons/detachProxyDisks already no-op once diskKey/
+// nbdPid are zeroed, and the disk-count decrement is skipped on a repeat call so it
+// can't double-decrement a Proxy VM shared with other migrations.
+func (h *hotAddNBDServer) teardown(ctx context.Context) {
+	hadAttachment := h.diskKey != 0 || h.nbdPid != 0
 	transfers := []hotAddDiskTransfer{{DiskKey: h.diskKey, NBDPid: h.nbdPid}}
 	h.migobj.killNBDDaemons(h.session.sshClient, transfers)
 	h.migobj.detachProxyDisks(ctx, h.session.proxyVMObj, transfers)
-	h.migobj.adjustProxyDiskCount(ctx, -1)
+	if hadAttachment {
+		h.migobj.adjustProxyDiskCount(ctx, -1)
+	}
 	h.diskKey = 0
 	h.nbdPid = 0
+}
+
+// StopNBDServer tears down this round's attachment, leaving the Proxy VM ready for
+// the next round's StartNBDServer. CopyDisk/CopyChangedBlocks below already do this
+// right after copying, so by the time nbd_copy.go calls this it is usually a no-op --
+// kept because nbd.NBDOperations requires it and the final cleanup pass at the end of
+// LiveReplicateDisks calls it unconditionally on every disk.
+func (h *hotAddNBDServer) StopNBDServer() error {
+	ctx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	defer cancel()
+	h.teardown(ctx)
 	return nil
+}
+
+func (h *hotAddNBDServer) CopyDisk(ctx context.Context, dest string, diskindex int, destEncrypted bool) error {
+	copyErr := h.NBDServer.CopyDisk(ctx, dest, diskindex, destEncrypted)
+	teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	defer cancel()
+	h.teardown(teardownCtx)
+	return copyErr
+}
+
+// CopyChangedBlocks mirrors CopyDisk -- see its comment.
+func (h *hotAddNBDServer) CopyChangedBlocks(ctx context.Context, changedAreas types.DiskChangeInfo, path string, destEncrypted bool) error {
+	copyErr := h.NBDServer.CopyChangedBlocks(ctx, changedAreas, path, destEncrypted)
+	teardownCtx, cancel := context.WithTimeout(h.session.ctx, hotAddCopyTimeout)
+	defer cancel()
+	h.teardown(teardownCtx)
+	return copyErr
 }
