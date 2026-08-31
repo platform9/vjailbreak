@@ -26,20 +26,33 @@ For the underlying mechanism behind interface-name persistence and per-OS guest 
 | **Fallback to DHCP** | On = accept an OpenStack-assigned address rather than fail. Off = stop the migration on conflict or mismatch. |
 | **Persist source network interfaces** | Restore the original interface names inside the guest. Only available when Preserve IP is on. |
 
-## Quick picker
+## Table of scenarios
 
-| Your situation | Scenario |
-| --- | --- |
-| Same subnet, keep the exact IP and MAC, fail if the address is taken | [A](#a--keep-the-same-ip-and-the-same-mac) |
-| Assign a specific new IP | [B](#b--assign-a-specific-new-ip-address) |
-| Force everything onto DHCP | [C](#c--force-everything-onto-dhcp) |
-| Destination is a different subnet | [D](#d--the-destination-is-on-a-different-subnet) |
-| Same subnet, prefer the IP but accept DHCP during a bulk move | [E](#e--prefer-the-same-ip-but-accept-dhcp-rather-than-fail) |
-| Destination is an L2-only network | [F](#f--the-destination-is-an-l2-only-network) |
-| Keep the IP but re-issue the MAC | [G](#g--keep-the-ip-but-let-openstack-pick-a-new-mac) |
-| Source VM is powered off | [H](#h--the-source-vm-is-powered-off) |
-| Attach the port with no address at all | [I](#i--create-the-port-with-no-address-at-all) |
-| Preserve IP and MAC, but Persist Network is off | [J](#j--preserve-ip-and-mac-but-persist-network-is-off) |
+Find the situation that matches yours, read across the row for the settings to apply, then follow the link to the detailed block — expected outcome, port and guest behavior, and the caveats.
+
+| Scenario | Preserve IP | IP address box | Preserve MAC | Fallback to DHCP | Persist source network interfaces | Details |
+| --- | --- | --- | --- | --- | --- | --- |
+| **A** — Same subnet: keep the exact IP and MAC, fail if the address is taken | **On** | Leave as-is | **On** | Off | **On** | [Scenario A →](#a--keep-the-same-ip-and-the-same-mac) |
+| **B** — Specific new IP | Off | Type one IPv4 address | Either | Off, or on if a DHCP address is acceptable | Unavailable | [Scenario B →](#b--assign-a-specific-new-ip-address) |
+| **C** — Everything on DHCP | Off on every NIC | Empty | Either | **On** — required | Unavailable | [Scenario C →](#c--force-everything-onto-dhcp) |
+| **D** — Different subnet | Off | Empty, or an address valid in the new subnet | Either | **On** — required | Unavailable | [Scenario D →](#d--the-destination-is-on-a-different-subnet) |
+| **E** — Same subnet, bulk move: prefer the IP but accept DHCP rather than fail | **On** | Leave as-is | **On** | **On** | **On** | [Scenario E →](#e--prefer-the-same-ip-but-accept-dhcp-rather-than-fail) |
+| **F** — L2-only network | No effect on the port | Ignored | Either — on to keep the MAC | Greyed out | Your choice | [Scenario F →](#f--the-destination-is-an-l2-only-network) |
+| **G** — Same IP, new MAC | **On** | Leave as-is | Off | Your choice | Your choice | [Scenario G →](#g--keep-the-ip-but-let-openstack-pick-a-new-mac) |
+| **H** — Source VM powered off | Forced off (greyed out) | Type an address, or empty for DHCP | Either — usually on | On if the address box is empty | Unavailable | [Scenario H →](#h--the-source-vm-is-powered-off) |
+| **I** — Port with no address | Off | Empty | Either | Off | Unavailable | [Scenario I →](#i--create-the-port-with-no-address-at-all) |
+| **J** — Preserve IP and MAC, Persist Network off | **On** | Leave as-is | **On** | Your choice | Off | [Scenario J →](#j--preserve-ip-and-mac-but-persist-network-is-off) |
+
+**Reading the table**
+
+- **Either** / **Your choice** — the setting does not change the outcome the scenario describes.
+- **Unavailable** — the UI disables **Persist source network interfaces** whenever Preserve IP is off.
+- **Greyed out** — the UI disables the setting for this scenario; you cannot change it.
+- **Leave as-is** — do not edit the box; it already shows the discovered IP.
+
+:::caution
+Scenarios **C** and **I** share every setting except **Fallback to DHCP**, and Scenarios **A**, **E**, and **J** share every setting except **Fallback to DHCP** and **Persist source network interfaces**. Those single differences change the result substantially, so confirm them against the detailed block before you migrate.
+:::
 
 ---
 
@@ -49,7 +62,7 @@ For the underlying mechanism behind interface-name persistence and per-OS guest 
 
 - The destination network carries the same subnet as the source.
 - The VM is powered on and its IP was discovered correctly.
-- DNS records, firewall rules, or MAC-locked licences depend on the address surviving the move.
+- DNS records, firewall rules, or MAC-locked licenses depend on the address surviving the move.
 
 **Settings**
 
@@ -68,7 +81,7 @@ For the underlying mechanism behind interface-name persistence and per-OS guest 
 - **Inside the guest:** unchanged. A static NIC stays static on the same address; a DHCP NIC stays on DHCP. The original interface names are restored.
 
 :::caution
-If the address is already in use, the migration fails with a port conflict. That is deliberate — it stops you creating a duplicate. Consider ticking **Disconnect source network** so the original VM releases the address first.
+If the address is already in use, the migration fails with a port conflict. That is deliberate — it stops you from creating a duplicate. Consider ticking **Disconnect source network** so the original VM releases the address first.
 
 **Persist source network interfaces** must be on for the "unchanged" guarantee above. If it is off, the guest outcome depends on the OS — see [Scenario J](#j--preserve-ip-and-mac-but-persist-network-is-off).
 :::
@@ -92,7 +105,7 @@ If the address is already in use, the migration fails with a port conflict. That
 **What you get**
 
 - **OpenStack port:** the address you typed, provided it belongs to a subnet on the destination network.
-- If it does not belong to a subnet: the migration fails (Fallback off) or the port gets an OpenStack-assigned address (Fallback on).
+  - If it does not belong to a subnet: the migration fails (Fallback off), or the port gets an OpenStack-assigned address (Fallback on).
 - **Inside the guest:** DHCP configuration on the assigned address.
 
 :::caution
@@ -180,7 +193,7 @@ This is the most common cause of failed migrations.
 - **Inside the guest:** the original static configuration where the address was preserved; DHCP where it was not.
 
 :::caution
-You will not be stopped when an address changes. Check the migration report afterward to see which VMs moved.
+You will not be stopped when an address changes. Check the migration report afterward to see which VMs changed address.
 
 As with Scenario A, the guest outcome above assumes **Persist source network interfaces** is on. If it is off, see [Scenario J](#j--preserve-ip-and-mac-but-persist-network-is-off).
 :::
@@ -234,7 +247,7 @@ Nothing in vJailbreak assigns addresses on an L2 network. Make sure a DHCP serve
 - **Inside the guest:** DHCP. The guest cannot match its old static settings to a hardware address it has never seen.
 
 :::caution
-Anything licence-locked to the MAC address will break.
+Anything license-locked to the MAC address will break.
 
 Interface names inside the guest may change, because names are recovered by matching on the MAC.
 :::
@@ -300,7 +313,7 @@ The VM will boot with an unconfigured NIC and no network reachability on it. Hav
 - You want the address and MAC carried over, but do not need the original interface names restored.
 - Or **Persist source network interfaces** was simply left at its default (off) and you want to know what to expect.
 
-This is the case Scenarios A and E point at. The port outcome is identical to them — only the guest differs.
+This is the case Scenarios A and E refer to. The port outcome is identical to them — only the guest differs.
 
 **Settings**
 
