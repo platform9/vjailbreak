@@ -28,6 +28,8 @@ import (
 
 //go:generate mockgen -source=../nbd/nbdops.go -destination=../nbd/nbdops_mock.go -package=nbd
 
+// NBDOperations is the per-disk sync provider seam shared by normal-hot (VDDK) and
+// hot-add flows; server/username/password/thumbprint are VDDK-specific and unused by hot-add.
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
@@ -883,4 +885,15 @@ func generateSockUrl(tmp_dir string) string {
 
 func generateHotAddNBDUrl(host string, port int) string {
 	return fmt.Sprintf("nbd://%s:%d", host, port)
+}
+
+// NewTCPSourceServer returns an NBDServer pointed at a remote qemu-nbd endpoint
+// (Hot-Add's Proxy VM) instead of a local nbdkit socket. Only CopyDisk/
+// CopyChangedBlocks/GetProgress are meant to be used on the result -- starting and
+// stopping the remote qemu-nbd process is the caller's responsibility.
+func NewTCPSourceServer(host string, port int, progchan chan string) *NBDServer {
+	return &NBDServer{
+		sourceURL:    generateHotAddNBDUrl(host, port),
+		progresschan: progchan,
+	}
 }
