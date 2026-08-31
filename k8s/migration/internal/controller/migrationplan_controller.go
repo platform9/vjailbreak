@@ -2114,9 +2114,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		// VDDK is only used by the default ("normal") CBT/NBD copy method; skip
+		// the precheck for StorageAcceleratedCopy and HotAdd, which don't need it.
+		if requiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2183,6 +2187,16 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
+}
+
+// requiresVDDK reports whether the given MigrationTemplate storage copy method
+// needs the VDDK library. Only the default ("normal", i.e. empty/unset) CBT/NBD
+// copy method invokes nbdkit's vddk plugin against the ESXi/vCenter NFC service.
+// StorageAcceleratedCopy clones disks array-side via SSH+XCOPY, and HotAdd
+// ("vJailbreak Accelerated Copy") streams via qemu-nbd on the Proxy VM — neither
+// touches the VDDK library.
+func requiresVDDK(storageCopyMethod string) bool {
+	return storageCopyMethod != StorageCopyMethod && storageCopyMethod != constants.HotAddCopyMethod
 }
 
 func (r *MigrationPlanReconciler) validateVDDKPresence(
