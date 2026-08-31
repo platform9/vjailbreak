@@ -13,6 +13,7 @@ import (
 
 	"github.com/pkg/errors"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
+	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"github.com/platform9/vjailbreak/v2v-helper/nbd"
 	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
@@ -20,7 +21,6 @@ import (
 	"github.com/platform9/vjailbreak/v2v-helper/reporter"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
-	"github.com/platform9/vjailbreak/pkg/vpwned/sdk/storage"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -196,6 +196,10 @@ func (migobj *Migrate) CheckCutoverOptions() (bool, string) {
 	return false, ""
 }
 
+// gracefulCleanupTimeout bounds the OpenStack/Neutron calls cleanup makes after a
+// SIGTERM/SIGINT, once they're on their own fresh context (see gracefulTerminate).
+const gracefulCleanupTimeout = 5 * time.Minute
+
 func (migobj *Migrate) gracefulTerminate(ctx context.Context, vminfo vm.VMInfo, cancel context.CancelFunc) {
 	gracefulShutdown := make(chan os.Signal, 1)
 	// Handle SIGTERM
@@ -203,7 +207,9 @@ func (migobj *Migrate) gracefulTerminate(ctx context.Context, vminfo vm.VMInfo, 
 	<-gracefulShutdown
 	migobj.logMessage("Gracefully terminating")
 	cancel()
-	migobj.cleanup(ctx, vminfo, "Migration terminated", nil, nil)
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), gracefulCleanupTimeout)
+	migobj.cleanup(cleanupCtx, vminfo, "Migration terminated", nil, nil)
+	cleanupCancel()
 	os.Exit(0)
 }
 
@@ -294,21 +300,56 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 			}
 			return errors.Wrap(err, "failed to create volumes for HotAdd migration")
 		}
-		for idx, vmdisk := range vminfo.VMDisks {
-			path, err := migobj.AttachVolume(ctx, vmdisk)
-			if err != nil {
-				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
-					return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+
+		if migobj.MigrationType == "cold" {
+			// Cold never needs incremental sync, so it keeps the original one-shot
+			// power-off-then-copy path: attach destination volumes up front, then
+			// HotAddCopyDisks does a single pass with no CBT involved.
+			for idx, vmdisk := range vminfo.VMDisks {
+				path, err := migobj.AttachVolume(ctx, vmdisk)
+				if err != nil {
+					if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to attach volume for HotAdd migration: %s", err), portids, vcenterSettings); cleanuperror != nil {
+						return errors.Wrapf(err, "failed to cleanup after HotAdd attach failure: %s", cleanuperror)
+					}
+					return errors.Wrap(err, "failed to attach volume for HotAdd migration")
 				}
-				return errors.Wrap(err, "failed to attach volume for HotAdd migration")
+				vminfo.VMDisks[idx].Path = path
 			}
-			vminfo.VMDisks[idx].Path = path
-		}
-		if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
-			if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
-				return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+			if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to perform HotAdd disk copy")
 			}
-			return errors.Wrap(err, "failed to perform HotAdd disk copy")
+		} else {
+			// Hot/mock: share the same live-replicate loop normal-hot uses, backed by
+			// hotAddNBDServer instead of VDDK -- destination volumes are attached by
+			// LiveReplicateDisks itself, same as the normal-hot branch below.
+			if err := migobj.EnableCBTWrapper(); err != nil {
+				migobj.cleanup(ctx, vminfo, fmt.Sprintf("CBT Failure: %s", err), portids, vcenterSettings)
+				return errors.Wrap(err, "CBT Failure")
+			}
+
+			session, err := migobj.NewHotAddSession(ctx)
+			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to open Hot-Add Proxy VM session: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup after Hot-Add session failure: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to open Hot-Add Proxy VM session")
+			}
+			defer session.Close()
+
+			for range vminfo.VMDisks {
+				migobj.Nbdops = append(migobj.Nbdops, NewHotAddNBDServer(migobj, session))
+			}
+
+			vminfo, err = migobj.LiveReplicateDisks(ctx, vminfo)
+			if err != nil {
+				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to live replicate disks: %s", err), portids, vcenterSettings); cleanuperror != nil {
+					return errors.Wrapf(err, "failed to cleanup disks: %s", cleanuperror)
+				}
+				return errors.Wrap(err, "failed to live replicate disks")
+			}
 		}
 
 	} else {
@@ -694,6 +735,20 @@ func (migobj *Migrate) detachProbeFromServer(ctx context.Context, serverID, prob
 
 func (migobj *Migrate) cleanup(ctx context.Context, vminfo vm.VMInfo, message string, portids []string, vcenterSettings *k8sutils.VjailbreakSettings) error {
 	migobj.logMessage(fmt.Sprintf("%s. Trying to perform cleanup", message))
+
+	// Stop whatever each disk's NBD provider still has open -- for Hot-Add this is
+	// what kills qemu-nbd and detaches the frozen VMDK from the Proxy VM, so a
+	// mid-flight termination doesn't leave those behind. No-op for cold Hot-Add
+	// (Nbdops is never populated there) and for normal/VDDK when nothing was started.
+	for idx, nbdop := range migobj.Nbdops {
+		if nbdop == nil {
+			continue
+		}
+		if err := nbdop.StopNBDServer(); err != nil {
+			utils.PrintLog(fmt.Sprintf("Warning: failed to stop NBD server for disk %d during cleanup: %v", idx, err))
+		}
+	}
+
 	err := migobj.DetachAllVolumesWithCleanup(ctx, vminfo)
 	if err != nil {
 		utils.PrintLog(fmt.Sprintf("Failed to detach all volumes from VM: %s\n", err))

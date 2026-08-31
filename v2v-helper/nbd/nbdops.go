@@ -28,6 +28,8 @@ import (
 
 //go:generate mockgen -source=../nbd/nbdops.go -destination=../nbd/nbdops_mock.go -package=nbd
 
+// NBDOperations is the per-disk sync provider seam shared by normal-hot (VDDK) and
+// hot-add flows; server/username/password/thumbprint are VDDK-specific and unused by hot-add.
 type NBDOperations interface {
 	StartNBDServer(vm *object.VirtualMachine, server, username, password, thumbprint, snapref, file string, progchan chan string) error
 	StopNBDServer() error
@@ -39,6 +41,7 @@ type NBDOperations interface {
 type NBDServer struct {
 	cmd          *exec.Cmd
 	tmp_dir      string
+	sourceURL    string
 	progresschan chan string
 	TotalSize    int64
 	StartTime    time.Time
@@ -273,11 +276,17 @@ vixDiskLib.nfcAio.Session.BufCount=4`
 	}
 	nbdserver.cmd = cmd
 	nbdserver.tmp_dir = tmp_dir
+	nbdserver.sourceURL = generateSockUrl(tmp_dir)
 	nbdserver.progresschan = progchan
 	return nil
 }
 
 func (nbdserver *NBDServer) StopNBDServer() error {
+	// Nil-safe: a mid-migration termination may call this on a disk whose
+	// StartNBDServer never ran, leaving cmd at its zero value. Nothing to kill.
+	if nbdserver.cmd == nil || nbdserver.cmd.Process == nil {
+		return nil
+	}
 	err := nbdserver.cmd.Process.Kill()
 	if err != nil {
 		return fmt.Errorf("failed to kill nbdkit: %v", err)
@@ -286,20 +295,6 @@ func (nbdserver *NBDServer) StopNBDServer() error {
 	return nil
 }
 
-// buildNbdcopyArgs constructs the argument list for the nbdcopy invocation
-// used by CopyDisk. It is a pure function (no exec, no I/O) specifically so
-// the --target-is-zero decision can be unit tested without shelling out.
-//
-// --target-is-zero tells nbdcopy to trust that the destination already reads
-// as all-zero, so it can skip writing any source region that is itself
-// zero/sparse. That assumption holds for a plain, freshly created Cinder
-// volume, but not for an encrypted one: encryption is applied transparently
-// at the QEMU layer, so a region that was never actually written through the
-// encryption engine does not decrypt back to zero on readback - it decrypts
-// to pseudo-random, key-derived noise. Skipping those regions produces a
-// disk that looks corrupted (missing partition table, unbootable) even
-// though the copy reported success. For encrypted destinations we must fall
-// back to a full, dense copy - slower, but correct.
 func buildNbdcopyArgs(sockUrl, dest string, destEncrypted bool) []string {
 	args := []string{"--progress=3"}
 	if !destEncrypted {
@@ -324,7 +319,7 @@ func (nbdserver *NBDServer) CopyDisk(ctx context.Context, dest string, diskindex
 			"Disk %d destination volume is encrypted; disabling nbdcopy --target-is-zero and doing a full dense copy", diskindex))
 	}
 
-	args := buildNbdcopyArgs(generateSockUrl(nbdserver.tmp_dir), dest, destEncrypted)
+	args := buildNbdcopyArgs(nbdserver.sourceURL, dest, destEncrypted)
 	cmd := exec.CommandContext(ctx, "nbdcopy", args...)
 	cmd.ExtraFiles = []*os.File{progressWrite}
 
@@ -681,7 +676,7 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 	coalesced := coalesceExtents(changedAreas.ChangedArea, int64(ExtentCoalesceGap))
 
 	// Build the handle pool that all workers will share.
-	pool, err := newHandlePool(HandlePoolSize, generateSockUrl(nbdserver.tmp_dir))
+	pool, err := newHandlePool(HandlePoolSize, nbdserver.sourceURL)
 	if err != nil {
 		return fmt.Errorf("failed to build handle pool: %v", err)
 	}
@@ -877,4 +872,19 @@ func (nbdserver *NBDServer) CopyChangedBlocks(ctx context.Context, changedAreas 
 
 func generateSockUrl(tmp_dir string) string {
 	return fmt.Sprintf("nbd+unix:///?socket=%s/nbdkit.sock", tmp_dir)
+}
+
+func generateHotAddNBDUrl(host string, port int) string {
+	return fmt.Sprintf("nbd://%s:%d", host, port)
+}
+
+// NewTCPSourceServer returns an NBDServer pointed at a remote qemu-nbd endpoint
+// (Hot-Add's Proxy VM) instead of a local nbdkit socket. Only CopyDisk/
+// CopyChangedBlocks/GetProgress are meant to be used on the result -- starting and
+// stopping the remote qemu-nbd process is the caller's responsibility.
+func NewTCPSourceServer(host string, port int, progchan chan string) *NBDServer {
+	return &NBDServer{
+		sourceURL:    generateHotAddNBDUrl(host, port),
+		progresschan: progchan,
+	}
 }
