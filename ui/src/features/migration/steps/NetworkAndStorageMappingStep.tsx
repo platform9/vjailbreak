@@ -10,8 +10,7 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
-  Alert,
-  Chip
+  Alert
 } from '@mui/material'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
 import { useMemo } from 'react'
@@ -271,32 +270,7 @@ export default function NetworkAndStorageMappingStep({
                       key={option.value}
                       value={option.value}
                       control={<Radio />}
-                      label={
-                        option.value === 'HotAdd' ? (
-                          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                            <Box component="span">{option.label}</Box>
-                            <Chip
-                              label="Beta"
-                              size="small"
-                              color="warning"
-                              variant="outlined"
-                              sx={{
-                                transform: 'translateY(-6px)',
-                                height: 16,
-                                '& .MuiChip-label': {
-                                  px: 0.75,
-                                  fontSize: '0.65rem',
-                                  lineHeight: '16px',
-                                  display: 'flex',
-                                  alignItems: 'center'
-                                }
-                              }}
-                            />
-                          </Box>
-                        ) : (
-                          option.label
-                        )
-                      }
+                      label={option.label}
                     />
                   ))}
                 </RadioGroup>
@@ -370,6 +344,7 @@ export default function NetworkAndStorageMappingStep({
                     onChange={handleStorageMappingsChange}
                     oneToManyMapping
                     fieldPrefix="storageMapping"
+                    data-testid="storage-mapping-table"
                   />
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Select a verified vJailbreak Proxy VM to use for Accelerated Copy disk access during migration.
@@ -396,6 +371,7 @@ export default function NetworkAndStorageMappingStep({
                         displayEmpty
                         onChange={(e) => onChange('proxyVMRef')(e.target.value)}
                         disabled={readyProxyVMs.length === 0}
+                        data-testid="proxy-vm-dropdown"
                         renderValue={(selected) => {
                           if (!selected) return <em>Select vJailbreak Proxy VM</em>
                           const vm = readyProxyVMs.find((v) => v.metadata.name === selected)

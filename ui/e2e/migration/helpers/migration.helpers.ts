@@ -46,6 +46,7 @@ export const API = {
   podLogs: (namespace: string, podName: string) =>
     `**/namespaces/${namespace}/pods/${podName}/log*`,
   rollingMigrationPlans: `**${V1A1}/rollingmigrationplans`,
+  proxyVMs: new RegExp(`${escapeRegExp(V1A1)}/proxyvms(\\?.*)?$`),
 }
 
 export const ROUTES = {
@@ -108,6 +109,14 @@ export async function selectPcdCluster(page: Page, clusterValue: string): Promis
   await expect(page.getByTestId('pcd-cluster-dropdown')).not.toBeDisabled({ timeout: 10_000 })
   await page.getByTestId('pcd-cluster-dropdown').click()
   await page.getByRole('option', { name: clusterValue }).click()
+}
+
+// storageCopyMethod defaults to 'HotAdd' (vJailbreak Accelerated Copy), which requires
+// picking a Ready Proxy VM before submit is enabled.
+export async function selectProxyVM(page: Page, vmName: string): Promise<void> {
+  await expect(page.getByTestId('proxy-vm-dropdown')).not.toBeDisabled({ timeout: 10_000 })
+  await page.getByTestId('proxy-vm-dropdown').click()
+  await page.getByRole('option', { name: new RegExp(vmName) }).click()
 }
 
 // ─── Route mocking helpers ────────────────────────────────────────────────────

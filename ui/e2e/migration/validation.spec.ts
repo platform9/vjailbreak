@@ -5,6 +5,7 @@ import {
   openMigrationDrawer,
   selectVmwareCluster,
   selectPcdCluster,
+  selectProxyVM,
   mockRoute,
   expectSectionNavError,
   expectSectionNavIncomplete,
@@ -31,6 +32,7 @@ import {
   MOCK_VMWARE_MACHINES_LIST,
   MOCK_VOLUME_IMAGE_PROFILES_LIST,
   MOCK_VMWARE_MACHINE_POWERED_OFF,
+  MOCK_PROXY_VMS_LIST,
 } from './helpers/migration.fixtures'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -118,6 +120,7 @@ async function mockStandardFormApis(page: Page) {
   await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST)
   await mockRoute(page, API.openstackCredByName('pcd-cred-1'), 'GET', MOCK_OPENSTACK_CRED_1)
   await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+  await mockRoute(page, API.proxyVMs, 'GET', MOCK_PROXY_VMS_LIST)
   await mockRoute(page, API.rdmDisks, 'GET', { apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1', kind: 'RdmDiskList', metadata: { continue: '', resourceVersion: '1' }, items: [] })
   await page.route('**migrationtemplates**', (route) => {
     const method = route.request().method()
@@ -330,6 +333,8 @@ test.describe('MIG-014 — all networks must be mapped', () => {
     await expect(page.getByTestId('network-mapping-table')).toBeVisible()
     await mapAllTableRows(page, 'network-mapping-table')
     await mapAllTableRows(page, 'storage-mapping-table')
+    // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required for completeness.
+    await selectProxyVM(page, 'proxy-vm-1')
     await expectSectionNavClear(page, 'map-resources')
   })
 })
@@ -360,6 +365,8 @@ test.describe('MIG-015 — all datastores must be mapped', () => {
     await expect(page.getByTestId('network-mapping-table')).toBeVisible()
     await mapAllTableRows(page, 'network-mapping-table')
     await mapAllTableRows(page, 'storage-mapping-table')
+    // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required for completeness.
+    await selectProxyVM(page, 'proxy-vm-1')
     await expectSectionNavClear(page, 'map-resources')
   })
 })
@@ -461,6 +468,13 @@ test.describe('MIG-017 — options cutover time validation', () => {
   })
 
   test('Cutover option toggle enables cutover type selection', async ({ page }) => {
+    // storageCopyMethod defaults to HotAdd, which only supports cold/mock data copy
+    // (MigrationOptionsAlt.tsx force-resets dataCopyMethod to 'cold' for HotAdd). Switch
+    // to Standard Copy first so 'hot' becomes selectable for this cutover-specific test.
+    await page.getByTestId('section-nav-item-map-resources').click()
+    await page.getByRole('radio', { name: /standard copy/i }).click()
+    await page.getByTestId('section-nav-item-options').click()
+
     // Cutover is disabled for cold migration (the default dataCopyMethod='cold').
     // Enable warm migration first so the cutover checkbox becomes interactive.
     // Must click the visible <label> wrapper — clicking the hidden input (opacity:0)
