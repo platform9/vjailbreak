@@ -1343,7 +1343,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-										Type: utils.NewHostPathType("Directory"),
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},
 							},
