@@ -61,15 +61,19 @@ test.describe('MIGOPTS-001 — GH-2176 regression: Migration Options toggles res
     await checkbox.scrollIntoViewIfNeeded()
     await expect(checkbox).toBeVisible()
 
-    const box = await checkbox.boundingBox()
-    if (!box) throw new Error('checkbox not visible')
-    const cx = box.x + box.width / 2
-    const cy = box.y + box.height / 2
+    const clickCenter = async () => {
+      // Re-resolve on every call: checking this box can reveal an info Alert above it
+      // (e.g. the HotAdd "requires Cold or Mock copy" banner), which shifts the
+      // checkbox down — reusing stale coordinates would click the wrong spot.
+      const box = await checkbox.boundingBox()
+      if (!box) throw new Error('checkbox not visible')
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    }
 
-    await page.mouse.click(cx, cy)
+    await clickCenter()
     await expect(checkbox).toBeChecked()
 
-    await page.mouse.click(cx, cy)
+    await clickCenter()
     await expect(checkbox).not.toBeChecked()
   })
 })

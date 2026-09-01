@@ -6,6 +6,7 @@ import {
   submitMigrationForm,
   selectVmwareCluster,
   selectPcdCluster,
+  selectProxyVM,
   mockRoute,
   mockRouteError,
   expectToast,
@@ -32,6 +33,7 @@ import {
   MOCK_PCD_CLUSTERS_LIST,
   MOCK_VMWARE_CRED_1,
   MOCK_VMWARE_MACHINES_LIST,
+  MOCK_PROXY_VMS_LIST,
 } from './helpers/migration.fixtures'
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
@@ -45,6 +47,7 @@ async function mockStandardFormApis(page: Page) {
   await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST)
   await mockRoute(page, API.openstackCredByName('pcd-cred-1'), 'GET', MOCK_OPENSTACK_CRED_1)
   await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+  await mockRoute(page, API.proxyVMs, 'GET', MOCK_PROXY_VMS_LIST)
   await page.route('**migrationtemplates**', (route) => {
     const method = route.request().method()
     if (method === 'POST') {
@@ -142,6 +145,9 @@ async function completeMigrationFormSteps(page: Page) {
     )
     await expect(storTable.locator('[aria-label="delete-mapping"]')).toHaveCount(prevCount + 1, { timeout: 5000 })
   }
+
+  // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required before submit.
+  await selectProxyVM(page, 'proxy-vm-1')
 }
 
 // ─── MIG-020: API error on standard migration submission ──────────────────────
