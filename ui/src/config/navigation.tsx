@@ -37,12 +37,7 @@ export const navigationItems: NavigationItem[] = [
       {
         id: 'proxy-vms',
         label: 'vJailbreak Proxy VMs',
-        path: '/dashboard/proxy-vms',
-        badge: {
-          label: 'Beta',
-          color: 'warning',
-          variant: 'outlined'
-        }
+        path: '/dashboard/proxy-vms'
       }
     ]
   },

@@ -225,6 +225,29 @@ export const MOCK_MIGRATION_PLANS_LIST_EMPTY = {
   items: [],
 }
 
+// ─── Proxy VMs (Storage Accelerated Copy / HotAdd) ─────────────────────────────
+
+export const MOCK_PROXY_VM_READY = {
+  apiVersion: API_VERSION,
+  kind: 'ProxyVM',
+  metadata: baseMeta('proxy-vm-1'),
+  spec: {
+    vmName: 'proxy-vm-1',
+    vmwareCredsRef: { name: 'vcenter-cred-1' },
+  },
+  status: {
+    validationStatus: 'Ready',
+    ipAddress: '192.168.1.200',
+  },
+}
+
+export const MOCK_PROXY_VMS_LIST = {
+  apiVersion: API_VERSION,
+  kind: 'ProxyVMList',
+  metadata: { resourceVersion: '1' },
+  items: [MOCK_PROXY_VM_READY],
+}
+
 // ─── VMware Credentials ───────────────────────────────────────────────────────
 
 export const MOCK_VMWARE_CRED_1 = {

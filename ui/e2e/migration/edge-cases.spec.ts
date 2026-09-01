@@ -6,6 +6,7 @@ import {
   openMigrationDrawer,
   selectVmwareCluster,
   selectPcdCluster,
+  selectProxyVM,
   mockRoute,
   expectToast,
   API,
@@ -36,6 +37,7 @@ import {
   MOCK_SETTINGS_CONFIGMAP_NETWORK_PERSISTENCE_OFF,
   MOCK_SUBNET_COMPATIBILITY_INCOMPATIBLE,
   MOCK_SUBNET_COMPATIBILITY_COMPATIBLE,
+  MOCK_PROXY_VMS_LIST,
   NS,
 } from './helpers/migration.fixtures'
 
@@ -50,6 +52,7 @@ async function mockStandardFormApis(page: Page) {
   await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST)
   await mockRoute(page, API.openstackCredByName('pcd-cred-1'), 'GET', MOCK_OPENSTACK_CRED_1)
   await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+  await mockRoute(page, API.proxyVMs, 'GET', MOCK_PROXY_VMS_LIST)
   await page.route('**migrationtemplates**', (route) => {
     const method = route.request().method()
     if (method === 'POST') {
@@ -187,6 +190,8 @@ test.describe('MIG-029 — single VM selection', () => {
     // Map networks and storage using proven tr+[role="combobox"] pattern
     await mapAllTableRows(page, 'network-mapping-table')
     await mapAllTableRows(page, 'storage-mapping-table')
+    // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required before submit.
+    await selectProxyVM(page, 'proxy-vm-1')
 
     await expect(page.getByTestId('migration-form-submit')).toBeEnabled({ timeout: 5000 })
   })
