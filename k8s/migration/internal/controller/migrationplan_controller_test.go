@@ -36,6 +36,7 @@ import (
 
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	"github.com/platform9/vjailbreak/pkg/common/constants"
 )
 
 var _ = ginkgo.Describe("MigrationPlan Controller", func() {
@@ -537,6 +538,32 @@ func TestSetMigrationSpecificFields_DataOnly(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("DATA_ONLY = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestRequiresVDDK verifies that the VDDK precheck is only required for the
+// default ("normal"/unset) storage copy method, and is skipped for
+// StorageAcceleratedCopy and HotAdd ("vJailbreak Accelerated Copy"), neither
+// of which invokes nbdkit's vddk plugin.
+func TestRequiresVDDK(t *testing.T) {
+	tests := []struct {
+		name              string
+		storageCopyMethod string
+		want              bool
+	}{
+		{name: "unset/default (normal) requires VDDK", storageCopyMethod: "", want: true},
+		{name: "explicit normal requires VDDK", storageCopyMethod: "normal", want: true},
+		{name: "StorageAcceleratedCopy skips VDDK", storageCopyMethod: StorageCopyMethod, want: false},
+		{name: "HotAdd skips VDDK", storageCopyMethod: constants.HotAddCopyMethod, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := requiresVDDK(tt.storageCopyMethod)
+			if got != tt.want {
+				t.Errorf("requiresVDDK(%q) = %v, want %v", tt.storageCopyMethod, got, tt.want)
 			}
 		})
 	}
