@@ -19,6 +19,7 @@ export interface VjailbreakSettings {
     AUTO_FSTAB_UPDATE: string
     DEFAULT_NETWORK_PERSISTENCE?: string
     HTTP_TIMEOUT_SECONDS: string
+    VDDK_REQUIRED?: string
   }
   kind: string
   metadata: {
