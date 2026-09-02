@@ -4,8 +4,10 @@ description: Usage
 ---
 
 vJailbreak works by running itself as a VM on the target OpenStack cloud. It connects remotely
-to the VMware vSphere environment to perform the migration. vJailbreak uses the VMware VDDK
-library to interact with the VMware environment and perform the necessary disk copy operations.
+to the VMware vSphere environment to perform the migration. vJailbreak supports multiple storage
+copy methods: the **Standard** copy method uses the VMware VDDK library, while **vJailbreak
+Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK. These are
+the recommended methods when VDDK is unavailable.
 
 It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
 provisioning operations including creation of volumes, VMs.
@@ -250,15 +252,27 @@ Cloud-init can be used during VM creation to automate initial configuration incl
 
 
 
-### Copy VDDK Libraries
-VMware VDDK library is required for vJailbreak to interact with the VMware environment and it must be configured in the vJailbreak VM.
-- Copy the 8.0.X version of the [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/8.0) for Linux into `/home/ubuntu` of the vJailbreak VM. Untar it to a folder named `vmware-vix-disklib-distrib` in the `/home/ubuntu` directory.
-  ```shell
-  # Example: Extract VDDK tarball
-  cd /home/ubuntu
-  tar -xvf VMware-vix-disklib-8.0.3-*.x86_64.tar.gz
-  # This will create the vmware-vix-disklib-distrib directory
-  ```
+### Copy VDDK Libraries (Standard Copy Only)
+
+VDDK is required only if you plan to use the **Standard** storage copy method. If you are using
+**vJailbreak Accelerated Copy** or **Storage-Accelerated Copy**, skip this step; neither method
+requires VDDK.
+
+:::caution[VDDK currently unavailable]
+VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
+package, use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead. Both work
+without VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only** (source VM
+must be powered off before copy).
+:::
+
+If you have a VDDK 8.0.x package, copy it into `/home/ubuntu` of the vJailbreak VM and untar it
+to a folder named `vmware-vix-disklib-distrib`:
+
+```shell
+cd /home/ubuntu
+tar -xvf VMware-vix-disklib-8.0.3-*.x86_64.tar.gz
+# This will create the vmware-vix-disklib-distrib directory
+```
 
 ### Configure DNS Resolution
 Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly. You can either configure this during VM creation with cloud-init (as shown above) or modify the configuration after VM deployment.

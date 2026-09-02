@@ -5,6 +5,12 @@ description: High-performance VM migration using storage array level XCOPY opera
 
 Storage Accelerated Copy is an advanced data copy method that leverages storage array level XCOPY operations to dramatically improve migration performance. Instead of copying data over the network via the traditional NBD/NFC protocol, this method offloads the data copy to the storage array itself, achieving significantly faster transfer speeds.
 
+:::note[VDDK not required]
+Storage-Accelerated Copy does not require VDDK at any stage. Disk data is copied directly by the
+storage array via `vmkfstools` XCOPY. VDDK is never used. This method is unaffected by VDDK
+availability.
+:::
+
 ## Overview
 
 ### How It Works

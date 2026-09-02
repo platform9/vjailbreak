@@ -9,6 +9,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
  
 ## Common issues
 
+- [VDDK unavailable: VMware's public download pages are down](#vddk-unavailable-vmwares-public-download-pages-are-down)
 - [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
@@ -203,6 +204,34 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   - Check ahead of a migration wave: `test -L /boot/grub/grub.cfg && echo OK || echo MISSING`.
   - Observed on RHEL 7.9 (Maipo); other RHEL 7.x releases with the same layout may be affected.
   - See also: [Known Limitations](../../../reference/known-limitations/#rhel-7-guests-missing-grub-compatibility-symlink).
+
+---
+
+## VDDK unavailable: VMware's public download pages are down
+
+- **Symptom**
+
+  VMware's public VDDK download pages are currently unavailable. You cannot download VDDK from
+  VMware's official site.
+
+- **Impact**
+
+  Only the **Standard copy method** requires VDDK. **vJailbreak Accelerated Copy** and
+  **Storage-Accelerated Copy** do not need VDDK and are fully unaffected.
+
+- **Resolution**
+
+  Use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead of Standard copy.
+  Both methods work without VDDK installed on the vJailbreak appliance.
+
+  :::caution[Cold migration only]
+  vJailbreak Accelerated Copy supports **cold migration only**: the source VM must be powered
+  off before copy begins. It does not support live (hot) migration. If live migration is required,
+  wait for VDDK to become available and use Standard copy.
+  :::
+
+  See [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) and
+  [Storage-Accelerated Copy](../../../concepts/storage-accelerated-copy/) for setup instructions.
 
 ---
 

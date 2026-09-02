@@ -18,18 +18,30 @@ Determines how the data copy is done
 ### Storage copy method
 Determines the underlying mechanism used to transfer disk data.
 
-* **Normal** (default) - Uses the traditional network-based copy via VMware's NFC protocol. Data is transferred from ESXi hosts to OpenStack Cinder volumes over the network. This method is limited to approximately 1 Gbps per VMDK due to NFC protocol constraints.
+* **Normal** - Uses the traditional network-based copy via VMware's NFC protocol. Data is transferred from ESXi hosts to OpenStack Cinder volumes over the network. This method is limited to approximately 1 Gbps per VMDK due to NFC protocol constraints. **Requires VDDK.**
 
-* **Storage-Accelerated Copy** - Leverages storage array-level XCOPY operations for dramatically faster migrations. Instead of copying data over the network, this method offloads the copy to the storage array itself. Requires:
+* **Storage-Accelerated Copy** - Leverages storage array-level XCOPY operations for dramatically faster migrations. Instead of copying data over the network, this method offloads the copy to the storage array itself. **Does not require VDDK.** Requires:
   - Supported storage array (Pure Storage or NetApp)
   - Both VMware datastores and OpenStack Cinder backed by the same array
   - ESXi SSH access configured
   - VMs must be powered off during copy (cold migration only)
 
-* **vJailbreak Accelerated Copy** - Attaches frozen snapshot disks directly to a Proxy VM running in vCenter (using VMware's hot-add mechanism) and streams data over NBD to the destination. Works with any datastore type (NFS, VMFS, vSAN) and does not require a shared storage array. Requires:
+* **vJailbreak Accelerated Copy** *(default)* - Attaches frozen snapshot disks directly to a Proxy VM running in vCenter (using VMware's hot-add mechanism) and streams data over NBD to the destination. Works with any datastore type (NFS, VMFS, vSAN) and does not require a shared storage array. **Does not require VDDK.** Requires:
   - A registered Proxy VM in **Ready** state (Linux VM with `qemu-nbd` installed)
   - SSH access from vJailbreak to the Proxy VM
-  - VMs must be powered off during copy (cold migration only)
+  - VMs must be powered off during copy (**cold migration only; hot/live copy is not supported**)
+
+:::caution[vJailbreak Accelerated Copy: cold migration only]
+vJailbreak Accelerated Copy powers off the source VM before attaching its disks. It **cannot** be
+used with the **"Copy live VMs, then power off"** data copy method. Select **"Power off VMs, then
+copy"** when using this storage copy method.
+:::
+
+:::tip[Running without VDDK?]
+If VMware's public VDDK download pages are unavailable, use **vJailbreak Accelerated Copy** or
+**Storage-Accelerated Copy**; neither method requires VDDK. **Normal (Standard) copy** is the
+only method that requires VDDK.
+:::
 
 :::tip
 Storage-Accelerated Copy can be 10-100x faster than normal copy for large VMs. For a 1 TB disk, normal copy takes ~2.5 hours while Storage-Accelerated Copy can complete in 5-30 minutes.
