@@ -5,7 +5,7 @@
 A free and open-source tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
 
 [![Build Status](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml/badge.svg)](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/platform9/vjailbreak/v2v-helper)](https://goreportcard.com/report/github.com/platform9/vjailbreak/v2v-helper)
+[![Go Lint](https://github.com/platform9/vjailbreak/actions/workflows/golangci-lint.yaml/badge.svg?branch=main)](https://github.com/platform9/vjailbreak/actions/workflows/golangci-lint.yaml)
 
 [![Latest Release](https://badgen.net/github/release/platform9/vjailbreak/latest)](https://github.com/platform9/vjailbreak/releases/latest)
 [![All Releases](https://badgen.net/github/releases/platform9/vjailbreak)](https://github.com/platform9/vjailbreak/releases)
@@ -153,10 +153,15 @@ For information about alternative licensing arrangements, contact info@platform9
    # - Configure security group to allow required traffic
    ```
 
-3. **Copy VDDK Libraries**:
+3. **Copy VDDK Libraries (Standard Copy method only)**:
+   - VDDK is required only if you plan to use the **Standard** storage copy method. As of
+     **v0.4.10**, vJailbreak defaults to **vJailbreak Accelerated Copy**. Along with
+     **Storage-Accelerated Copy**, it does not require VDDK at all. Skip this step unless you
+     specifically need Standard copy.
    - Download [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/)
    - Copy to `/home/ubuntu` on the vJailbreak VM
    - Untar to create `vmware-vix-disklib-distrib` in `/home/ubuntu`
+   - See [vJailbreak Accelerated Copy](https://platform9.github.io/vjailbreak/concepts/vjailbreak-accelerated-copy/) and [Storage-Accelerated Copy](https://platform9.github.io/vjailbreak/concepts/storage-accelerated-copy/) for VDDK-free migration options
 
 4. **Configure DNS Resolution**:
    - Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly
