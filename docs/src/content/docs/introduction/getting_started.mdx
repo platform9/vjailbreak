@@ -6,7 +6,7 @@ description: Usage
 vJailbreak works by running itself as a VM on the target OpenStack cloud. It connects remotely
 to the VMware vSphere environment to perform the migration. vJailbreak supports multiple storage
 copy methods: the **Standard** copy method uses the VMware VDDK library, while **vJailbreak
-Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK at all — these are
+Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK. These are
 the recommended methods when VDDK is unavailable.
 
 It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
@@ -255,12 +255,12 @@ Cloud-init can be used during VM creation to automate initial configuration incl
 ### Copy VDDK Libraries (Standard Copy Only)
 
 VDDK is required only if you plan to use the **Standard** storage copy method. If you are using
-**vJailbreak Accelerated Copy** or **Storage-Accelerated Copy**, skip this step — neither method
+**vJailbreak Accelerated Copy** or **Storage-Accelerated Copy**, skip this step; neither method
 requires VDDK.
 
 :::caution[VDDK currently unavailable]
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
-package, use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead — both work
+package, use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead. Both work
 without VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only** (source VM
 must be powered off before copy).
 :::

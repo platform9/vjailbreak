@@ -12,7 +12,7 @@ VDDK is required only if you plan to use the **Standard** storage copy method.
 
 :::note
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
-package, use vJailbreak Accelerated Copy or Storage-Accelerated Copy instead — both work without
+package, use vJailbreak Accelerated Copy or Storage-Accelerated Copy instead. Both work without
 VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only**.
 :::
 

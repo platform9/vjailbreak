@@ -7,7 +7,7 @@ Storage Accelerated Copy is an advanced data copy method that leverages storage 
 
 :::note[VDDK not required]
 Storage-Accelerated Copy does not require VDDK at any stage. Disk data is copied directly by the
-storage array via `vmkfstools` XCOPY — VDDK is never used. This method is unaffected by VDDK
+storage array via `vmkfstools` XCOPY. VDDK is never used. This method is unaffected by VDDK
 availability.
 :::
 

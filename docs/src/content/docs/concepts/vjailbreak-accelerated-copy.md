@@ -7,7 +7,7 @@ vJailbreak Accelerated Copy is an advanced data copy method that attaches source
 
 > **Underlying feature:** vJailbreak Accelerated Copy is powered by VMware's **hot-add** disk transport mechanism to attach source disks to the Proxy VM.
 
-:::danger[Cold migration only — hot data copy is not supported]
+:::danger[Cold migration only: hot data copy is not supported]
 vJailbreak Accelerated Copy **does not support live (hot) migration**. The source VM is powered off
 before its disks are attached to the Proxy VM. You must select **"Power off VMs, then copy"** as
 the Data Copy Method when using vJailbreak Accelerated Copy. Attempting to use it with
@@ -16,7 +16,7 @@ the Data Copy Method when using vJailbreak Accelerated Copy. Attempting to use i
 
 :::note[VDDK not required]
 As of v0.4.10, vJailbreak Accelerated Copy does not require VDDK at any stage. Data is transferred
-directly via the hot-add disk transport and NBD streaming — VDDK is never used. This makes it the
+directly via the hot-add disk transport and NBD streaming. VDDK is never used. This makes it the
 recommended copy method when VMware's VDDK download pages are unavailable.
 :::
 

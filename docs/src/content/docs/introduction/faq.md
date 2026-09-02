@@ -11,10 +11,10 @@ VMware's public VDDK download pages are currently unavailable. VDDK is only requ
 **vJailbreak Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK and can be
 used immediately:
 
-- [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/) — works with any
+- [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/): works with any
   datastore; **cold migration only** (source VM must be powered off before copy begins, live/hot
   migration is not supported)
-- [Storage-Accelerated Copy](../../concepts/storage-accelerated-copy/) — requires a supported
+- [Storage-Accelerated Copy](../../concepts/storage-accelerated-copy/): requires a supported
   storage array (Pure Storage or NetApp); cold migration only
 
 ### Are IPs and MAC addresses persisted?
