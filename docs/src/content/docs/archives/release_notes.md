@@ -955,3 +955,13 @@ kubectl rollout restart deployment -n migration-system
 - **Migration Profiles — Upgrade Path:** The two default profiles (Windows and Linux) are auto-created on fresh installations only. Users upgrading from lower versions to v0.4.4 will need to create these profiles manually.
 - **VMware Tools Registry Entries:** Depending on the Windows version, a small number of VMware Tools registry entries (listed in public docs) may not be removed by the uninstall script. These are harmless but can be removed manually if desired.
 - **FC SAM — Verified Target:** FC support for SAM has been verified against NetApp FC targets. Compatibility with other FC storage vendors is not yet validated.
+## v0.4.5
+
+### What's Changed
+* Fix RDM configuration issue from UI by @geet-pf9 in https://github.com/platform9/vjailbreak/pull/1895
+* Bug: Fix unauthenticated error when doing vcenter operations after a long time.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1891
+* Fixed migration issue for shared rdm disk by @geet-pf9 in https://github.com/platform9/vjailbreak/pull/1902
+* chore: Pre-release CRD generation for v0.4.5 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/1904
+
+
+**Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.4.4...v0.4.5
