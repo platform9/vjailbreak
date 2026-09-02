@@ -33,6 +33,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
 - **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
+- **PVSCSI controller**: The Proxy VM's first SCSI controller (**SCSI controller 0**) must be of type **VMware Paravirtual (PVSCSI)**
 - **Datastore accessibility**: The HotAdd proxy must have access to the same datastore as the target virtual machine, and the VMFS version and data block sizes for the target VM must be the same as the datastore where the HotAdd proxy resides.
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
@@ -52,6 +53,7 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 ### 2. vCenter Requirements
 
 - The Proxy VM must have **disk.EnableUUID = TRUE** set in vCenter VM settings
+- The Proxy VM's **SCSI controller 0** must be of type **VMware Paravirtual (PVSCSI)**
 - vCenter must allow disk attach/detach operations on the Proxy VM
 - The Proxy VM must be powered on and reachable over SSH
 - The Proxy VM must be on the same datastore as the source VM's disks, with a matching VMFS version and block size (see **Datastore accessibility** under [Requirements](#requirements))
@@ -106,6 +108,20 @@ This setting is required for vJailbreak to match attached disks to their block d
 2. Click **VM Options** → **Advanced** → **Edit Configuration**
 3. Find or add the key `disk.EnableUUID` and set the value to `TRUE`
 4. Click **OK** and restart the VM if it was already running
+
+### Configure the SCSI Controller Type on the Proxy VM
+
+Source disks are attached to the Proxy VM's first SCSI controller, and vJailbreak can only match them to block devices when that controller is **VMware Paravirtual**:
+
+1. Power off the Proxy VM
+2. In vSphere Client, right-click the Proxy VM and select **Edit Settings**
+3. Under **Virtual Hardware**, locate **SCSI controller 0**
+4. Set **Change Type** to **VMware Paravirtual**
+5. Click **OK** and power the VM back on
+
+:::caution
+Other controller types — including **LSI Logic SAS**, **LSI Logic Parallel**, and **BusLogic Parallel** — are not supported. Migrations using a Proxy VM without PVSCSI on SCSI controller 0 fail with `could not identify block device for disk <uuid>`. See [Proxy VM Must Use a PVSCSI Controller](../../reference/known-limitations/#proxy-vm-must-use-a-pvscsi-controller).
+:::
 
 ## SSH Key Configuration
 
@@ -267,6 +283,8 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 - **Cold copy only**: The source VM is powered off before disk attachment — live (hot) copy of the running VM's active disks is not supported
 - **Same vCenter**: Proxy VM and source VM must be managed by the same vCenter instance
 - **VMware Tools required**: The Proxy VM must have VMware Tools running so vJailbreak can retrieve its guest IP
+- **PVSCSI controller only**: The Proxy VM's first SCSI controller (**SCSI controller 0**) must be **VMware Paravirtual (PVSCSI)**. Disk UUID matching does not work on other controller types, and migrations fail with `could not identify block device for disk <uuid>`. See [Configure the SCSI Controller Type](#configure-the-scsi-controller-type-on-the-proxy-vm).
+- **Concurrent disk attach can fail**: When several migrations reach the disk-attach step at the same time on the same Proxy VM, vCenter may reject some of the simultaneous reconfigure tasks and those migrations fail. This is a transient race — the migrations that attached first continue normally, and the failed ones succeed on retry. Stagger migration start times or spread migrations across multiple Proxy VMs to reduce the chance of it happening.
 - **Maximum 60 disks per Proxy VM (including its own boot disk)**: vSphere allows at most **60** virtual disks per VM (4 SCSI controllers × 15 disks). The Proxy VM's own boot disk counts toward this total, so the constraint is **Proxy VM boot disk + attached source disks ≤ 60** — a Proxy VM with a single boot disk can have up to **59** source disks attached at any one time. This is a shared ceiling across **all** migrations using the same Proxy VM concurrently, not a per-migration limit. To migrate more disks in parallel, register additional Proxy VMs and distribute migrations across them.
 
 ## Troubleshooting
@@ -305,9 +323,21 @@ Error: could not identify block device for disk <uuid>
 
 **Resolution:**
 1. Verify `disk.EnableUUID = TRUE` is set on the Proxy VM (this is the most common cause)
-2. Confirm the disk was actually attached — check vCenter → Proxy VM → Edit Settings → Hard Disks
-3. SSH into the Proxy VM and run `lsblk` to list visible block devices
-4. Check vCenter events for disk attach errors on the Proxy VM
+2. Verify the Proxy VM's **SCSI controller 0** is of type **VMware Paravirtual** — no other controller type is supported. See [Configure the SCSI Controller Type](#configure-the-scsi-controller-type-on-the-proxy-vm)
+3. Confirm the disk was actually attached — check vCenter → Proxy VM → Edit Settings → Hard Disks
+4. SSH into the Proxy VM and run `lsblk` to list visible block devices
+5. Check vCenter events for disk attach errors on the Proxy VM
+
+### Disk Attach Fails When Several Migrations Start Together
+
+**Symptoms:** A batch of migrations is started at once and some of them fail early with a vCenter error while attaching disks to the Proxy VM. The remaining migrations proceed into the copy phase normally.
+
+**Cause:** vCenter does not always handle simultaneous VM reconfigure (disk attach) tasks on the same Proxy VM gracefully, so some attach requests are rejected. This is a transient race condition, not a misconfiguration.
+
+**Resolution:**
+1. Wait until the surviving migrations have entered the copy phase
+2. [Retry](../../guides/how-to/retry_failed_migration/) the failed migrations — they normally succeed on the second attempt
+3. To reduce the chance of the race, stagger migration start times instead of starting a large batch at once, or register additional Proxy VMs and distribute migrations across them
 
 ### Snapshot Creation Failed
 

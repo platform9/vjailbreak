@@ -247,6 +247,26 @@ CBT is not enabled on disk <id>
 To check a VM's hardware version in vCenter, select the VM and look at **VM Hardware → Compatibility** (shown as "ESXi X.X and later (VM version N)").
 :::
 
+## vJailbreak Accelerated Copy
+
+The limitations below are specific to [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/). See its [full limitations list](../../concepts/vjailbreak-accelerated-copy/#limitations) for the remaining constraints.
+
+### Concurrent Disk Attach Can Fail
+
+When several migrations reach the disk-attach step at the same time on the same Proxy VM, vCenter does not always handle the simultaneous reconfigure tasks gracefully and rejects some attach requests, failing those migrations. This is a **transient race condition** — the migrations that attached first are unaffected and continue into the copy phase.
+
+**Workaround**: [Retry](../../guides/how-to/retry_failed_migration/) the failed migrations once the others have moved into the copy phase. To reduce the chance of the race, stagger migration start times or distribute migrations across additional Proxy VMs.
+
+See [Proxy VM disk attach fails when several migrations start together](../../guides/troubleshooting/troubleshooting/#proxy-vm-disk-attach-fails-when-several-migrations-start-together).
+
+### Proxy VM Must Use a PVSCSI Controller
+
+vJailbreak matches each attached snapshot disk to a block device inside the Proxy VM by disk UUID, which works only on the **VMware Paravirtual (PVSCSI)** controller. The Proxy VM's **SCSI controller 0** must be PVSCSI — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel are not supported. Migrations using any other type fail with `could not identify block device for disk <uuid>`.
+
+**Workaround**: Power off the Proxy VM and set **Edit Settings** → **SCSI controller 0** → **Change Type** → **VMware Paravirtual** before registering it in vJailbreak.
+
+See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [could not identify block device](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-could-not-identify-block-device).
+
 ## Application Reboot During Migration
 
 Cold migration (**Power off VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.

@@ -13,6 +13,8 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 - [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
+- [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
+- [vJailbreak Accelerated Copy fails: could not identify block device](#vjailbreak-accelerated-copy-fails-could-not-identify-block-device)
 
 vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
@@ -201,3 +203,59 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   - Check ahead of a migration wave: `test -L /boot/grub/grub.cfg && echo OK || echo MISSING`.
   - Observed on RHEL 7.9 (Maipo); other RHEL 7.x releases with the same layout may be affected.
   - See also: [Known Limitations](../../../reference/known-limitations/#rhel-7-guests-missing-grub-compatibility-symlink).
+
+---
+
+## Proxy VM disk attach fails when several migrations start together
+
+- **Symptom**
+
+  A batch of [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) migrations is started at once. Some of them fail early with a vCenter error while attaching the source snapshot disks to the Proxy VM, while the rest continue into the copy phase without any problem.
+
+- **Cause**
+
+  Each migration attaches its source disks to the Proxy VM as a vCenter VM reconfigure task. When several migrations issue these tasks against the same Proxy VM simultaneously, vCenter does not always serialize them gracefully and rejects some of the attach requests.
+
+  This is a **transient race condition** — the Proxy VM, its credentials, and its configuration are all fine. Only the migrations that lost the race are affected.
+
+- **Resolution**
+
+  1. Let the surviving migrations progress past the attach step and into the copy phase.
+  2. [Retry](../../how-to/retry_failed_migration/) the failed migrations. They normally succeed on the second attempt.
+
+- **Notes**
+
+  - To reduce the chance of hitting this, stagger migration start times rather than starting a large batch at once, or register additional Proxy VMs and distribute migrations across them.
+  - Use the [data copy start time](../../../concepts/migration-options/#data-copy-start-time) option to spread a wave of migrations over a window.
+  - See also: [Known Limitations](../../../reference/known-limitations/#concurrent-disk-attach-can-fail).
+
+---
+
+## vJailbreak Accelerated Copy fails: could not identify block device
+
+- **Symptom**
+
+  A [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) migration fails after the snapshot disk has been attached to the Proxy VM:
+
+  ```text
+  could not identify block device for disk <uuid>
+  ```
+
+- **Cause**
+
+  vJailbreak locates each attached disk inside the Proxy VM by matching its disk UUID to a block device. Two conditions must be met for this to work:
+
+  1. `disk.EnableUUID` is set to `TRUE` on the Proxy VM, so the UUID is visible to the guest.
+  2. The Proxy VM's first SCSI controller (**SCSI controller 0**) is of type **VMware Paravirtual (PVSCSI)**. Only PVSCSI is supported — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel controllers do not work.
+
+- **Resolution**
+
+  1. Confirm `disk.EnableUUID = TRUE` on the Proxy VM: vSphere Client → **Edit Settings** → **VM Options** → **Advanced** → **Edit Configuration**.
+  2. Confirm **SCSI controller 0** is **VMware Paravirtual**. If it is not, power off the Proxy VM, then in **Edit Settings** → **Virtual Hardware** set **SCSI controller 0** → **Change Type** → **VMware Paravirtual**, and power it back on.
+  3. Re-verify the Proxy VM in the vJailbreak UI and re-run the migration.
+
+- **Notes**
+
+  - SSH into the Proxy VM and run `lsblk` to confirm the attached disks are visible to the guest.
+  - Check vCenter events on the Proxy VM for disk attach errors if the disk never appears.
+  - See also: [Known Limitations](../../../reference/known-limitations/#proxy-vm-must-use-a-pvscsi-controller) and [Configure the SCSI Controller Type on the Proxy VM](../../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm).
