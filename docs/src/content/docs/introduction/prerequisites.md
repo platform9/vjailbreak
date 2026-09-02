@@ -5,6 +5,17 @@ description: prerequisites for vJailbreak
 
 For frequently asked questions, see [FAQ](../faq/).
 
+### VDDK requirements
+
+VDDK is required only if you plan to use the **Standard** storage copy method.
+**vJailbreak Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK.
+
+:::note
+VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
+package, use vJailbreak Accelerated Copy or Storage-Accelerated Copy instead — both work without
+VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only**.
+:::
+
 ### What access do I need for my vCenter user to be able to perform this migration?
 
 The required privileges depend on which features you use. The base set below is required for all migrations. Additional privileges are listed separately for vJailbreak Accelerated Copy and OVA-based Proxy VM deployment.

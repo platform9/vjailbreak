@@ -3,6 +3,20 @@ title: FAQ
 description: frequently asked questions
 ---
 
+### What should I do if I cannot download VDDK?
+
+VMware's public VDDK download pages are currently unavailable. VDDK is only required for the
+**Standard** storage copy method.
+
+**vJailbreak Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK and can be
+used immediately:
+
+- [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/) — works with any
+  datastore; **cold migration only** (source VM must be powered off before copy begins, live/hot
+  migration is not supported)
+- [Storage-Accelerated Copy](../../concepts/storage-accelerated-copy/) — requires a supported
+  storage array (Pure Storage or NetApp); cold migration only
+
 ### Are IPs and MAC addresses persisted?
 Yes, if your OpenStack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
 

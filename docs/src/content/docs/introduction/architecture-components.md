@@ -6,7 +6,7 @@ description: Overview of vJailbreak components
 
 # Architecture
 Below is high level architecture of how vJailbreak works. vJailbreak runs
-in a virtual machine in the target OpenStack environment. vJailbreak connects with VMware environment via vSphere APIs and the VDDK library. It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary provisioning operations including creation of volumes, VMs.
+in a virtual machine in the target OpenStack environment. vJailbreak connects with VMware environment via vSphere APIs, and — for the Standard copy method only — the VDDK library. vJailbreak Accelerated Copy and Storage-Accelerated Copy transfer disk data without requiring VDDK. It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary provisioning operations including creation of volumes, VMs.
 
 ![vJailbreak Architecture](/vjailbreak/images/deployment-architecture.png)
 
@@ -14,7 +14,7 @@ in a virtual machine in the target OpenStack environment. vJailbreak connects wi
 Below is an overview of each component and its role in the migration process.
 
 ### v2v-helper
-The `v2v-helper` is the main application responsible for executing the migration process. It is designed to run as a pod within the vJailbreak virtual machine (VM) in the target OpenStack environment.
+The `v2v-helper` is the main application responsible for executing the migration process. It is designed to run as a pod within the vJailbreak virtual machine (VM) in the target OpenStack environment. It supports three storage copy methods: Standard (VDDK-based), vJailbreak Accelerated Copy (Hot-Add, VDDK-free), and Storage-Accelerated Copy (XCOPY, VDDK-free) — only Standard copy requires VDDK.
 
 ### UI
 The `UI` component provides a user-friendly interface for vJailbreak. It allows users to manage and monitor the migration process through an intuitive graphical interface.
