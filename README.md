@@ -155,8 +155,8 @@ For information about alternative licensing arrangements, contact info@platform9
 
 3. **Copy VDDK Libraries (Standard Copy method only)**:
    - VDDK is required only if you plan to use the **Standard** storage copy method. As of
-     **v0.4.10**, vJailbreak defaults to **vJailbreak Accelerated Copy**, which — along with
-     **Storage-Accelerated Copy** — does not require VDDK at all. Skip this step unless you
+     **v0.4.10**, vJailbreak defaults to **vJailbreak Accelerated Copy**. Along with
+     **Storage-Accelerated Copy**, it does not require VDDK at all. Skip this step unless you
      specifically need Standard copy.
    - Download [VDDK libraries](https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/)
    - Copy to `/home/ubuntu` on the vJailbreak VM
