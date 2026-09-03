@@ -64,6 +64,31 @@ var DeploymentConfigs = []DeploymentConfig{
 	},
 }
 
+// DaemonSetConfig describes a DaemonSet the upgrade flow has to replay. Unlike a
+// Deployment there is nothing to scale, and the image carries a fixed tag rather than the
+// release tag, so what an upgrade actually replaces is the manifest.
+type DaemonSetConfig struct {
+	Namespace     string
+	Name          string
+	ContainerName string
+	// Image is verified as-is by the pre-flight check; it is not suffixed with the tag.
+	Image string
+	// ManifestPath is fetched from the target tag, relative to the repository root.
+	ManifestPath string
+}
+
+// Any DaemonSet the upgrade must replace belongs here. One that is missing keeps running
+// the manifest it was installed with indefinitely, with no warning in the UI or the logs.
+var DaemonSetConfigs = []DaemonSetConfig{
+	{
+		Namespace:     "kube-system",
+		Name:          "sync-daemon",
+		ContainerName: "sync-container",
+		Image:         "quay.io/platform9/vjailbreak:alpine",
+		ManifestPath:  "deploy/09sync-daemon.yaml",
+	},
+}
+
 var (
 	deploymentWaitTimeout  = 5 * time.Minute
 	deploymentPollInterval = 10 * time.Second
@@ -347,6 +372,15 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
+	for _, cfg := range DaemonSetConfigs {
+		e.updateProgress(fmt.Sprintf("Applying %s daemonset from GitHub", cfg.Name), StatusDeploying, "")
+		if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, cfg.ManifestPath); err != nil {
+			return fmt.Errorf("failed to apply %s daemonset: %w", cfg.Name, err)
+		}
+		e.incrementCompletedSteps()
+		e.saveProgress(ctx)
+	}
+
 	e.updateProgress("Waiting for all deployments to be ready", StatusDeploying, "")
 	for _, cfg := range []DeploymentConfig{
 		controllerConfig,
@@ -358,6 +392,11 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 			return fmt.Errorf("deployment %s not ready: %w", cfg.Name, err)
 		}
 	}
+	for _, cfg := range DaemonSetConfigs {
+		if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+			return fmt.Errorf("daemonset %s not ready: %w", cfg.Name, err)
+		}
+	}
 
 	e.updateProgress("Verifying upgrade stability", StatusVerifyingStability, "")
 
@@ -367,6 +406,15 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 			log.Printf("Stability check failed for deployment %s: %v", cfg.Name, err)
 			ok = false
 			break
+		}
+	}
+	if ok {
+		for _, cfg := range DaemonSetConfigs {
+			if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+				log.Printf("Stability check failed for daemonset %s: %v", cfg.Name, err)
+				ok = false
+				break
+			}
 		}
 	}
 
@@ -511,6 +559,51 @@ func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg Deploy
 				}
 			}
 		}
+	}
+}
+
+// waitForDaemonSetReady waits until every node the DaemonSet targets is running the
+// current generation of its pod. A DaemonSet has no replica count, so readiness is
+// desired-vs-ready across nodes, and the generation check is what makes an applied
+// manifest change (a new mount shape, say) actually observed rather than assumed.
+func (e *UpgradeExecutor) waitForDaemonSetReady(ctx context.Context, cfg DaemonSetConfig) error {
+	ticker := time.NewTicker(deploymentPollInterval)
+	defer ticker.Stop()
+
+	deadline := time.Now().Add(deploymentWaitTimeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("daemonset %s not ready within timeout", cfg.Name)
+			}
+		}
+
+		ds := &appsv1.DaemonSet{}
+		if err := e.kubeClient.Get(ctx, client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, ds); err != nil {
+			if kerrors.IsNotFound(err) {
+				return fmt.Errorf("daemonset %s not found", cfg.Name)
+			}
+			return fmt.Errorf("failed to get daemonset %s: %w", cfg.Name, err)
+		}
+
+		desired := ds.Status.DesiredNumberScheduled
+		rolloutComplete := ds.Status.NumberReady == desired &&
+			ds.Status.UpdatedNumberScheduled == desired &&
+			ds.Status.NumberUnavailable == 0
+		generationMatches := ds.Status.ObservedGeneration >= ds.Generation
+
+		// A DaemonSet with no eligible nodes reports zero desired. That is ready by every
+		// counter above, and treating it as ready is correct: there is nothing to roll out.
+		if rolloutComplete && generationMatches {
+			return nil
+		}
+
+		log.Printf("Waiting for daemonset %s/%s: ready=%d/%d updated=%d unavailable=%d generation=%d/%d",
+			cfg.Namespace, cfg.Name, ds.Status.NumberReady, desired, ds.Status.UpdatedNumberScheduled,
+			ds.Status.NumberUnavailable, ds.Status.ObservedGeneration, ds.Generation)
 	}
 }
 
@@ -843,6 +936,13 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 		return e.handleRollbackFailure(ctx, err)
 	}
 
+	for _, cfg := range DaemonSetConfigs {
+		e.updateProgress(fmt.Sprintf("Restoring %s daemonset from GitHub", cfg.Name), StatusRollingBack, "")
+		if err := ApplyManifestFromGitHub(ctx, e.kubeClient, previousVersion, cfg.ManifestPath); err != nil {
+			log.Printf("Warning: Failed to restore %s daemonset: %v", cfg.Name, err)
+		}
+	}
+
 	e.updateProgress("Waiting for all deployments to be ready", StatusRollingBack, "")
 	for _, cfg := range []DeploymentConfig{
 		controllerConfig,
@@ -852,6 +952,11 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 	} {
 		if err := e.waitForDeploymentReady(ctx, cfg); err != nil {
 			log.Printf("Warning: Deployment %s not ready: %v", cfg.Name, err)
+		}
+	}
+	for _, cfg := range DaemonSetConfigs {
+		if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+			log.Printf("Warning: DaemonSet %s not ready: %v", cfg.Name, err)
 		}
 	}
 	e.incrementCompletedSteps()

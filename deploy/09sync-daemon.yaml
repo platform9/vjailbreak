@@ -24,17 +24,18 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              echo "Fixing permissions on /home/ubuntu/vmware-vix-disklib-distrib..."
-              chown -R 1000:1000 /home/ubuntu/vmware-vix-disklib-distrib
-              chmod 755 /home/ubuntu/vmware-vix-disklib-distrib
-              echo "Fixing permissions on /home/ubuntu/virtio-win..."
-              chown -R 1000:1000 /home/ubuntu/virtio-win
-              chmod 755 /home/ubuntu/virtio-win
+              # /home/ubuntu is mounted as a whole now, so these two directories are no
+              # longer pre-created by their own volumes. Create them before chowning, or
+              # chown -R fails on a fresh appliance and the init container never passes.
+              for d in /home/ubuntu/vmware-vix-disklib-distrib /home/ubuntu/virtio-win; do
+                echo "Fixing permissions on $d..."
+                mkdir -p "$d"
+                chown -R 1000:1000 "$d"
+                chmod 755 "$d"
+              done
           volumeMounts:
-            - name: vmwarelib
-              mountPath: /home/ubuntu/vmware-vix-disklib-distrib
-            - name: virtio-win
-              mountPath: /home/ubuntu/virtio-win
+            - name: home-ubuntu
+              mountPath: /home/ubuntu
       containers:
         - name: sync-container
           image: quay.io/platform9/vjailbreak:alpine
@@ -48,12 +49,10 @@ spec:
             - name: pf9-env
               mountPath: /etc/pf9
               readOnly: true
-            - name: vmwarelib
-              mountPath: /home/ubuntu/vmware-vix-disklib-distrib
+            - name: home-ubuntu
+              mountPath: /home/ubuntu
             - name: logs
               mountPath: /var/log/pf9
-            - name: virtio-win
-              mountPath: /home/ubuntu/virtio-win
           command: ["/bin/sh", "-c"]
           args:
             - |
@@ -135,14 +134,34 @@ spec:
                   mkdir -p /home/ubuntu/vmware-vix-disklib-distrib/
 
                   echo "Syncing from rsync://${MASTER_IP}"
-                  rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
-                  rsync -avz  /var/log/pf9 rsync://${MASTER_IP}/worker-logs
-                  rsync -avz rsync://${MASTER_IP}/virtio-win /home/ubuntu/virtio-win
 
-                  if [ $? -eq 0 ]; then
-                    echo "Sync completed successfully."
+                  # Each rsync is checked on its own. A single trailing `$?` only ever
+                  # reported the last one, so a VDDK sync that delivered nothing was
+                  # still logged as a success.
+                  failed=""
+
+                  if ! rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/; then
+                    failed="$failed vmwarelib"
+                  fi
+                  if ! rsync -avz /var/log/pf9 rsync://${MASTER_IP}/worker-logs; then
+                    failed="$failed worker-logs"
+                  fi
+                  if ! rsync -avz rsync://${MASTER_IP}/virtio-win /home/ubuntu/virtio-win; then
+                    failed="$failed virtio-win"
+                  fi
+
+                  # An empty VDDK directory is not an rsync error, but it does mean this
+                  # node cannot run a migration, so do not report success for it.
+                  if [ -z "$(ls -A /home/ubuntu/vmware-vix-disklib-distrib 2>/dev/null)" ]; then
+                    echo "WARNING: /home/ubuntu/vmware-vix-disklib-distrib is empty after sync."
+                    echo "WARNING: migrations on this node will fail. If the master has VDDK,"
+                    echo "WARNING: its sync-daemon may hold a stale mount - restart that pod."
+                  fi
+
+                  if [ -n "$failed" ]; then
+                    echo "Sync failed for:$failed. Retrying next cycle."
                   else
-                    echo "Sync failed. Retrying in 60 seconds..."
+                    echo "Sync completed successfully."
                   fi
                   sleep 20
                 done
@@ -152,15 +171,17 @@ spec:
           hostPath:
             path: /etc/pf9
             type: DirectoryOrCreate
-        - name: vmwarelib
+        # Mount the parent, never /home/ubuntu/<subdir> directly. A hostPath bind mount
+        # pins the inode of the path it names, so naming a subdirectory meant that
+        # deleting and recreating it (any VDDK re-upload) left this mount attached to the
+        # orphaned inode permanently, and rsync then served an empty directory to every
+        # agent while still reporting success. Mounting the parent makes the subdirectory
+        # an ordinary path lookup, resolved fresh on every access.
+        - name: home-ubuntu
           hostPath:
-            path: /home/ubuntu/vmware-vix-disklib-distrib
+            path: /home/ubuntu
             type: DirectoryOrCreate
         - name: logs
           hostPath:
             type: DirectoryOrCreate
             path: /var/log/pf9
-        - name: virtio-win
-          hostPath:
-            type: DirectoryOrCreate
-            path: /home/ubuntu/virtio-win

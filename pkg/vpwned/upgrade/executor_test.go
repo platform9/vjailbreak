@@ -108,6 +108,21 @@ spec:
 		}
 	}
 
+	for _, cfg := range DaemonSetConfigs {
+		if strings.HasSuffix(r.URL.Path, cfg.ManifestPath) {
+			return reply(http.StatusOK, fmt.Sprintf(`apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  selector:
+    matchLabels:
+      app: %s
+`, cfg.Name, cfg.Namespace, cfg.Name))
+		}
+	}
+
 	return reply(http.StatusNotFound, "404: Not Found")
 }
 
@@ -178,11 +193,15 @@ func versionConfigClientset(t *testing.T, version string) *kubernetes.Clientset 
 	return clientset
 }
 
-// settledDeployments returns every vjailbreak deployment running one ready replica.
-func settledDeployments() []client.Object {
-	objs := make([]client.Object, 0, len(DeploymentConfigs))
+// settledWorkloads returns every vjailbreak workload in a ready state: each deployment
+// with one ready replica, and each daemonset fully scheduled.
+func settledWorkloads() []client.Object {
+	objs := make([]client.Object, 0, len(DeploymentConfigs)+len(DaemonSetConfigs))
 	for _, cfg := range DeploymentConfigs {
 		objs = append(objs, deployment(cfg.Name, 1, 1, 1))
+	}
+	for _, cfg := range DaemonSetConfigs {
+		objs = append(objs, daemonSet(cfg.Name, cfg.Namespace, 1, 1))
 	}
 	return objs
 }
@@ -201,6 +220,24 @@ func newSettlingClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	// Manifests are applied as unstructured objects, so the written object is re-read as a
 	// typed Deployment rather than type-asserted.
 	settle := func(ctx context.Context, c client.WithWatch, obj client.Object) error {
+		// DaemonSets have no replica count to mirror; the DaemonSet controller reports how
+		// many nodes are scheduled and ready, so stand in for that.
+		_, isDS := obj.(*appsv1.DaemonSet)
+		if isDS || obj.GetObjectKind().GroupVersionKind().Kind == "DaemonSet" {
+			ds := &appsv1.DaemonSet{}
+			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), ds); err != nil {
+				return err
+			}
+			ds.Status.DesiredNumberScheduled = 1
+			ds.Status.CurrentNumberScheduled = 1
+			ds.Status.NumberReady = 1
+			ds.Status.UpdatedNumberScheduled = 1
+			ds.Status.NumberAvailable = 1
+			ds.Status.NumberUnavailable = 0
+			ds.Status.ObservedGeneration = ds.Generation
+			return c.Status().Update(ctx, ds)
+		}
+
 		_, typed := obj.(*appsv1.Deployment)
 		if !typed && obj.GetObjectKind().GroupVersionKind().Kind != "Deployment" {
 			return nil
@@ -308,15 +345,58 @@ func TestDeploymentConfigsCoversEveryWorkload(t *testing.T) {
 	}
 }
 
-// The deployment phase reports one completed step per manifest it applies, so the
-// declared total must move when a deployment is added.
-func TestTotalUpgradeStepsMatchesDeploymentCount(t *testing.T) {
-	const stepsBesidesDeploymentApplies = 8
+// Every workload the upgrade replaces must be listed in one of the two config slices.
+// An unlisted DaemonSet keeps running the manifest it was installed with, forever, with
+// no warning anywhere - which is exactly how the stale sync-daemon mount survived.
+func TestDaemonSetConfigsCoversEveryWorkload(t *testing.T) {
+	want := map[string]struct {
+		namespace     string
+		containerName string
+		image         string
+		manifestPath  string
+	}{
+		"sync-daemon": {
+			namespace:     "kube-system",
+			containerName: "sync-container",
+			image:         "quay.io/platform9/vjailbreak:alpine",
+			manifestPath:  "deploy/09sync-daemon.yaml",
+		},
+	}
 
-	want := stepsBesidesDeploymentApplies + len(DeploymentConfigs)
+	if len(DaemonSetConfigs) != len(want) {
+		t.Fatalf("DaemonSetConfigs has %d entries, want %d", len(DaemonSetConfigs), len(want))
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		expected, ok := want[cfg.Name]
+		if !ok {
+			t.Errorf("unexpected daemonset %q in DaemonSetConfigs", cfg.Name)
+			continue
+		}
+		if cfg.Namespace != expected.namespace {
+			t.Errorf("%s namespace = %q, want %q", cfg.Name, cfg.Namespace, expected.namespace)
+		}
+		if cfg.ContainerName != expected.containerName {
+			t.Errorf("%s container = %q, want %q", cfg.Name, cfg.ContainerName, expected.containerName)
+		}
+		if cfg.Image != expected.image {
+			t.Errorf("%s image = %q, want %q", cfg.Name, cfg.Image, expected.image)
+		}
+		if cfg.ManifestPath != expected.manifestPath {
+			t.Errorf("%s manifest = %q, want %q", cfg.Name, cfg.ManifestPath, expected.manifestPath)
+		}
+	}
+}
+
+// The deployment phase reports one completed step per manifest it applies, so the
+// declared total must move when a deployment or daemonset is added.
+func TestTotalUpgradeStepsMatchesWorkloadCount(t *testing.T) {
+	const stepsBesidesManifestApplies = 8
+
+	want := stepsBesidesManifestApplies + len(DeploymentConfigs) + len(DaemonSetConfigs)
 	if TotalUpgradeSteps != want {
-		t.Errorf("TotalUpgradeSteps = %d, want %d (%d other steps + one apply per deployment)",
-			TotalUpgradeSteps, want, stepsBesidesDeploymentApplies)
+		t.Errorf("TotalUpgradeSteps = %d, want %d (%d other steps + one apply per workload manifest)",
+			TotalUpgradeSteps, want, stepsBesidesManifestApplies)
 	}
 }
 
@@ -742,7 +822,7 @@ func TestRunBackupAndCRDPhase(t *testing.T) {
 		router := serveGitHub(t)
 
 		e := &UpgradeExecutor{
-			kubeClient: newSettlingClient(t, settledDeployments()...),
+			kubeClient: newSettlingClient(t, settledWorkloads()...),
 			progress:   &UpgradeProgress{},
 		}
 
@@ -823,7 +903,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 		router := serveGitHub(t)
 
 		e := &UpgradeExecutor{
-			kubeClient: newSettlingClient(t, settledDeployments()...),
+			kubeClient: newSettlingClient(t, settledWorkloads()...),
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
 
@@ -835,6 +915,12 @@ func TestRunDeploymentPhase(t *testing.T) {
 			path := deploymentManifestPath(cfg.Name)
 			if !router.fetched(path) {
 				t.Errorf("%s was never applied; %s would keep running the old image", path, cfg.Name)
+			}
+		}
+		for _, cfg := range DaemonSetConfigs {
+			if !router.fetched(cfg.ManifestPath) {
+				t.Errorf("%s was never applied; %s would keep running the old manifest",
+					cfg.ManifestPath, cfg.Name)
 			}
 		}
 		if e.progress.Status != StatusCompleted {
@@ -854,7 +940,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 	t.Run("the controller replica count is remembered", func(t *testing.T) {
 		serveGitHub(t)
 
-		objs := settledDeployments()
+		objs := settledWorkloads()
 		objs[0] = deployment("migration-controller-manager", 2, 2, 2)
 
 		e := &UpgradeExecutor{
@@ -874,7 +960,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 		serveGitHub(t, deploymentManifestPath("vjailbreak-ai"))
 
 		e := &UpgradeExecutor{
-			kubeClient: newSettlingClient(t, settledDeployments()...),
+			kubeClient: newSettlingClient(t, settledWorkloads()...),
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
 
@@ -950,7 +1036,7 @@ func TestExecuteRunsEveryPhase(t *testing.T) {
 	router := serveGitHub(t)
 
 	e := &UpgradeExecutor{
-		kubeClient:    newSettlingClient(t, settledDeployments()...),
+		kubeClient:    newSettlingClient(t, settledWorkloads()...),
 		clientset:     versionConfigClientset(t, "v0.4.8"),
 		dynamicClient: newFakeDynamic(t),
 		config:        &rest.Config{},
@@ -971,6 +1057,11 @@ func TestExecuteRunsEveryPhase(t *testing.T) {
 	}
 	for _, cfg := range DeploymentConfigs {
 		if !router.fetched(deploymentManifestPath(cfg.Name)) {
+			t.Errorf("%s was never applied", cfg.Name)
+		}
+	}
+	for _, cfg := range DaemonSetConfigs {
+		if !router.fetched(cfg.ManifestPath) {
 			t.Errorf("%s was never applied", cfg.Name)
 		}
 	}
@@ -996,7 +1087,7 @@ func TestExecuteToleratesUnknownCurrentVersion(t *testing.T) {
 	}
 
 	e := &UpgradeExecutor{
-		kubeClient:    newSettlingClient(t, settledDeployments()...),
+		kubeClient:    newSettlingClient(t, settledWorkloads()...),
 		clientset:     clientset,
 		dynamicClient: newFakeDynamic(t),
 		config:        &rest.Config{},
@@ -1113,7 +1204,7 @@ func TestExecuteRollbackManifestDriven(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 	router := serveGitHub(t)
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledDeployments()...)}
+	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledWorkloads()...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err != nil {
 		t.Fatalf("ExecuteRollback() error = %v, want nil", err)
@@ -1124,6 +1215,12 @@ func TestExecuteRollbackManifestDriven(t *testing.T) {
 		if !router.fetched(path) {
 			t.Errorf("%s was not restored during rollback; %s would stay on the new image",
 				path, cfg.Name)
+		}
+	}
+	for _, cfg := range DaemonSetConfigs {
+		if !router.fetched(cfg.ManifestPath) {
+			t.Errorf("%s was not restored during rollback; %s would stay on the new manifest",
+				cfg.ManifestPath, cfg.Name)
 		}
 	}
 	if !router.fetched("deploy/00crds.yaml") {
@@ -1140,7 +1237,7 @@ func TestExecuteRollbackFailsWhenControllerManifestIsMissing(t *testing.T) {
 	t.Setenv("JOB_UID", "")
 	serveGitHub(t, deploymentManifestPath("migration-controller-manager"))
 
-	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledDeployments()...)}
+	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, settledWorkloads()...)}
 
 	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err == nil {
 		t.Fatal("ExecuteRollback() error = nil, want the controller failure surfaced")
@@ -1257,7 +1354,7 @@ func TestExecuteRollsBackWhenCRDPhaseFails(t *testing.T) {
 	router := serveGitHub(t, "deploy/00crds.yaml")
 
 	e := &UpgradeExecutor{
-		kubeClient:    newSettlingClient(t, settledDeployments()...),
+		kubeClient:    newSettlingClient(t, settledWorkloads()...),
 		clientset:     versionConfigClientset(t, "v0.4.8"),
 		dynamicClient: newFakeDynamic(t),
 		config:        &rest.Config{},
@@ -1280,7 +1377,7 @@ func TestRunDeploymentPhaseFailsWhenControllerManifestIsMissing(t *testing.T) {
 	serveGitHub(t, deploymentManifestPath("migration-controller-manager"))
 
 	e := &UpgradeExecutor{
-		kubeClient: newSettlingClient(t, settledDeployments()...),
+		kubeClient: newSettlingClient(t, settledWorkloads()...),
 		progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 	}
 
@@ -1307,7 +1404,7 @@ func TestExecuteRollbackUsesStoredOriginalReplicas(t *testing.T) {
 		t.Fatalf("failed to marshal progress: %v", err)
 	}
 
-	objs := settledDeployments()
+	objs := settledWorkloads()
 	// The failed upgrade left the controller scaled to zero.
 	objs[0] = deployment("migration-controller-manager", 0, 0, 0)
 	objs = append(objs, &corev1.ConfigMap{
@@ -1339,7 +1436,7 @@ func TestExecuteRollbackNeverRestoresZeroReplicas(t *testing.T) {
 
 	serveGitHub(t)
 
-	objs := settledDeployments()
+	objs := settledWorkloads()
 	objs[0] = deployment("migration-controller-manager", 0, 0, 0)
 
 	e := &UpgradeExecutor{kubeClient: newSettlingClient(t, objs...)}

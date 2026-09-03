@@ -68,6 +68,9 @@ generate-manifests: setup-hooks vjail-controller ui
 	cp image_builder/configs/vjailbreak-settings.yaml image_builder/deploy/vjailbreak-settings.yaml
 	make -C k8s/migration/ build-installer && cp k8s/migration/dist/install.yaml image_builder/deploy/00controller.yaml
 	cp deploy/volumeimageprofile-defaults.yaml image_builder/configs/volumeimageprofile-defaults.yaml
+	# deploy/09sync-daemon.yaml is the single source of truth: the upgrade flow fetches it
+	# from deploy/ at the target tag, and packer installs this copy as /etc/pf9/yamls/daemonset.yaml.
+	cp deploy/09sync-daemon.yaml image_builder/configs/daemonset.yaml
 	envsubst < vjailbreak-ai/deploy/vjailbreak-ai.yaml > image_builder/deploy/08vjailbreak-ai.yaml
 	
 .PHONY: build-vpwned

@@ -34,7 +34,8 @@ const (
 	StatusUnknown            = "unknown"
 )
 
-// One step per deployment manifest applied, so this grows when a deployment is added.
-const TotalUpgradeSteps = 12
+// One step per workload manifest applied, so this grows when a deployment or a daemonset
+// is added: 8 other steps + 4 DeploymentConfigs + 1 DaemonSetConfigs.
+const TotalUpgradeSteps = 13
 
 const TotalRollbackSteps = 5

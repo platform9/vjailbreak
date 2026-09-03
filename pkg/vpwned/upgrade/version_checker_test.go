@@ -355,6 +355,14 @@ func TestCheckImagesExist(t *testing.T) {
 			t.Errorf("skopeo was not asked about %s (%s); got:\n%s", image, cfg.Name, recorded)
 		}
 	}
+	// DaemonSet images are pinned to a fixed tag rather than the release tag, so they are
+	// verified as-is. Derived from DaemonSetConfigs for the same reason as above.
+	for _, cfg := range DaemonSetConfigs {
+		image := "docker://" + cfg.Image
+		if !strings.Contains(string(recorded), image) {
+			t.Errorf("skopeo was not asked about %s (%s); got:\n%s", image, cfg.Name, recorded)
+		}
+	}
 }
 
 func TestCheckImagesExistMissingImage(t *testing.T) {

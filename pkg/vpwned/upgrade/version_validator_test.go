@@ -546,6 +546,19 @@ func deployment(name string, replicas, ready, statusReplicas int32) *appsv1.Depl
 	}
 }
 
+func daemonSet(name, namespace string, desired, ready int32) *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: desired,
+			CurrentNumberScheduled: desired,
+			NumberReady:            ready,
+			UpdatedNumberScheduled: ready,
+			NumberAvailable:        ready,
+		},
+	}
+}
+
 func backupConfigMap(name, backupID, resource string, age time.Duration) *corev1.ConfigMap {
 	labels := map[string]string{"vjailbreak-backup": "true"}
 	if backupID != "" {
@@ -1840,6 +1853,100 @@ status:
   readyReplicas: %d
   updatedReplicas: %d
 `, name, Namespace, replicas, replicas, replicas)
+}
+
+func daemonSetSnapshot(name, namespace, image string) string {
+	return fmt.Sprintf(`apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  selector:
+    matchLabels:
+      app: %s
+  template:
+    metadata:
+      labels:
+        app: %s
+    spec:
+      containers:
+        - name: sync-container
+          image: %s
+`, name, namespace, name, name, image)
+}
+
+// A rollback can only restore what was snapshotted. The sync-daemon manifest carries the
+// hostPath mount shape, so without a snapshot a rollback would leave the new mount in
+// place while every other component went back a version.
+func TestBackupResourcesWithIDBacksUpEveryDaemonSet(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DaemonSetConfigs {
+		objs = append(objs, daemonSet(cfg.Name, cfg.Namespace, 1, 1))
+	}
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := BackupResourcesWithID(context.Background(), kubeClient, &rest.Config{}, "id-1"); err != nil {
+		t.Fatalf("BackupResourcesWithID() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		cm := &corev1.ConfigMap{}
+		key := client.ObjectKey{Name: "backup-ds-" + cfg.Name, Namespace: Namespace}
+		if err := kubeClient.Get(context.Background(), key, cm); err != nil {
+			t.Errorf("no backup for daemonset %s: %v - rollback would have nothing to restore", cfg.Name, err)
+			continue
+		}
+		if cm.Data["resource"] == "" {
+			t.Errorf("backup for daemonset %s holds no serialized resource", cfg.Name)
+		}
+	}
+}
+
+func TestRestoreResourcesRestoresEveryDaemonSet(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DeploymentConfigs {
+		objs = append(objs, deployment(cfg.Name, 2, 2, 0))
+	}
+	for _, cfg := range DaemonSetConfigs {
+		objs = append(objs, backupConfigMap("backup-ds-"+cfg.Name, "id-1",
+			daemonSetSnapshot(cfg.Name, cfg.Namespace, "quay.io/platform9/vjailbreak:previous"), 0))
+	}
+
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := RestoreResources(context.Background(), kubeClient, "id-1"); err != nil {
+		t.Fatalf("RestoreResources() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		ds := &appsv1.DaemonSet{}
+		key := client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}
+		if err := kubeClient.Get(context.Background(), key, ds); err != nil {
+			t.Errorf("daemonset %s was not restored: %v", cfg.Name, err)
+			continue
+		}
+		containers := ds.Spec.Template.Spec.Containers
+		if len(containers) != 1 || containers[0].Image != "quay.io/platform9/vjailbreak:previous" {
+			t.Errorf("daemonset %s was not restored from its snapshot; containers = %+v", cfg.Name, containers)
+		}
+	}
+}
+
+// A daemonset with no snapshot must be skipped without stopping the rest of the restore.
+func TestRestoreResourcesSkipsDaemonSetWithoutBackup(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DeploymentConfigs {
+		objs = append(objs, deployment(cfg.Name, 2, 2, 0))
+		objs = append(objs, backupConfigMap("backup-deploy-"+cfg.Name, "id-1",
+			deploymentSnapshot(cfg.Name, 2), 0))
+	}
+
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := RestoreResources(context.Background(), kubeClient, "id-1"); err != nil {
+		t.Fatalf("RestoreResources() error = %v, want nil", err)
+	}
 }
 
 // Rollback can only restore what was snapshotted, so every deployment the upgrade

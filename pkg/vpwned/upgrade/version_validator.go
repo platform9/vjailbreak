@@ -244,6 +244,30 @@ func BackupResourcesWithID(ctx context.Context, kubeClient client.Client, restCo
 			log.Printf("Warning: Deployment %s not found for backup: %v", depName, err)
 		}
 	}
+	// A rollback can only restore what was snapshotted. A DaemonSet's manifest carries its
+	// mount shape, so skipping it here would leave a rolled-back appliance running the new
+	// pod spec while every other component went back a version.
+	for _, cfg := range DaemonSetConfigs {
+		ds := &appsv1.DaemonSet{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, ds); err != nil {
+			log.Printf("Warning: DaemonSet %s/%s not found for backup: %v", cfg.Namespace, cfg.Name, err)
+			continue
+		}
+		var buffer strings.Builder
+		ds.GetObjectKind().SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
+		if err := s.Encode(ds, &buffer); err != nil {
+			log.Printf("Warning: failed to serialize DaemonSet %s: %v", cfg.Name, err)
+			continue
+		}
+		backupCM := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "backup-ds-" + cfg.Name, Namespace: Namespace, Labels: backupLabel},
+		}
+		_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+			backupCM.Data = map[string]string{"resource": buffer.String()}
+			return nil
+		})
+	}
+
 	log.Println("Backup completed.")
 	return nil
 }
@@ -267,6 +291,7 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 	crdBackups := map[string]corev1.ConfigMap{}
 	cmBackups := map[string]corev1.ConfigMap{}
 	deployBackups := map[string]corev1.ConfigMap{}
+	dsBackups := map[string]corev1.ConfigMap{}
 	otherBackups := []corev1.ConfigMap{}
 
 	for _, cm := range backupCMList.Items {
@@ -277,6 +302,8 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 			cmBackups[cm.Name] = cm
 		case strings.HasPrefix(cm.Name, "backup-deploy-"):
 			deployBackups[cm.Name] = cm
+		case strings.HasPrefix(cm.Name, "backup-ds-"):
+			dsBackups[cm.Name] = cm
 		default:
 			otherBackups = append(otherBackups, cm)
 		}
@@ -434,6 +461,26 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 			log.Printf("Failed to restore resource from backup %s: %v", cm.Name, err)
 		} else {
 			log.Printf("Restored resource from backup %s", cm.Name)
+		}
+	}
+
+	// Restored explicitly rather than via the generic bucket, so a DaemonSet missing from
+	// the snapshot is reported instead of silently doing nothing.
+	for _, cfg := range DaemonSetConfigs {
+		cm, ok := dsBackups["backup-ds-"+cfg.Name]
+		if !ok {
+			log.Printf("No daemonset backup found for %s", cfg.Name)
+			continue
+		}
+		yamlData, ok := cm.Data["resource"]
+		if !ok {
+			log.Printf("backup %s missing resource key; skipping", cm.Name)
+			continue
+		}
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to restore DaemonSet from backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Restored DaemonSet from backup %s", cm.Name)
 		}
 	}
 

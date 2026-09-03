@@ -188,11 +188,16 @@ func loadGitHubConfig(ctx context.Context) (string, string) {
 func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
 	log.Printf("Verifying images exist for tag: %s", tag)
 
-	images := []string{
-		"quay.io/platform9/vjailbreak-ui:" + tag,
-		"quay.io/platform9/vjailbreak-controller:" + tag,
-		"quay.io/platform9/vjailbreak-vpwned:" + tag,
-		"quay.io/platform9/vjailbreak-ai:" + tag,
+	// Derived from the workload configs rather than hardcoded, so a workload cannot be
+	// added without its image being verified before the upgrade job starts.
+	images := make([]string, 0, len(DeploymentConfigs)+len(DaemonSetConfigs))
+	for _, cfg := range DeploymentConfigs {
+		images = append(images, cfg.ImagePrefix+":"+tag)
+	}
+	// DaemonSet images carry a fixed tag rather than the release tag, so they are checked
+	// as declared.
+	for _, cfg := range DaemonSetConfigs {
+		images = append(images, cfg.Image)
 	}
 
 	for _, imageName := range images {
