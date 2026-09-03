@@ -42,7 +42,7 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:main
+        image: quay.io/platform9/vjailbreak-controller:0.1.13
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -58,10 +58,6 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
-        ports:
-        - containerPort: 9443
-          name: webhook-server
-          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -73,9 +69,6 @@ spec:
             cpu: 200m
             memory: 256Mi
         volumeMounts:
-        - mountPath: /tmp/k8s-webhook-server/serving-certs
-          name: cert
-          readOnly: true
         - mountPath: /etc/pf9/k3s
           name: master-token
         - mountPath: /home/ubuntu
@@ -98,10 +91,6 @@ spec:
       serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 30
       volumes:
-      - name: cert
-        secret:
-          defaultMode: 420
-          secretName: webhook-server-cert
       - hostPath:
           path: /var/lib/rancher/k3s/server
           type: Directory

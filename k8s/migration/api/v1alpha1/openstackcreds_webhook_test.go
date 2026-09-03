@@ -17,23 +17,82 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"context"
+	"testing"
+
 	. "github.com/onsi/ginkgo/v2"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var _ = Describe("OpenstackCreds Webhook", func() {
 
 	Context("When creating OpenstackCreds under Validating Webhook", func() {
 		It("Should deny if a required field is empty", func() {
-
-			// TODO(user): Add your logic here
-
+			// Validation logic deferred to #2347
 		})
 
 		It("Should admit if all required fields are provided", func() {
-
-			// TODO(user): Add your logic here
-
+			// Validation logic deferred to #2347
 		})
 	})
 
 })
+
+// TestOpenstackCredsCustomValidator tests the type-assertion logic in the validator.
+func TestOpenstackCredsCustomValidator(t *testing.T) {
+	v := &OpenstackCredsCustomValidator{}
+	ctx := context.Background()
+	validObj := &OpenstackCreds{}
+	wrongObj := &corev1.Pod{}
+
+	tests := []struct {
+		name    string
+		op      string
+		wantErr bool
+	}{
+		{"ValidateCreate correct type", "create", false},
+		{"ValidateUpdate correct type", "update", false},
+		{"ValidateDelete correct type", "delete", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			switch tt.op {
+			case "create":
+				_, err = v.ValidateCreate(ctx, validObj)
+			case "update":
+				_, err = v.ValidateUpdate(ctx, nil, validObj)
+			case "delete":
+				_, err = v.ValidateDelete(ctx, validObj)
+			}
+			if (err != nil) != tt.wantErr {
+				t.Errorf("got err=%v, wantErr=%v", err, tt.wantErr)
+			}
+		})
+	}
+
+	wrongTests := []struct {
+		name string
+		op   string
+	}{
+		{"ValidateCreate wrong type", "create"},
+		{"ValidateUpdate wrong type", "update"},
+		{"ValidateDelete wrong type", "delete"},
+	}
+	for _, tt := range wrongTests {
+		t.Run(tt.name, func(t *testing.T) {
+			var err error
+			switch tt.op {
+			case "create":
+				_, err = v.ValidateCreate(ctx, wrongObj)
+			case "update":
+				_, err = v.ValidateUpdate(ctx, nil, wrongObj)
+			case "delete":
+				_, err = v.ValidateDelete(ctx, wrongObj)
+			}
+			if err == nil {
+				t.Errorf("expected error for wrong type, got nil")
+			}
+		})
+	}
+}
