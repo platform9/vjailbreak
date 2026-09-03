@@ -11,6 +11,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: arraycreds.vjailbreak.k8s.pf9.io
 spec:
@@ -256,6 +257,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: arraycredsmappings.vjailbreak.k8s.pf9.io
 spec:
@@ -348,6 +350,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: bmconfigs.vjailbreak.k8s.pf9.io
 spec:
@@ -461,6 +464,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: clustermigrations.vjailbreak.k8s.pf9.io
 spec:
@@ -607,6 +611,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: esximigrations.vjailbreak.k8s.pf9.io
 spec:
@@ -730,6 +735,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: esxisshcreds.vjailbreak.k8s.pf9.io
 spec:
@@ -880,6 +886,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationblueprints.vjailbreak.k8s.pf9.io
 spec:
@@ -1230,6 +1237,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationplans.vjailbreak.k8s.pf9.io
 spec:
@@ -1486,6 +1494,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: migrations.vjailbreak.k8s.pf9.io
 spec:
@@ -1727,6 +1736,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: migrationtemplates.vjailbreak.k8s.pf9.io
 spec:
@@ -1864,6 +1874,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: networkmappings.vjailbreak.k8s.pf9.io
 spec:
@@ -1956,6 +1967,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: openstackcreds.vjailbreak.k8s.pf9.io
 spec:
@@ -2254,6 +2266,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: pcdclusters.vjailbreak.k8s.pf9.io
 spec:
@@ -2346,6 +2359,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: pcdhosts.vjailbreak.k8s.pf9.io
 spec:
@@ -2443,6 +2457,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: proxyvms.vjailbreak.k8s.pf9.io
 spec:
@@ -2571,6 +2586,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: rdmdisks.vjailbreak.k8s.pf9.io
 spec:
@@ -2724,6 +2740,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: rollingmigrationplans.vjailbreak.k8s.pf9.io
 spec:
@@ -3071,6 +3088,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: storagemappings.vjailbreak.k8s.pf9.io
 spec:
@@ -3165,6 +3183,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: vjailbreaknodes.vjailbreak.k8s.pf9.io
 spec:
@@ -3332,6 +3351,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: vmwareclusters.vjailbreak.k8s.pf9.io
 spec:
@@ -3398,6 +3418,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: vmwarecreds.vjailbreak.k8s.pf9.io
 spec:
@@ -3520,6 +3541,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: vmwarehosts.vjailbreak.k8s.pf9.io
 spec:
@@ -3611,6 +3633,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: vmwaremachines.vjailbreak.k8s.pf9.io
 spec:
@@ -3833,6 +3856,7 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
     controller-gen.kubebuilder.io/version: v0.17.1
   name: volumeimageprofiles.vjailbreak.k8s.pf9.io
 spec:
@@ -5177,6 +5201,54 @@ spec:
     app: vpwned-sdk
   type: ClusterIP
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-webhook-service
+  namespace: migration-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: migration
+  name: migration-serving-cert
+  namespace: migration-system
+spec:
+  dnsNames:
+  - migration-webhook-service.migration-system.svc
+  - migration-webhook-service.migration-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: migration-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-selfsigned-issuer
+  namespace: migration-system
+spec:
+  selfSigned: {}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5204,6 +5276,41 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: validating-webhook-configuration
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: validatingwebhookconfiguration
+    app.kubernetes.io/part-of: migration
+  name: migration-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-openstackcreds
+  failurePolicy: Fail
+  name: vopenstackcreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - openstackcreds
+  sideEffects: None
 
 ---
 apiVersion: v1
