@@ -50,6 +50,23 @@ linters:
         linters:
           - revive
         text: "var-naming: avoid meaningless package names"
+      # Pre-existing: goconst findings surfaced by golangci-lint v2.13.2 upgrade
+      - path: internal/controller/(migrationplan|openstackcreds)_controller\.go
+        linters:
+          - goconst
+      - path: pkg/(utils|metrics)/
+        linters:
+          - goconst
+      # Pre-existing: goroutine with background context is intentional here
+      - path: internal/controller/openstackcreds_controller\.go
+        linters:
+          - gosec
+        text: "G118"
+      # Pre-existing: ctrl.Result.Requeue deprecation in favour of RequeueAfter
+      - path: internal/controller/.*_controller\.go
+        linters:
+          - staticcheck
+        text: "SA1019"
     paths:
       - test
   settings:

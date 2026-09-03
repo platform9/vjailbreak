@@ -1,6 +1,6 @@
 module github.com/platform9/vjailbreak/k8s/migration
 
-go 1.24.10
+go 1.27.0
 
 replace github.com/platform9/vjailbreak/v2v-helper => ../../v2v-helper
 
