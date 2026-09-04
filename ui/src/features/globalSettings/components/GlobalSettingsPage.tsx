@@ -10,6 +10,8 @@ import {
   CircularProgress,
   FormControl,
   FormHelperText,
+  IconButton,
+  InputAdornment,
   MenuItem,
   Select,
   SelectChangeEvent,
@@ -27,6 +29,8 @@ import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined'
 import HistoryToggleOffOutlinedIcon from '@mui/icons-material/HistoryToggleOffOutlined'
 import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined'
 import LanOutlinedIcon from '@mui/icons-material/LanOutlined'
+import Visibility from '@mui/icons-material/Visibility'
+import VisibilityOff from '@mui/icons-material/VisibilityOff'
 import FieldLabel from 'src/components/design-system/ui/FieldLabel'
 import FormGrid from 'src/components/design-system/ui/FormGrid'
 import InlineHelp from 'src/components/design-system/ui/InlineHelp'
@@ -56,6 +60,11 @@ import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import { useMigrationsQuery } from 'src/hooks/api/useMigrationsQuery'
 import { Phase } from 'src/api/migrations/model'
 import { getAIKeyStatus, saveAIKey } from 'src/api/ai/aiAnalysis'
+import {
+  getProxyCredsStatus,
+  saveProxyCreds,
+  deleteProxyCreds
+} from 'src/api/proxy/proxyCredentials'
 import axios from 'axios'
 
 const VDDK_UPLOADED_KEY = 'vddk-uploaded'
@@ -385,6 +394,20 @@ type UseGlobalSettingsControllerReturn = {
   setActiveTab: React.Dispatch<React.SetStateAction<TabKey>>
   notification: NotificationState
   proxyUpdateSuccess: boolean
+  proxyAuthEnabled: boolean
+  setProxyAuthEnabled: React.Dispatch<React.SetStateAction<boolean>>
+  proxyAuthConfigured: boolean
+  proxyAuthStatusMessage: string | null
+  proxyAuthUsername: string
+  setProxyAuthUsername: React.Dispatch<React.SetStateAction<string>>
+  proxyAuthPassword: string
+  setProxyAuthPassword: React.Dispatch<React.SetStateAction<string>>
+  proxyAuthHttpsOverride: boolean
+  setProxyAuthHttpsOverride: React.Dispatch<React.SetStateAction<boolean>>
+  proxyAuthHttpsUsername: string
+  setProxyAuthHttpsUsername: React.Dispatch<React.SetStateAction<string>>
+  proxyAuthHttpsPassword: string
+  setProxyAuthHttpsPassword: React.Dispatch<React.SetStateAction<string>>
   timezoneOptions: TimezoneOption[]
   isTimeSettingsDisabled: boolean
   onText: (e: React.ChangeEvent<HTMLInputElement>) => void
@@ -405,6 +428,14 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   const [activeTab, setActiveTab] = useState<TabKey>('general')
   const [notification, setNotification] = useState<NotificationState>(DEFAULT_NOTIFICATION)
   const [proxyUpdateSuccess, setProxyUpdateSuccess] = useState(false)
+
+  const [proxyAuthEnabled, setProxyAuthEnabled] = useState(false)
+  const [proxyAuthConfigured, setProxyAuthConfigured] = useState(false)
+  const [proxyAuthHttpsOverride, setProxyAuthHttpsOverride] = useState(false)
+  const [proxyAuthUsername, setProxyAuthUsername] = useState('')
+  const [proxyAuthPassword, setProxyAuthPassword] = useState('')
+  const [proxyAuthHttpsUsername, setProxyAuthHttpsUsername] = useState('')
+  const [proxyAuthHttpsPassword, setProxyAuthHttpsPassword] = useState('')
 
   const rhfForm = useForm<SettingsForm>({
     defaultValues: DEFAULTS,
@@ -704,6 +735,23 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     fetchSettings()
   }, [fetchSettings])
 
+  useEffect(() => {
+    getProxyCredsStatus()
+      .then((status) => {
+        setProxyAuthEnabled(status.configured)
+        setProxyAuthConfigured(status.configured)
+        setProxyAuthHttpsOverride(status.https_override)
+      })
+      .catch(() => {})
+  }, [])
+
+  const proxyAuthStatusMessage = useMemo(() => {
+    if (!proxyAuthConfigured) return null
+    return proxyAuthHttpsOverride
+      ? 'HTTP and HTTPS proxy credentials are configured separately.'
+      : 'Proxy credentials are configured.'
+  }, [proxyAuthConfigured, proxyAuthHttpsOverride])
+
   const show = useCallback((message: string, severity: NotificationSeverity = 'info') => {
     setNotification({ open: true, message, severity })
   }, [])
@@ -756,6 +804,41 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     rhfForm.reset({ ...DEFAULTS })
   }, [rhfForm, isTimeSettingsDisabled, form.TIMEZONE, form.NTP_SERVERS])
 
+  const validateProxyAuthFields = useCallback((): string | null => {
+    if (!proxyAuthEnabled) return null
+
+    const hasAnyCredInput =
+      proxyAuthUsername.trim() !== '' ||
+      proxyAuthPassword.trim() !== '' ||
+      proxyAuthHttpsUsername.trim() !== '' ||
+      proxyAuthHttpsPassword.trim() !== ''
+
+    if (!hasAnyCredInput) {
+      if (!proxyAuthConfigured) {
+        return 'Proxy username and password are required when proxy authentication is enabled.'
+      }
+      return null
+    }
+
+    if (!proxyAuthUsername.trim() || !proxyAuthPassword.trim()) {
+      return 'Both proxy username and password are required to update credentials.'
+    }
+
+    if (proxyAuthHttpsOverride && (!proxyAuthHttpsUsername.trim() || !proxyAuthHttpsPassword.trim())) {
+      return 'Both HTTPS proxy username and password are required when using different HTTPS credentials.'
+    }
+
+    return null
+  }, [
+    proxyAuthEnabled,
+    proxyAuthConfigured,
+    proxyAuthUsername,
+    proxyAuthPassword,
+    proxyAuthHttpsOverride,
+    proxyAuthHttpsUsername,
+    proxyAuthHttpsPassword
+  ])
+
   const onSave = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault()
@@ -765,6 +848,26 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         show('Please fix the validation errors.', 'error')
         return
       }
+
+      const proxyAuthError = validateProxyAuthFields()
+      if (proxyAuthError) {
+        show(proxyAuthError, 'error')
+        return
+      }
+
+      const hasNewProxyCredInput =
+        proxyAuthUsername.trim() !== '' ||
+        proxyAuthPassword.trim() !== '' ||
+        proxyAuthHttpsUsername.trim() !== '' ||
+        proxyAuthHttpsPassword.trim() !== ''
+
+      const proxyAuthAction: 'save' | 'delete' | 'none' = proxyAuthEnabled
+        ? hasNewProxyCredInput
+          ? 'save'
+          : 'none'
+        : proxyAuthConfigured
+          ? 'delete'
+          : 'none'
 
       const proxyChanged =
         form.PROXY_ENABLED !== initial.PROXY_ENABLED ||
@@ -809,12 +912,45 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         } as any)
         stage = 'env'
 
+        let proxyCredsFailed = false
+        if (proxyAuthAction === 'save') {
+          try {
+            const credsResult = await saveProxyCreds({
+              username: proxyAuthUsername.trim(),
+              password: proxyAuthPassword.trim(),
+              https_override: proxyAuthHttpsOverride,
+              https_username: proxyAuthHttpsOverride ? proxyAuthHttpsUsername.trim() : undefined,
+              https_password: proxyAuthHttpsOverride ? proxyAuthHttpsPassword.trim() : undefined
+            })
+            setProxyAuthConfigured(credsResult.configured)
+            setProxyAuthHttpsOverride(credsResult.https_override)
+            setProxyAuthUsername('')
+            setProxyAuthPassword('')
+            setProxyAuthHttpsUsername('')
+            setProxyAuthHttpsPassword('')
+          } catch (credsErr) {
+            proxyCredsFailed = true
+            console.error('Failed to save proxy credentials:', credsErr)
+          }
+        } else if (proxyAuthAction === 'delete') {
+          try {
+            await deleteProxyCreds()
+            setProxyAuthConfigured(false)
+            setProxyAuthHttpsOverride(false)
+          } catch (credsErr) {
+            proxyCredsFailed = true
+            console.error('Failed to clear proxy credentials:', credsErr)
+          }
+        }
+
         let envInjectionFailed = false
-        try {
-          await injectEnvVariables(buildEnvPayload(form))
-        } catch (envErr) {
-          envInjectionFailed = true
-          console.error('Failed to inject proxy env variables:', envErr)
+        if (!proxyCredsFailed) {
+          try {
+            await injectEnvVariables(buildEnvPayload(form))
+          } catch (envErr) {
+            envInjectionFailed = true
+            console.error('Failed to inject proxy env variables:', envErr)
+          }
         }
 
         if (timeSettingsChanged) {
@@ -838,13 +974,18 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         setInitial(nextState)
         setErrors(buildErrors(nextState))
 
-        if (envInjectionFailed) {
+        if (proxyCredsFailed) {
+          show(
+            'Settings saved, but saving proxy credentials failed. Proxy environment variables were not updated — please retry.',
+            'warning'
+          )
+        } else if (envInjectionFailed) {
           show(
             'Settings saved, but applying proxy environment variables failed. Please verify connectivity and try again.',
             'warning'
           )
         } else {
-          if (proxyChanged) {
+          if (proxyChanged || proxyAuthAction !== 'none') {
             setProxyUpdateSuccess(true)
           }
           show(
@@ -876,7 +1017,22 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
         setSaving(false)
       }
     },
-    [form, initial, validateForm, show, buildErrors, rhfForm]
+    [
+      form,
+      initial,
+      validateForm,
+      show,
+      buildErrors,
+      rhfForm,
+      validateProxyAuthFields,
+      proxyAuthEnabled,
+      proxyAuthConfigured,
+      proxyAuthUsername,
+      proxyAuthPassword,
+      proxyAuthHttpsOverride,
+      proxyAuthHttpsUsername,
+      proxyAuthHttpsPassword
+    ]
   )
 
   const tabErrorFlags = useMemo(
@@ -907,6 +1063,20 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     setActiveTab,
     notification,
     proxyUpdateSuccess,
+    proxyAuthEnabled,
+    setProxyAuthEnabled,
+    proxyAuthConfigured,
+    proxyAuthStatusMessage,
+    proxyAuthUsername,
+    setProxyAuthUsername,
+    proxyAuthPassword,
+    setProxyAuthPassword,
+    proxyAuthHttpsOverride,
+    setProxyAuthHttpsOverride,
+    proxyAuthHttpsUsername,
+    setProxyAuthHttpsUsername,
+    proxyAuthHttpsPassword,
+    setProxyAuthHttpsPassword,
     timezoneOptions,
     isTimeSettingsDisabled,
     onText,
@@ -933,6 +1103,20 @@ export default function GlobalSettingsPage() {
     setActiveTab,
     notification,
     proxyUpdateSuccess,
+    proxyAuthEnabled,
+    setProxyAuthEnabled,
+    proxyAuthConfigured,
+    proxyAuthStatusMessage,
+    proxyAuthUsername,
+    setProxyAuthUsername,
+    proxyAuthPassword,
+    setProxyAuthPassword,
+    proxyAuthHttpsOverride,
+    setProxyAuthHttpsOverride,
+    proxyAuthHttpsUsername,
+    setProxyAuthHttpsUsername,
+    proxyAuthHttpsPassword,
+    setProxyAuthHttpsPassword,
     onText,
     onBool,
     onSelect,
@@ -944,6 +1128,9 @@ export default function GlobalSettingsPage() {
     timezoneOptions,
     isTimeSettingsDisabled,
   } = useGlobalSettingsController()
+
+  const [showProxyPassword, setShowProxyPassword] = useState(false)
+  const [showProxyHttpsPassword, setShowProxyHttpsPassword] = useState(false)
 
   const activeTabRef = useRef(activeTab)
   useEffect(() => {
@@ -1483,6 +1670,121 @@ export default function GlobalSettingsPage() {
                     helperText={errors.NO_PROXY}
                   />
                 </FormGrid>
+
+                <Box sx={{ mt: 3 }}>
+                  <ToggleField
+                    label="Proxy requires authentication"
+                    checked={proxyAuthEnabled}
+                    onChange={(_, checked) => setProxyAuthEnabled(checked)}
+                    description="Provide credentials if the proxy server requires basic authentication."
+                    data-testid="global-settings-toggle-PROXY_AUTH_ENABLED"
+                  />
+                </Box>
+
+                {proxyAuthEnabled && (
+                  <Box sx={{ mt: 2 }}>
+                    {proxyAuthStatusMessage ? (
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        {proxyAuthStatusMessage}
+                      </Alert>
+                    ) : null}
+
+                    <FormGrid minWidth={320} gap={2}>
+                      <TextField
+                        label="Proxy Username"
+                        fullWidth
+                        value={proxyAuthUsername}
+                        onChange={(e) => setProxyAuthUsername(e.target.value)}
+                        helperText={
+                          proxyAuthConfigured
+                            ? 'Leave blank to keep the existing username and password.'
+                            : 'Required'
+                        }
+                        data-testid="global-settings-input-PROXY_AUTH_USERNAME"
+                      />
+                      <TextField
+                        label="Proxy Password"
+                        fullWidth
+                        type={showProxyPassword ? 'text' : 'password'}
+                        value={proxyAuthPassword}
+                        onChange={(e) => setProxyAuthPassword(e.target.value)}
+                        helperText={
+                          proxyAuthConfigured
+                            ? 'Leave blank to keep the existing username and password.'
+                            : 'Required'
+                        }
+                        data-testid="global-settings-input-PROXY_AUTH_PASSWORD"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                aria-label="toggle proxy password visibility"
+                                onClick={() => setShowProxyPassword((prev) => !prev)}
+                                edge="end"
+                                size="small"
+                              >
+                                {showProxyPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    </FormGrid>
+
+                    <Box sx={{ mt: 2 }}>
+                      <ToggleField
+                        label="Use different credentials for HTTPS proxy"
+                        checked={proxyAuthHttpsOverride}
+                        onChange={(_, checked) => setProxyAuthHttpsOverride(checked)}
+                        data-testid="global-settings-toggle-PROXY_AUTH_HTTPS_OVERRIDE"
+                      />
+                    </Box>
+
+                    {proxyAuthHttpsOverride && (
+                      <FormGrid minWidth={320} gap={2} sx={{ mt: 2 }}>
+                        <TextField
+                          label="HTTPS Proxy Username"
+                          fullWidth
+                          value={proxyAuthHttpsUsername}
+                          onChange={(e) => setProxyAuthHttpsUsername(e.target.value)}
+                          helperText={
+                            proxyAuthConfigured
+                              ? 'Leave blank to keep the existing username and password.'
+                              : 'Required'
+                          }
+                          data-testid="global-settings-input-PROXY_AUTH_HTTPS_USERNAME"
+                        />
+                        <TextField
+                          label="HTTPS Proxy Password"
+                          fullWidth
+                          type={showProxyHttpsPassword ? 'text' : 'password'}
+                          value={proxyAuthHttpsPassword}
+                          onChange={(e) => setProxyAuthHttpsPassword(e.target.value)}
+                          helperText={
+                            proxyAuthConfigured
+                              ? 'Leave blank to keep the existing username and password.'
+                              : 'Required'
+                          }
+                          data-testid="global-settings-input-PROXY_AUTH_HTTPS_PASSWORD"
+                          InputProps={{
+                            endAdornment: (
+                              <InputAdornment position="end">
+                                <IconButton
+                                  aria-label="toggle https proxy password visibility"
+                                  onClick={() => setShowProxyHttpsPassword((prev) => !prev)}
+                                  edge="end"
+                                  size="small"
+                                >
+                                  {showProxyHttpsPassword ? <VisibilityOff /> : <Visibility />}
+                                </IconButton>
+                              </InputAdornment>
+                            )
+                          }}
+                        />
+                      </FormGrid>
+                    )}
+                  </Box>
+                )}
               </>
             )}
           </TabPanel>
