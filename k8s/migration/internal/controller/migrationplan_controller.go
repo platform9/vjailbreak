@@ -1294,6 +1294,14 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 											},
 										},
 									})
+									envFrom = append(envFrom, corev1.EnvFromSource{
+										SecretRef: &corev1.SecretEnvSource{
+											LocalObjectReference: corev1.LocalObjectReference{
+												Name: "pf9-proxy-creds",
+											},
+											Optional: &pointtrue,
+										},
+									})
 									return envFrom
 								}(),
 								VolumeMounts: []corev1.VolumeMount{

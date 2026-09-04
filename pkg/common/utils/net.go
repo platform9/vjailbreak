@@ -26,6 +26,27 @@ type VjbNet struct {
 	NoProxy         string
 	UseProxyFromEnv bool
 	proxyCfg        *httpproxy.Config
+
+	HTTPProxyUsername  string
+	HTTPProxyPassword  string
+	HTTPSProxyUsername string
+	HTTPSProxyPassword string
+}
+
+func withProxyCredentials(rawURL, username, password string) string {
+	if rawURL == "" || username == "" {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Host == "" {
+		u2, err2 := url.Parse("http://" + rawURL)
+		if err2 != nil || u2.Host == "" {
+			return rawURL
+		}
+		u = u2
+	}
+	u.User = url.UserPassword(username, password)
+	return u.String()
 }
 
 func (v *VjbNet) getNetTransport(tlsConfig *tls.Config) *http.Transport {
@@ -53,11 +74,14 @@ func (v *VjbNet) getNetTransport(tlsConfig *tls.Config) *http.Transport {
 		}
 
 		transport.Proxy = func(req *http.Request) (*url.URL, error) {
-			proxyURL, err := v.proxyCfg.ProxyFunc()(req.URL)
+			cfg := *v.proxyCfg
+			cfg.HTTPProxy = withProxyCredentials(cfg.HTTPProxy, v.HTTPProxyUsername, v.HTTPProxyPassword)
+			cfg.HTTPSProxy = withProxyCredentials(cfg.HTTPSProxy, v.HTTPSProxyUsername, v.HTTPSProxyPassword)
+
+			proxyURL, err := cfg.ProxyFunc()(req.URL)
 			if err != nil {
 				return nil, err
 			}
-			// Preserve existing logging behavior.
 			if proxyURL != nil {
 				fmt.Printf("Proxy config: HTTPProxy=%s, HTTPSProxy=%s, NoProxy=%s\n",
 					v.proxyCfg.HTTPProxy, v.proxyCfg.HTTPSProxy, v.proxyCfg.NoProxy)
@@ -80,9 +104,6 @@ func (v *VjbNet) CreateHTTPClient() error {
 	}
 	transport := v.getNetTransport(tlsConfig)
 
-	if v.UseProxyFromEnv {
-		transport.Proxy = http.ProxyFromEnvironment
-	}
 	v.Client = &http.Client{
 		Transport: transport,
 		Timeout:   v.timeout,
@@ -101,10 +122,6 @@ func (v *VjbNet) CreateSecureHTTPClient() error {
 	}
 
 	transport := v.getNetTransport(tlsConfig)
-
-	if v.UseProxyFromEnv {
-		transport.Proxy = http.ProxyFromEnvironment
-	}
 
 	v.Client = &http.Client{
 		Transport: transport,
@@ -137,6 +154,16 @@ func (v *VjbNet) SetUseProxyFromEnv(use bool) {
 	v.UseProxyFromEnv = use
 }
 
+func (v *VjbNet) SetHTTPProxyCredentials(username, password string) {
+	v.HTTPProxyUsername = username
+	v.HTTPProxyPassword = password
+}
+
+func (v *VjbNet) SetHTTPSProxyCredentials(username, password string) {
+	v.HTTPSProxyUsername = username
+	v.HTTPSProxyPassword = password
+}
+
 func (v *VjbNet) GetClient() *http.Client {
 	return v.Client
 }
@@ -157,9 +184,14 @@ func (v *VjbNet) proxy4URL(reqURL *url.URL) (*url.URL, error) {
 	if v.NoProxy != "" {
 		v.proxyCfg.NoProxy = v.NoProxy
 	}
+
+	cfg := *v.proxyCfg
+	cfg.HTTPProxy = withProxyCredentials(cfg.HTTPProxy, v.HTTPProxyUsername, v.HTTPProxyPassword)
+	cfg.HTTPSProxy = withProxyCredentials(cfg.HTTPSProxy, v.HTTPSProxyUsername, v.HTTPSProxyPassword)
+
 	// Delegate proxy decision to httpproxy's ProxyFunc for correct
 	// NO_PROXY and scheme handling.
-	proxyURL, err := v.proxyCfg.ProxyFunc()(reqURL)
+	proxyURL, err := cfg.ProxyFunc()(reqURL)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +239,11 @@ func NewVjbNet() *VjbNet {
 		NoProxy:         "",
 		UseProxyFromEnv: true,
 		proxyCfg:        httpproxy.FromEnvironment(),
+
+		HTTPProxyUsername:  os.Getenv("HTTP_PROXY_USERNAME"),
+		HTTPProxyPassword:  os.Getenv("HTTP_PROXY_PASSWORD"),
+		HTTPSProxyUsername: os.Getenv("HTTPS_PROXY_USERNAME"),
+		HTTPSProxyPassword: os.Getenv("HTTPS_PROXY_PASSWORD"),
 	}
 }
 
