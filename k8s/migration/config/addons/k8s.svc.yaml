@@ -69,6 +69,9 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
+        - secretRef:
+            name: pf9-proxy-creds
+            optional: true
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
