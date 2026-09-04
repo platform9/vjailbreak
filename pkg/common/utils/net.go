@@ -104,9 +104,6 @@ func (v *VjbNet) CreateHTTPClient() error {
 	}
 	transport := v.getNetTransport(tlsConfig)
 
-	if v.UseProxyFromEnv {
-		transport.Proxy = http.ProxyFromEnvironment
-	}
 	v.Client = &http.Client{
 		Transport: transport,
 		Timeout:   v.timeout,
@@ -125,10 +122,6 @@ func (v *VjbNet) CreateSecureHTTPClient() error {
 	}
 
 	transport := v.getNetTransport(tlsConfig)
-
-	if v.UseProxyFromEnv {
-		transport.Proxy = http.ProxyFromEnvironment
-	}
 
 	v.Client = &http.Client{
 		Transport: transport,
