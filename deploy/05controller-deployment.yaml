@@ -42,6 +42,9 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
+        - secretRef:
+            name: pf9-proxy-creds
+            optional: true
         image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
