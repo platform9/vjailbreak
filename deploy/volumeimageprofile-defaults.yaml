@@ -25,3 +25,55 @@ spec:
     hw_qemu_guest_agent: "yes"
     hw_video_model: virtio
     hw_pointer_model: usbtablet
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VolumeImageProfile
+metadata:
+  name: rhel5-legacy-ide
+  namespace: migration-system
+spec:
+  osFamily: linuxGuest
+  description: >-
+    TEST BRANCH ONLY - for pre-virtio guests (e.g. RHEL 5.x) migrated with the
+    virt-v2v conversion step skipped (see CONVERT override in
+    migrationplan_controller.go). Plain IDE needs no matching driver at all,
+    since ide/piix support is compiled into these old kernels rather than
+    loaded as a module - the safest bet when the source SCSI controller type
+    is unknown or unconfirmed.
+  properties:
+    hw_disk_bus: ide
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VolumeImageProfile
+metadata:
+  name: rhel5-legacy-scsi-lsilogic
+  namespace: migration-system
+spec:
+  osFamily: linuxGuest
+  description: >-
+    TEST BRANCH ONLY - for pre-virtio guests (e.g. RHEL 5.x) migrated with the
+    virt-v2v conversion step skipped. Matches VMware's "LSI Logic Parallel"
+    virtual SCSI controller, which emulates the same LSI/Symbios 53c895a chip
+    as QEMU/KVM's lsilogic scsi model - use this if the source VM's SCSI
+    controller (vCenter: Edit Settings > Hard Disk > SCSI Controller Type) is
+    LSI Logic Parallel.
+  properties:
+    hw_disk_bus: scsi
+    hw_scsi_model: lsilogic
+---
+apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
+kind: VolumeImageProfile
+metadata:
+  name: rhel5-legacy-scsi-buslogic
+  namespace: migration-system
+spec:
+  osFamily: linuxGuest
+  description: >-
+    TEST BRANCH ONLY - for pre-virtio guests (e.g. RHEL 5.x) migrated with the
+    virt-v2v conversion step skipped. Matches VMware's older "BusLogic
+    Parallel" virtual SCSI controller - use this if the source VM's SCSI
+    controller (vCenter: Edit Settings > Hard Disk > SCSI Controller Type) is
+    BusLogic Parallel rather than LSI Logic Parallel.
+  properties:
+    hw_disk_bus: scsi
+    hw_scsi_model: buslogic

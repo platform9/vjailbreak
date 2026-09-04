@@ -1643,7 +1643,12 @@ func (r *MigrationPlanReconciler) buildBaseConfigMapData(
 		"SOURCE_VM_NAME":                    vmMachine.Spec.VMInfo.Name,
 		"SOURCE_VM_ID":                      vmMachine.Spec.VMInfo.VMID,
 		"SOURCE_VM_KEY":                     sourceVMKey,
-		"CONVERT":                           "true",
+		// TEMP(test branch, do not merge): unconditionally skip virt-v2v conversion.
+		// Pre-virtio guests (e.g. RHEL 5.x) can leave their original, already-correct
+		// storage driver in the initrd instead of virt-v2v guessing one; pair this with
+		// a VolumeImageProfile matching the source disk's real controller (ide / lsilogic
+		// / buslogic). Revert to driving this from config before merging anywhere real.
+		"CONVERT":                           "false",
 		"TYPE":                              migrationplan.Spec.MigrationStrategy.Type,
 		"DATACOPYSTART":                     migrationplan.Spec.MigrationStrategy.DataCopyStart.Format(time.RFC3339),
 		"CUTOVERSTART":                      migrationplan.Spec.MigrationStrategy.VMCutoverStart.Format(time.RFC3339),
