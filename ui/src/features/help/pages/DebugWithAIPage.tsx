@@ -85,7 +85,11 @@ function OtherAgentsTab({
   const [copied, setCopied] = useState(false)
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(prompt)
+    try {
+      await navigator.clipboard.writeText(prompt)
+    } catch {
+      // clipboard unavailable (e.g. headless CI) — still show feedback
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }

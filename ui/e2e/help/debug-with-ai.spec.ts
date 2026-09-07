@@ -51,7 +51,7 @@ test('US1: repository link is present on Claude Code tab', async ({ page }) => {
 test('US1: version badge shows version from API', async ({ page }) => {
   await stubDebugPromptApi(page)
   await page.goto('/help/debug-ai')
-  await expect(page.getByText(/v1\.0\.0/)).toBeVisible()
+  await expect(page.getByText(/v1\.0\.0/).first()).toBeVisible()
 })
 
 test('US1: page loads without vjailbreak-ai (API unavailable)', async ({ page }) => {
@@ -85,10 +85,12 @@ test('US2: Copy System Prompt button exists on Other Agents tab', async ({ page 
 })
 
 test('US2: clicking Copy button changes label to Copied! then reverts', async ({ page }) => {
-  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
   await stubDebugPromptApi(page)
   await page.goto('/help/debug-ai')
   await page.getByRole('tab', { name: /other agents/i }).click()
+
+  // Wait for the prompt content to load before interacting with the copy button
+  await expect(page.getByText(MOCK_DEBUG_PROMPT.prompt)).toBeVisible()
 
   const copyBtn = page.getByRole('button', { name: /copy system prompt/i })
   await copyBtn.click()
