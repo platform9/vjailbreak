@@ -291,6 +291,48 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Sequence Diagram
+
+The same flow as a sequence diagram, including Proxy VM onboarding (only the operations specific to vJailbreak Accelerated Copy are shown — disk conversion and target VM creation follow the same path as every other copy method):
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Admin
+    participant Ctrl as vJailbreak Controller
+    participant vC as vCenter / ESXi
+    participant Proxy as Proxy VM
+    participant Pod as Migration Pod (v2v-helper)
+    participant OS as OpenStack (Cinder/Nova)
+
+    Note over Admin,OS: Onboarding — Option A: Deploy new Proxy VM (OVA)
+    Admin->>Ctrl: Deploy & Register VM (OVA)
+    Ctrl->>vC: Import OVA, power on VM
+    Ctrl->>Proxy: Auto-generate & inject SSH keypair
+    Ctrl->>Proxy: Verify SSH, qemu-nbd, disk.EnableUUID
+    Ctrl->>Ctrl: Store private key as Secret "{proxyVM}-hot-add-ssh-key"
+    Ctrl-->>Admin: Proxy VM ready
+
+    Note over Admin,OS: Onboarding — Option B: Register an existing VM
+    Admin->>Ctrl: Register VM + SSH key (generate or upload)
+    Note right of Admin: If generated, admin adds public key<br/>to the VM's authorized_keys manually
+    Ctrl->>Proxy: Verify SSH, qemu-nbd, disk.EnableUUID
+    Ctrl->>Ctrl: Store private key as Secret "{proxyVM}-hot-add-ssh-key"
+    Ctrl-->>Admin: Proxy VM ready
+
+    Note over Admin,OS: Migration — vJailbreak Accelerated Copy
+    Admin->>Ctrl: Create MigrationPlan (StorageCopyMethod=HotAdd)
+    Ctrl->>Pod: Launch v2v-helper (Proxy VM IP + SSH secret)
+    Pod->>vC: Power off source VM, take snapshot
+    Pod->>vC: Hot-add frozen VMDKs to Proxy VM
+    Pod->>Proxy: SSH — match disk WWID to block device
+    Pod->>Proxy: SSH — start qemu-nbd per disk
+    Proxy-->>Pod: nbdcopy streams disk over NBD
+    Pod->>OS: Write stream into Cinder volume
+    Pod->>vC: Detach disks, delete snapshot
+    Pod-->>Ctrl: Migration succeeded
+```
+
 ## Limitations
 
 - **Cold copy only**: The source VM is powered off before disk attachment — live (hot) copy of the running VM's active disks is not supported
