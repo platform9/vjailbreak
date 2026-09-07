@@ -1160,6 +1160,55 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+// buildV2VHelperEnvFrom assembles the v2v-helper container's EnvFrom sources:
+// the VMware and OpenStack credential secrets (always present), the array
+// credentials secret (only when storage array migration is in play), the
+// shared pf9-env settings ConfigMap, and the optional proxy credentials secret.
+func buildV2VHelperEnvFrom(vmwareSecretRef, openstackSecretRef, arrayCredsSecretRef string) []corev1.EnvFromSource {
+	optionalTrue := true
+	envFrom := []corev1.EnvFromSource{
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: vmwareSecretRef,
+				},
+			},
+		},
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: openstackSecretRef,
+				},
+			},
+		},
+	}
+	if arrayCredsSecretRef != "" {
+		envFrom = append(envFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: arrayCredsSecretRef,
+				},
+			},
+		})
+	}
+	envFrom = append(envFrom, corev1.EnvFromSource{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "pf9-env",
+			},
+		},
+	})
+	envFrom = append(envFrom, corev1.EnvFromSource{
+		SecretRef: &corev1.SecretEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "pf9-proxy-creds",
+			},
+			Optional: &optionalTrue,
+		},
+	})
+	return envFrom
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1260,50 +1309,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
 								},
-								Env: envVars,
-								EnvFrom: func() []corev1.EnvFromSource {
-									envFrom := []corev1.EnvFromSource{
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: vmwareSecretRef,
-												},
-											},
-										},
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: openstackSecretRef,
-												},
-											},
-										},
-									}
-									if arrayCredsSecretRef != "" {
-										envFrom = append(envFrom, corev1.EnvFromSource{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: arrayCredsSecretRef,
-												},
-											},
-										})
-									}
-									envFrom = append(envFrom, corev1.EnvFromSource{
-										ConfigMapRef: &corev1.ConfigMapEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "pf9-env",
-											},
-										},
-									})
-									envFrom = append(envFrom, corev1.EnvFromSource{
-										SecretRef: &corev1.SecretEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "pf9-proxy-creds",
-											},
-											Optional: &pointtrue,
-										},
-									})
-									return envFrom
-								}(),
+								Env:     envVars,
+								EnvFrom: buildV2VHelperEnvFrom(vmwareSecretRef, openstackSecretRef, arrayCredsSecretRef),
 								VolumeMounts: []corev1.VolumeMount{
 									{
 										Name:      "vddk",

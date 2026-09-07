@@ -289,3 +289,42 @@ export const getGlobalSettingsHelpers = (defaults: SettingsForm) => {
     fromConfigMapData
   }
 }
+
+export interface ProxyAuthFieldsInput {
+  enabled: boolean
+  configured: boolean
+  username: string
+  password: string
+  httpsOverride: boolean
+  httpsUsername: string
+  httpsPassword: string
+}
+
+export const validateProxyAuthFields = (input: ProxyAuthFieldsInput): string | null => {
+  const { enabled, configured, username, password, httpsOverride, httpsUsername, httpsPassword } = input
+
+  if (!enabled) return null
+
+  const hasAnyCredInput =
+    username.trim() !== '' ||
+    password.trim() !== '' ||
+    httpsUsername.trim() !== '' ||
+    httpsPassword.trim() !== ''
+
+  if (!hasAnyCredInput) {
+    if (!configured) {
+      return 'Proxy username and password are required when proxy authentication is enabled.'
+    }
+    return null
+  }
+
+  if (!username.trim() || !password.trim()) {
+    return 'Both proxy username and password are required to update credentials.'
+  }
+
+  if (httpsOverride && (!httpsUsername.trim() || !httpsPassword.trim())) {
+    return 'Both HTTPS proxy username and password are required when using different HTTPS credentials.'
+  }
+
+  return null
+}

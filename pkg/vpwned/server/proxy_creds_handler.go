@@ -3,14 +3,17 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -19,8 +22,11 @@ const (
 	proxyCredsSecretNS   = "migration-system"
 )
 
+var proxyCredsDeployments = []string{"migration-controller-manager", "migration-vpwned-sdk"}
+
 type proxyCredsHandler struct {
 	k8sClient client.Client
+	rawK8s    kubernetes.Interface
 }
 
 type proxyCredsRequest struct {
@@ -53,13 +59,21 @@ func (h *proxyCredsHandler) getCreds(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 	var secret corev1.Secret
 	err := h.k8sClient.Get(ctx, types.NamespacedName{Name: proxyCredsSecretName, Namespace: proxyCredsSecretNS}, &secret)
-	resp := proxyCredsResponse{}
-	if err == nil {
-		resp.Configured = len(secret.Data["HTTP_PROXY_USERNAME"]) > 0
-		resp.HTTPSOverride = string(secret.Data["HTTPS_PROXY_OVERRIDE"]) == "true"
+	switch {
+	case err == nil:
+		resp := proxyCredsResponse{
+			Configured:    len(secret.Data["HTTP_PROXY_USERNAME"]) > 0,
+			HTTPSOverride: string(secret.Data["HTTPS_PROXY_OVERRIDE"]) == "true",
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	case k8serrors.IsNotFound(err):
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(proxyCredsResponse{}) //nolint:errcheck
+	default:
+		logrus.Errorf("proxy_creds_handler: get secret failed: %v", err)
+		http.Error(w, "failed to fetch proxy credentials", http.StatusInternalServerError)
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
 func (h *proxyCredsHandler) saveCreds(w http.ResponseWriter, r *http.Request) {
@@ -116,6 +130,8 @@ func (h *proxyCredsHandler) saveCreds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.restartProxyDeployments(ctx)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(proxyCredsResponse{Configured: true, HTTPSOverride: req.HTTPSOverride}) //nolint:errcheck
 }
@@ -130,6 +146,32 @@ func (h *proxyCredsHandler) deleteCreds(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "failed to clear proxy credentials", http.StatusInternalServerError)
 		return
 	}
+
+	h.restartProxyDeployments(ctx)
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(proxyCredsResponse{}) //nolint:errcheck
+}
+
+// restartProxyDeployments patches each deployment's pod template annotation with
+// the current timestamp, triggering a rolling restart so already-running pods
+// pick up the new HTTP(S)_PROXY_USERNAME/PASSWORD values from the secret.
+func (h *proxyCredsHandler) restartProxyDeployments(ctx context.Context) {
+	if h.rawK8s == nil {
+		return
+	}
+	patch := []byte(fmt.Sprintf(
+		`{"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"%s"}}}}}`,
+		time.Now().UTC().Format(time.RFC3339),
+	))
+	for _, name := range proxyCredsDeployments {
+		_, err := h.rawK8s.AppsV1().Deployments(proxyCredsSecretNS).Patch(
+			ctx, name, types.MergePatchType, patch, metav1.PatchOptions{},
+		)
+		if err != nil {
+			logrus.Warnf("proxy_creds_handler: failed to restart %s deployment: %v", name, err)
+		} else {
+			logrus.Infof("proxy_creds_handler: triggered rolling restart of %s", name)
+		}
+	}
 }

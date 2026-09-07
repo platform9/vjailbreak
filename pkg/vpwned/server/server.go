@@ -242,7 +242,11 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 	if credsErr != nil {
 		logrus.Warnf("proxy creds handler: failed to create k8s client (non-cluster env): %v", credsErr)
 	} else {
-		mux.Handle("/vpw/v1/proxy/credentials", &proxyCredsHandler{k8sClient: proxyCredsK8sClient})
+		proxyCredsRawK8s, rawErr := CreateRawK8sClient()
+		if rawErr != nil {
+			logrus.Warnf("proxy creds handler: failed to create raw k8s client: %v", rawErr)
+		}
+		mux.Handle("/vpw/v1/proxy/credentials", &proxyCredsHandler{k8sClient: proxyCredsK8sClient, rawK8s: proxyCredsRawK8s})
 	}
 
 	// Wrap gatewayMuxer to handle all other routes

@@ -43,7 +43,11 @@ import {
   RHFAutocomplete,
   RHFTextField
 } from 'src/shared/components/forms'
-import { getGlobalSettingsHelpers, type SettingsForm } from 'src/features/globalSettings/helpers'
+import {
+  getGlobalSettingsHelpers,
+  validateProxyAuthFields as validateProxyAuthFieldsPure,
+  type SettingsForm
+} from 'src/features/globalSettings/helpers'
 import { isValidNtpServer } from 'src/features/globalSettings/validators'
 import {
   applyTimeSettings,
@@ -805,30 +809,15 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
   }, [rhfForm, isTimeSettingsDisabled, form.TIMEZONE, form.NTP_SERVERS])
 
   const validateProxyAuthFields = useCallback((): string | null => {
-    if (!proxyAuthEnabled) return null
-
-    const hasAnyCredInput =
-      proxyAuthUsername.trim() !== '' ||
-      proxyAuthPassword.trim() !== '' ||
-      proxyAuthHttpsUsername.trim() !== '' ||
-      proxyAuthHttpsPassword.trim() !== ''
-
-    if (!hasAnyCredInput) {
-      if (!proxyAuthConfigured) {
-        return 'Proxy username and password are required when proxy authentication is enabled.'
-      }
-      return null
-    }
-
-    if (!proxyAuthUsername.trim() || !proxyAuthPassword.trim()) {
-      return 'Both proxy username and password are required to update credentials.'
-    }
-
-    if (proxyAuthHttpsOverride && (!proxyAuthHttpsUsername.trim() || !proxyAuthHttpsPassword.trim())) {
-      return 'Both HTTPS proxy username and password are required when using different HTTPS credentials.'
-    }
-
-    return null
+    return validateProxyAuthFieldsPure({
+      enabled: proxyAuthEnabled,
+      configured: proxyAuthConfigured,
+      username: proxyAuthUsername,
+      password: proxyAuthPassword,
+      httpsOverride: proxyAuthHttpsOverride,
+      httpsUsername: proxyAuthHttpsUsername,
+      httpsPassword: proxyAuthHttpsPassword
+    })
   }, [
     proxyAuthEnabled,
     proxyAuthConfigured,
