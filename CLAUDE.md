@@ -119,7 +119,7 @@ Adding a Deployment/pod, a container image, or a `deploy/*.yaml` manifest? Eithe
 - Tests in `pkg/vpwned/upgrade/` must iterate `DeploymentConfigs`, never hardcode workload names, so an unwired workload fails the suite
 
 ### Module Structure
-- Four independent Go modules — run `go` commands from the correct directory: Controller `k8s/migration/`, V2V Helper `v2v-helper/`, API Server `pkg/vpwned/`, Common `pkg/common/`
+- Five independent Go modules — run `go` commands from the correct directory: Controller `k8s/migration/`, V2V Helper `v2v-helper/`, API Server `pkg/vpwned/`, Common `pkg/common/`, vAssessment `vassessment/`
 - When adding dependencies, run `go mod tidy` in the specific module directory
 - Cross-module imports must reference the full module path
 
@@ -133,6 +133,7 @@ Adding a Deployment/pod, a container image, or a `deploy/*.yaml` manifest? Eithe
 | `ui/` | React/TypeScript frontend (MUI, Vite) |
 | `pkg/vpwned/` | REST API server (Go module) for Cluster Conversion |
 | `pkg/common/` | Shared Go utilities (Go module) |
+| `vassessment/` | Standalone read-only VMware discovery & migration-readiness assessment CLI (Go module) |
 | `image_builder/` | Builds the vJailbreak appliance QCOW2 image |
 | `appliance/` | Vagrant-based k3s cluster for local testing |
 | `deploy/` | Generated Kubernetes manifests |
@@ -152,6 +153,7 @@ make build-image                       # Complete appliance QCOW2
 make test-v2v-helper                   # v2v-helper tests (requires Linux CGO)
 cd k8s/migration && make test          # Controller tests
 make run-local                         # Run controller locally
+make vassessment test-vassessment      # Build / test the vAssessment CLI
 cd ui && yarn dev                      # UI dev server (requires VITE_API_HOST, VITE_API_TOKEN)
 ```
 

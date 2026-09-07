@@ -19,6 +19,7 @@ node_modules
 openstack.rc
 .qodo
 pkg/vpwned/bin/vpwctl
+vassessment/bin/*
 proto_dependencies
 ui/test-results/*
 ui/playwright-report/*

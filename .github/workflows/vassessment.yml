@@ -1,0 +1,33 @@
+name: vassessment build & test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: build & test
+    runs-on: ubuntu-latest
+    if: "!startsWith(github.head_ref, 'pre-release/')"
+    defaults:
+      run:
+        working-directory: vassessment
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+          cache-dependency-path: vassessment/go.sum
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test ./... -v

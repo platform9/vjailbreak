@@ -1,0 +1,4 @@
+{
+  "name": "vassessment-readonly",
+  "privileges": ["System.View", "System.Read", "Datastore.Browse"]
+}
