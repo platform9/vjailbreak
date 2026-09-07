@@ -45,7 +45,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:2180-v2v-restructure-03559db6
+        image: quay.io/platform9/vjailbreak-controller:main
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
