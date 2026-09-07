@@ -1,12 +1,12 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import * as debugPromptModule from 'src/api/ai/debugPrompt'
 
 // Mock the API module before importing the component
 vi.mock('src/api/ai/debugPrompt', () => ({
   fetchDebugPrompt: vi.fn(),
 }))
 
-import { fetchDebugPrompt } from 'src/api/ai/debugPrompt'
 import DebugWithAIPage from './DebugWithAIPage'
 
 const MOCK_RESPONSE = {
@@ -15,7 +15,7 @@ const MOCK_RESPONSE = {
   prompt: 'test system prompt for debugging',
 }
 
-const mockFetch = vi.mocked(fetchDebugPrompt)
+const mockFetch = debugPromptModule.fetchDebugPrompt as ReturnType<typeof vi.fn>
 
 describe('DebugWithAIPage', () => {
   beforeEach(() => {

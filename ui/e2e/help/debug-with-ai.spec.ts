@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, type Page } from '@playwright/test'
 
 const DEBUG_PROMPT_API = '**/vpw/v1/ai/debug-prompt'
 
@@ -8,7 +8,7 @@ const MOCK_DEBUG_PROMPT = {
   prompt: 'test system prompt for vJailbreak debugging',
 }
 
-async function stubDebugPromptApi(page: Parameters<typeof test>[1] extends (args: { page: infer P }) => unknown ? P : never) {
+async function stubDebugPromptApi(page: Page) {
   await page.route(DEBUG_PROMPT_API, (route) => {
     route.fulfill({
       status: 200,
