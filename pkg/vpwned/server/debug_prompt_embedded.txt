@@ -1,0 +1,1102 @@
+version: 1.0.0
+last_updated: 2026-09-07
+
+
+# vJailbreak Debugging
+
+## Overview
+
+vJailbreak migrates VMs from VMware vSphere to Platform9 PCD. It spans three distinct domains, and a failure can originate in any of them:
+
+- **VMware side** — vCenter/ESXi: credentials, permissions, network port-groups, datastores, guest-OS state inside the source VM.
+- **vJailbreak VM side** — a single VM running k3s in the target PCD environment: the `migration-controller-manager`, `vjailbreak-ui`, and one `v2v-helper` pod per in-flight migration.
+- **PCD/OpenStack side** — the destination: Nova (boot), Neutron (networking/ports), Cinder (volumes).
+
+**The single most important correlation ID is the migration/VM name.** It threads through the `Migration` CRD's name, the `<migration-name>-v2v-helper` pod, and the debug log file `/var/log/pf9/<migration-name>.log`. Get it first — from the UI's migration list or `kubectl get migration -n migration-system`.
+
+## Ground Rules (apply throughout every step below)
+
+- **Independent-evidence rule.** A JIRA/GitHub issue title, a customer-authored RCA doc, or a
+  reporter's stated theory is **one input, not ground truth**. It may be wrong, biased toward a
+  convenient explanation ("must be a regression"), or simply guessing. Refer to it, cite it, but
+  verify independently before adopting its conclusion. State every finding as one of: **evidence
+  observed** (a specific log line, doc citation, or reproduced behavior) vs. **hypothesis
+  proposed** (unconfirmed, needs more evidence) vs. **hypothesis confirmed/refuted** (evidence
+  now settles it). Never present the second as the third.
+- **Verify-before-assert rule.** Do not state how an underlying tool (guestfish/libguestfs/
+  virt-v2v-in-place/nbdkit/vCenter/OpenStack) behaves from memory. Check it — against the actual
+  log evidence in front of you, or against the tool's own docs/source (see the specialist agents
+  in Step 3.5). If you can't verify a claim, say it's unverified rather than stating it with
+  confidence.
+- **Diagnosis-first gate.** Your job by default is to explain what happened, not to fix it. Reach
+  and report a root cause, then **stop and wait for explicit go-ahead** before editing any source
+  file. Do not jump from "root cause found" straight into `Edit` calls. See Step 4.
+- **Parallel-fan-out rule.** When investigation splits into N genuinely independent pieces — N
+  debug bundles to summarize, N migrations to RCA, N competing hypotheses to check, N tool
+  domains a failure might touch — dispatch N agents together rather than one at a time. Each
+  agent's prompt should itself carry the independent-evidence rule (explicit "do not assume X is
+  causal," "do not accept the reporter's theory uncritically," "report facts only, no fix
+  proposals," a word-count cap). Only synthesize/diff the results afterward, centrally — no
+  single agent has the full picture.
+
+## Architecture / Flow
+
+```
+Discovery → Mapping → Validate → Data Copy → Convert → [Cutover] → Post-Migration → Completed
+   (VMware)   (both)   (VMware)   (3 methods:      (virt-v2v,       (admin or       (rename/
+                                   NFC/XCOPY/       guest-OS         scheduled)      move/script/
+                                   hot-add-proxy)   quirks)                          persist-net)
+```
+
+Data Copy has three interchangeable transports (Normal NFC, Storage-Accelerated XCOPY, Hot-Add Proxy) layered under the same phase — see [copy-methods.md](copy-methods.md). Cutover only applies when Admin-Initiated cutover was selected.
+
+Full detail: [migration-lifecycle.md](migration-lifecycle.md).
+
+## Tool Availability
+
+| Tool | Available | What it gives you |
+|---|---|---|
+| SSH to vJailbreak VM | ✅ (user `ubuntu`, default password `password`) | Full access to logs, CRDs, ConfigMaps via `kubectl` |
+| `kubectl` on vJailbreak VM | ✅ | Pod logs, CRD status, ConfigMap values — see [support-bundle.md](support-bundle.md) |
+| `kubectl` locally (if kubeconfig configured) | ✅ if configured | Same as above, from dev machine |
+| OpenStack CLI (`openstack`) | ✅ | Nova/Neutron/Cinder resources — use directly, no handoff needed |
+| SSH/exec into ESXi hosts | ❌ | Would allow live ESXi-side verification. Without it: rely on vJailbreak logs and ask customer/VMware admin to check ESXi-side state. |
+| Live exec into `v2v-helper`/controller pods | ⚠️ Possible but avoid | Diagnose from logs and CRD status — never `kubectl exec` to poke at a running migration; it can corrupt state. |
+
+## Step-by-Step Debugging Workflow
+
+### Step 1: Get the Migration Name and Phase
+
+```bash
+kubectl get migration -n migration-system
+```
+Note `.status.phase` — this determines which reference file to open next.
+
+### Step 2: Classify and Route
+
+```
+.status.phase / symptom                         → go to
+──────────────────────────────────────────────────────────────────────
+Discovery (no VMs listed / hangs)                → migration-lifecycle.md §1, check VMwareCreds
+Mapping (subnet mismatch, port conflict)          → networking.md, migration-lifecycle.md §2
+Validate (missing OS for powered-off VM)          → migration-lifecycle.md §3
+Data Copy (NFC/nbdcopy failure)                   → copy-methods.md (Normal NFC section)
+Data Copy (XCOPY/SSH/array failure)               → copy-methods.md (Storage-Accelerated section)
+Data Copy (Hot-Add Proxy failure)                 → copy-methods.md (Hot-Add Proxy section)
+Convert (resolv.conf, dynamic disk, PCI slots)    → guest-os-issues.md
+Cutover (stuck at waitForAdminCutover, or fails)  → migration-lifecycle.md §6
+Post-Migration (network unreachable, WSFC issue)  → networking.md WSFC case study, guest-os-issues.md
+Cluster Conversion specific                       → cluster-conversion.md
+Nova/Neutron/Cinder failures                      → run openstack CLI directly (see support-bundle.md)
+```
+
+### Step 2.5: Check Known Issues First
+
+Grep [known-issues.md](known-issues.md) for the symptom pattern (error string, phase, guest OS)
+before starting a fresh deep investigation. A match means this case has been confirmed before —
+but still confirm it still applies (same phase, same tool version, same migration path) rather
+than reusing the conclusion wholesale. If nothing matches, proceed to Step 3 as normal; this is a
+fast-path, not a gate.
+
+### Step 3: vJailbreak-VM-Side Investigation (Always First)
+
+Pull the per-migration debug log and the `v2v-helper` pod logs before anything else — see [support-bundle.md](support-bundle.md). Check the `vjailbreak-settings` ConfigMap for the `CLEANUP_*` and `PERIODIC_SYNC_*` values relevant to the phase in question.
+
+**Offline debug bundle instead of a live cluster?** Same steps, reading files from the extracted
+bundle instead of `kubectl`. If you're given a second bundle to compare against (e.g. "here's a
+successful run of the same VM"), see [bundle-comparison.md](bundle-comparison.md) before diffing
+them — confirming VM identity and diffing phase-by-phase, in parallel per the fan-out rule above,
+not by hand.
+
+### Step 3.5: Second-Order Analysis (MANDATORY for Convert and Data Copy failures)
+
+**Identifying the error string is NOT the end of debugging.** After classifying the phase and finding the error, you MUST answer:
+
+> "WHY does the underlying tool (guestfish / libguestfs / virt-v2v-in-place / nbdkit / vCenter / OpenStack) behave this way for THIS guest OS, disk layout, and environment?"
+
+Route by tool error. Check [tool-internals.md](tool-internals.md) first (fast, static); escalate
+to the cited specialist agent when the claim is contested, unprecedented, or tool-internals.md
+doesn't cover it — the specialist fetches live docs instead of relying on a cached summary:
+
+| Error contains | Ask | Static reference | Specialist agent (if escalating) |
+|---|---|---|---|
+| `guestfish: multi-boot` | How many OS roots does each disk have individually? Is this Btrfs/Snapper? | [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) | `vjb-guestfs-behavior` |
+| `inspect-os` failure | Is guest using Btrfs? Multiple disks? Snapshots? | [tool-internals.md §inspect-os](tool-internals.md#inspect-os) | `vjb-guestfs-behavior` |
+| `resolv.conf` immutable | Did source have `chattr +i` set? | [guest-os-issues.md](guest-os-issues.md) | `vjb-virtv2v-inplace-behavior` |
+| `No more available PCI slots` | Is image using `virtio-blk` vs `virtio-scsi`? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) | `vjb-virtv2v-inplace-behavior` |
+| `initramfs` / dracut / mkinitrd | Does guest use dracut or legacy mkinitrd? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) | `vjb-virtv2v-inplace-behavior` |
+| `nbdkit` / VDDK / transports | Is ESXi reachable by hostname? Thumbprint match? | [tool-internals.md §nbdkit](tool-internals.md#nbdkit) | `vjb-guestfs-behavior` (nbdkit) or `vjb-vcenter-behavior` (VDDK/ESXi-side) |
+| NFC / vpxa / snapshot / moref errors | Is this documented vCenter/ESXi behavior, or unexpected? | — | `vjb-vcenter-behavior` |
+| Nova/Neutron/Cinder errors reaching this deep | Capacity/quota/admin-config on target cloud, or vjailbreak bug? | [support-bundle.md](support-bundle.md) PCD-side table | `vjb-openstack-behavior` |
+
+**When the failure could plausibly originate in more than one domain** (e.g. "is this a vCenter
+snapshot quirk or a guestfs multi-boot false-positive?"), dispatch the relevant specialists **in
+parallel, one message**, per the fan-out rule — don't check them one at a time.
+
+**Do not stop at "code bug in X.go".** Explain what guest-OS or environment characteristic triggered the bug.
+
+### Step 4: Report Root Cause — Stop Here
+
+Per the diagnosis-first ground rule: present the root cause (evidence observed vs. hypothesis
+confirmed — see ground rules) and **stop**. Do not proceed to editing source files in the same
+turn. Wait for the user to explicitly ask for a fix, a retry, or further investigation before
+continuing to Step 4.5.
+
+### Step 4.5: Decide Retry vs. Refill-and-Restart vs. Fix Code (after user confirms)
+
+Use the retry-vs-cleanup decision tree in [migration-lifecycle.md](migration-lifecycle.md) — it is keyed by phase and by whether the failure is a config problem or a runtime/environment blip. If the failure points to a code bug, identify the owning source file:
+
+| Phase | Owning code |
+|---|---|
+| Discovery / VMwareCreds | `k8s/migration/internal/controller/vmwarecreds_controller.go` |
+| Mapping / NetworkMapping / StorageMapping | `k8s/migration/internal/controller/` |
+| Data Copy — NFC | `v2v-helper/pkg/nbdcopy/` or `v2v-helper/pkg/copy/` |
+| Data Copy — XCOPY | `v2v-helper/pkg/storage/` (Pure: `pure.go`, NetApp: `netapp.go`) |
+| Data Copy — Hot-Add Proxy | `v2v-helper/pkg/hotadd/` |
+| Convert | `v2v-helper/pkg/virtv2v/` |
+| Cutover | `v2v-helper/cmd/` + `k8s/migration/internal/controller/migration_controller.go` |
+| Post-Migration | `k8s/migration/internal/controller/migration_controller.go` |
+
+### Step 5: PCD-Side Investigation (Fallback)
+
+If vJailbreak's own logs don't explain the failure and it clearly involves Nova/Neutron/Cinder, use the OpenStack CLI directly:
+
+```bash
+# Neutron port issues
+openstack port list --device-id <migration-vm-uuid> --insecure
+openstack port show <port-id> --insecure
+
+# Cinder volume stuck
+openstack volume show <volume-id> --insecure
+openstack volume list --status error --insecure
+
+# Nova scheduling failure
+openstack server show <server-id> --insecure
+openstack server event list <server-id> --insecure
+```
+
+### Step 6: Record Confirmed Findings (only with user confirmation)
+
+If the root cause reached **confirmed** status (per the independent-evidence ground rule — actual
+evidence, not an inherited hypothesis), ask the user whether to record it in
+[known-issues.md](known-issues.md). **Never append without an explicit yes** — this file is
+checked into git and read by future debugging sessions, so a wrong or premature entry compounds.
+If confirmed, append a row using the format in known-issues.md's own header.
+
+## Quick Error Pattern Reference
+
+| Error / Symptom | Phase | Likely cause | First action |
+|---|---|---|---|
+| No VMs found during discovery | Discovery | VMware credential/permission issue | Check `VMwareCreds` revalidation status |
+| Neutron port-create fails / "port already in use" | Mapping | Subnet mismatch, or stale port from a prior attempt | See [networking.md](networking.md); retry-vs-refill tree in migration-lifecycle.md |
+| Missing OS type for a powered-off VM | Validate | VMware Tools unavailable (VM off) | Manually fill OS/IP in the migration form |
+| `guestfish: multi-boot operating systems are not supported` | Convert | guestfish `-i` inspects all disks together; finds 2+ OS roots (common: OpenSUSE Btrfs+Snapper subvolumes, or 2-disk VM where both disks have OS-like content) | Test each disk individually: `guestfish --ro -a /dev/vdb : run : inspect-os`; see [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) |
+| `virt-v2v` rename `/etc/resolv.conf` fails | Convert | Immutable attribute set on source | `chattr -i /etc/resolv.conf` on source, retry |
+| `No more available PCI slots` | Convert / disk attach | Image using `virtio-blk` instead of `virtio-scsi` | Rebuild image with `hw_disk_bus=scsi` |
+| Hivex/registry read errors during inspection (Windows) | Convert | Dynamic disk (LDM) on boot disk | Convert to basic disk pre-migration |
+| Windows secondary disks show Offline | Post-migration | Windows "Offline Shared" SAN policy | `diskpart` → `SAN POLICY=OnlineAll`, or firstboot script |
+| VMware Tools registry/driver remnants | Post-migration | Incomplete uninstaller | No action — cosmetic, harmless |
+| Migration fails during nbdcopy, DNS errors in debug log | Data Copy (Normal) | ESXi hostname not resolvable from vJailbreak VM | Add ESXi host entries to `/etc/hosts` on vJailbreak VM |
+| XCOPY: SSH connection to ESXi fails | Data Copy (XCOPY) | SSH disabled, wrong key type (need RSA-4096), or network | See [copy-methods.md](copy-methods.md) troubleshooting table |
+| XCOPY: mapping fails on Pure | Data Copy (XCOPY) | No existing host object for ESXi's WWPN/IQN — FC zoning/onboarding incomplete | Storage-admin task, not a vJailbreak bug — see Pure/NetApp asymmetry in copy-methods.md |
+| XCOPY: mapping fails on NetApp cross-SVM | Data Copy (XCOPY) | Target volume's SVM differs from source ESXi's mapped SVM, igroup creation failed | Check array-side igroup-creation permissions on target SVM |
+| Cluster IP / floating IP unreachable post-migration | Post-migration / Networking | Neutron anti-spoofing dropping the GARP | See WSFC case study in [networking.md](networking.md) |
+| WSFC `ClusSvc` won't start, Event ID 1289 | Post-migration | NetFT adapter missing after virt-v2v NIC driver swap | See [guest-os-issues.md](guest-os-issues.md) |
+| Cutover stuck at `waitForAdminCutover` with no progress after triggering | Cutover | Normal 10–30s propagation lag | Wait; don't re-trigger within the window |
+| Cluster Conversion VM discovery inconsistent with duplicate names | Cluster Conversion | Known VM-ID-append regression | See [cluster-conversion.md](cluster-conversion.md) maturity caveat |
+
+## Key Operational Rules
+
+- **VMware Tools residual artifacts are cosmetic and harmless** — do not spend time trying to fully remove them; this is documented, expected behavior.
+- **Leftover ports/volumes after a failed migration may be intentional**, not a cleanup bug — check `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` / `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` in `vjailbreak-settings` before assuming otherwise.
+- **A Neutron allowed-address-pair change does not retroactively announce an IP** — the GARP (or equivalent) must actually be re-sent (e.g. via cluster failover) after the permission change, or it will still look broken.
+- **Mapping-phase failures require refilling the migration form** — there is no "edit migration" capability; port-conflict failures are the one exception (retry the same migration after freeing the port).
+- **XCOPY on Pure never creates a new host group** — it only reuses an existing one, because a Pure host object can belong to at most one host group and creating a new one would silently unmap production volumes. If no matching host object exists, that's a storage-admin gap, not a bug.
+- **Storage-Accelerated Copy (XCOPY) is cold-migration-only** and requires the exact same physical array on both sides — don't recommend it for a hot-migration or cross-array requirement.
+- **Check ALL nodes of a migrated cluster (WSFC or similar), not just the first** — the NetFT-missing failure was independently reproduced on both nodes in the source RCA; a single healthy-looking node is not sufficient evidence.
+
+## References
+
+### Internal Skill Docs
+- [tool-internals.md](tool-internals.md) — guestfish `-i` multi-boot detection, libguestfs inspect-os, Btrfs/Snapper, virt-v2v pipeline, nbdkit/VDDK failures
+- [architecture.md](architecture.md) — pods, CRDs, credentials, settings, scaling, compatibility, known limitations
+- [migration-lifecycle.md](migration-lifecycle.md) — phase-by-phase flow, retry/cleanup decision tree, cutover, post-migration options
+- [copy-methods.md](copy-methods.md) — Normal NFC, Storage-Accelerated XCOPY (Pure/NetApp), Hot-Add Proxy
+- [networking.md](networking.md) — mapping, IP/MAC/interface persistence, WSFC/Neutron case study
+- [guest-os-issues.md](guest-os-issues.md) — Windows/Linux conversion quirks
+- [cluster-conversion.md](cluster-conversion.md) — ESXi-to-PCD-hypervisor conversion
+- [support-bundle.md](support-bundle.md) — log/CRD map, support-bundle ZIP layout
+- [bundle-comparison.md](bundle-comparison.md) — diffing two offline debug bundles (identity check, phase-by-phase timeline)
+- [known-issues.md](known-issues.md) — living, confirmed-case log; check first (Step 2.5), append with user confirmation (Step 6)
+
+### Specialist Agents
+- `vjb-debug-triage` — controller + v2v-helper log triage; live (kubectl) or bundle (offline tarball) mode
+- `vjb-module-investigator` — cross-module code locator (all 4 Go modules)
+- `vjb-vcenter-behavior` — vCenter/ESXi/govmomi behavior, cites vSphere API docs + govmomi
+- `vjb-guestfs-behavior` — libguestfs/guestfish/nbdkit internals, cites libguestfs.org/nbdkit.1.html
+- `vjb-virtv2v-inplace-behavior` — `virt-v2v-in-place` specifically, cites virt-v2v-in-place(1)/virt-v2v-support(1)
+- `vjb-openstack-behavior` — Nova/Neutron/Cinder behavior, cites docs.openstack.org
+
+Dispatch the relevant specialists in parallel (one message) when a hypothesis spans domains — see
+the parallel-fan-out ground rule.
+
+### Public Documentation
+- vJailbreak docs: https://platform9.github.io/vjailbreak/
+- virt-v2v-in-place: https://libguestfs.org/virt-v2v-in-place.1.html
+- virt-v2v support matrix: https://libguestfs.org/virt-v2v-support.1.html
+- libguestfs: https://libguestfs.org/
+- nbdkit: https://libguestfs.org/nbdkit.1.html
+- vSphere API reference: https://developer.vmware.com/apis/vsphere-automation/latest/
+- govmomi: https://github.com/vmware/govmomi
+- OpenStack docs: https://docs.openstack.org/
+- Architecture deep-dive: https://deepwiki.com/platform9/vjailbreak
+
+---
+
+# vJailbreak Architecture
+
+## Deployment Model
+- vJailbreak ships as a single VM ("the vJailbreak VM" / "primary VM") deployed inside the TARGET OpenStack/PCD environment — not inside VMware.
+- The VM runs k3s (lightweight Kubernetes) and hosts all vJailbreak components as pods in the `migration-system` namespace.
+- One vJailbreak instance can be attached to MANY VMware vCenter/vSphere instances (via multiple `VMwareCreds` objects) but only ONE PCD/OpenStack environment — because the VM itself runs on that PCD's compute.
+- SSH access: user `ubuntu`, default password `password` (must be changed on first login). Web UI: `http://<vjb-vm-ip>/`, gated by HTTP basic auth (default `admin`/`password`).
+- VDDK (VMware Virtual Disk Development Kit) libraries — version 8.0.x — must be extracted to `/home/ubuntu/vmware-vix-disklib-distrib` on the VM. Without VDDK, vCenter cannot expose the NFC port needed for block-level disk reads. VDDK 9.x is known to have unresolved issues; stick to 8.0.x unless a specific fix note says otherwise.
+- Deployed from a `vjailbreak.qcow2` image; must be created with disk bus `virtio-scsi` (not the default `virtio-blk`) — see "PCI Slot Exhaustion" in [guest-os-issues.md](guest-os-issues.md) for why this matters even for the VJB VM itself, not just migrated guests.
+
+## Pods (namespace: `migration-system`)
+
+| Pod | Purpose |
+|---|---|
+| `migration-controller-manager` | The Kubernetes controller. Watches all migration CRDs, drives their reconciliation loop / phase state machine, decides when to spawn a `v2v-helper` pod. |
+| `vjailbreak-ui` | Web UI (React/TS/MUI/Vite) — discovery, mapping, migration-plan creation, log viewing. |
+| `v2v-helper` | **One pod per in-flight migration**, named `<migration-name>-v2v-helper`. Does the actual work: disk copy (NBD/XCOPY/hot-add), `virt-v2v` conversion, cutover. This is where almost all migration-specific failures surface. |
+| `migration-vpwned-sdk` | REST API server (Go module `pkg/vpwned`) backing Cluster Conversion specifically — see [cluster-conversion.md](cluster-conversion.md). |
+
+## Custom Resource Definitions (all in `migration-system`)
+
+| CRD | Purpose |
+|---|---|
+| `VMwareCreds` | vCenter/ESXi connection: host/IP, username, password, datacenter, insecure-TLS toggle. Backed by a same-named `Secret`. |
+| `OpenstackCreds` | PCD/OpenStack connection. Password-based (`OS_AUTH_URL`, `OS_USERNAME`, `OS_PASSWORD`, `OS_REGION_NAME`, `OS_PROJECT_NAME`, ...) or token-based (`OS_AUTH_TOKEN`). Backed by a same-named `Secret`. |
+| `NetworkMapping` | Source vSphere network/port-group ↔ destination PCD network. |
+| `StorageMapping` | Source VMware datastore ↔ destination PCD Cinder backend/volume-type. |
+| `MigrationTemplate` | Reusable set of mapping + option defaults, referenced by a `MigrationPlan`. |
+| `MigrationPlan` | A batch of VMs to migrate together, plus shared options (cutover type, data-copy method, post-migration options). Creates one `Migration` object per VM. |
+| `Migration` | **The correlation ID.** One object per VM migration, named after the migration/VM name. Its `.status.phase` is the state machine (Pending → Validating → DataCopy → Convert → [waitForAdminCutover →] Cutover → Completed \| Failed). Everything else — the `v2v-helper` pod name, the debug log filename — derives from this name. |
+
+Get this name FIRST in any investigation: `kubectl get migration -n migration-system` (or from the UI's migration list).
+
+## Credential Validation and Revalidation
+
+- Revalidation does two things: (1) an auth check against the target (vCenter or OpenStack), (2) if auth succeeds, a full inventory resync (VMs, networks, datastores refreshed).
+- Triggers: automatically on credential creation, automatically every **1 hour** by default, and on-demand via the UI's refresh button.
+- If VM/network/datastore lists in the UI look stale, check when the credential last revalidated before assuming a real data-fetch bug — it may just be due for its hourly refresh.
+- To read the actual configured values (not just "does auth work"): `kubectl get secret <vmwarecreds-or-openstackcreds-name> -n migration-system -o jsonpath='{.data.username}' | base64 -d` (substitute the field name for `password`, `OS_AUTH_URL`, etc). This is the fastest way to distinguish "wrong password" from "wrong endpoint" from "network unreachable" without going back through the UI.
+
+## `vjailbreak-settings` ConfigMap
+
+`kubectl get configmap vjailbreak-settings -n migration-system -o yaml`
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `DEFAULT_MIGRATION_METHOD` | `cold` | Whether new migrations default to hot (live) or cold (powered-off) copy. |
+| `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | `20` | Max iterations of changed-block (CBT) copy during hot migration before forcing convergence. |
+| `VCENTER_SCAN_CONCURRENCY_LIMIT` | `10` | Concurrent VM-scan workers during vCenter discovery. Raise for faster discovery in large environments. |
+| `VM_ACTIVE_WAIT_INTERVAL_SECONDS` / `VM_ACTIVE_WAIT_RETRY_LIMIT` | — | Timeout tuning for "wait for destination VM to become ACTIVE" post-boot. |
+| `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS` / `VOLUME_AVAILABLE_WAIT_RETRY_LIMIT` | — | Timeout tuning for "wait for Cinder volume to become available." Relevant to attach/detach-timeout symptoms — see [support-bundle.md](support-bundle.md). |
+| `PERIODIC_SYNC_INTERVAL` | `1h` | Interval between delta-block syncs during Periodic Sync mode (see [migration-lifecycle.md](migration-lifecycle.md)). |
+| `PERIODIC_SYNC_MAX_RETRIES` / `PERIODIC_SYNC_RETRY_CAP` | — | Retry/backoff tuning for periodic sync. |
+| `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | — | If enabled, Neutron ports created for a failed migration are deleted automatically. If disabled (check current value — don't assume), they're deliberately left so a retry can reuse them. |
+| `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | — | Same idea, for Cinder volumes created for a failed migration. |
+| `VALIDATE_RDM_OWNER_VMS` | — | Ensures all VMs sharing an RDM disk are migrated together (prevents split-brain on shared RDM data). |
+| v2v-helper pod CPU/memory/ephemeral-storage requests+limits | — | Tunable if migrations are getting OOMKilled or throttled; see agent sizing below for the underlying budget. |
+
+**Always check these two `CLEANUP_*` flags before concluding "VJB should have cleaned up that stray port/volume automatically."** If they're off, leftover artifacts after a failed migration are expected behavior, not a bug — see the retry-vs-cleanup decision tree in [migration-lifecycle.md](migration-lifecycle.md).
+
+## Agent Scaling (parallel migrations)
+
+vJailbreak scales out via additional **agent VMs** — up to 5 total (1 primary + 4 additional), each running its own k3s and its own set of `v2v-helper` pods.
+
+Per-migration resource budget on any one agent:
+
+| Resource | Request | Limit |
+|---|---|---|
+| CPU | 1 core | 2 cores |
+| Memory | 1 GiB | 3 GiB |
+| Ephemeral storage | — | 3 GiB |
+
+Recommended agent flavor sizing:
+
+| Flavor | vCPUs | RAM | Storage | Concurrent migrations |
+|---|---|---|---|---|
+| Small | 8 | 16 GiB | 60 GiB | 2–3 |
+| Medium | 16 | 32 GiB | 100 GiB | 5–7 |
+| Large | 32 | 64 GiB | 200 GiB | 10–14 |
+| X-Large | 48 | 96 GiB | 300 GiB | 15–21 |
+
+Formula: `max concurrent migrations = min(available_CPU / 2, available_memory_GiB / 3, available_storage_GiB / 3)`, reserving ~20–25% of the flavor's resources as system overhead before applying the formula.
+
+Operational notes:
+- **Network bandwidth, not CPU/memory, is usually the actual limiting factor** — monitor utilization even if the formula says there's compute headroom.
+- VDDK is auto-synced from the primary VM to every agent — don't manually re-upload it per agent.
+- **L2-only networks without DHCP cannot support agent scale-up** — only the primary VM can run migrations in that topology, since agents need DHCP to get their own IP.
+- Minimum disk per agent: 60 GiB.
+- Agent VMs use the same `ubuntu`/`password` default SSH credential as the primary VM.
+
+## Compatibility Matrix
+
+**VMware vCenter Server**: 6.7, 7.0, 8.0.
+
+**Guest OS — Linux/BSD (verified)**: CentOS 6, 7, 9 · Debian 12 · Oracle Linux 8 · RHEL 8, 9, 10 · Rocky 8, 9, 10 · SUSE Linux Enterprise 15 · Ubuntu 14, 15, 16, 17, 22.04, 24.04 · FreeBSD 14.
+**Guest OS — Linux (expected, untested)**: AlmaLinux, Amazon Linux 2, CentOS 4/5, CentOS Stream 10, Debian 8, Oracle Linux 7, RHEL 4/5/7.
+**Guest OS — Windows (verified)**: 11, 11 Enterprise, Server 2012, 2016, 2019, 2022, 2025.
+**Notable gap**: VMware Photon OS has no verified or expected support — treat as unsupported until proven otherwise.
+
+## Known Limitations (treat as expected behavior, not bugs)
+
+| # | Limitation | Detail |
+|---|---|---|
+| 1 | Windows Dynamic Disk (LDM) | Cannot migrate directly — see [guest-os-issues.md](guest-os-issues.md). |
+| 2 | Domain Controllers | Strongly not recommended — VM-GenerationID loss risks AD USN rollback. |
+| 3 | Persist Network on Server 2012 and earlier | Depends on PowerShell capability unavailable on those OS versions. |
+| 4 | "Assign IP" + "Persist Network" | Mutually exclusive UI options — cannot enable both. |
+| 5 | Multi-IP per interface | Only one IP per NIC configurable via the UI's Assign-IP flow. |
+| 6 | VMware Tools residual artifacts | Cosmetic only, no action needed — see [guest-os-issues.md](guest-os-issues.md). |
+| 7 | Multi-boot VMs | Unsupported outright. |
+| 8 | Hotplug flavor | Live CPU/RAM resize requires an admin-configured hotplug-enabled flavor on PCD; not automatic. |
+| 9 | PCI slot exhaustion | Default `virtio-blk` caps around 26 attached devices — use `virtio-scsi`. |
+| 10 | Low disk space | Source VM needs minimum free space (~100 MB for most filesystems) before conversion. |
+| 11 | Virtual hardware version | Hot migration (CBT) requires VMware virtual hardware version 7+. |
+| 12 | Reboots required | Both hot and cold migration require a guest reboot during conversion — applications must tolerate this. |
+
+## References
+- Upstream repo `CLAUDE.md`: https://github.com/platform9/vjailbreak/blob/main/CLAUDE.md
+- Docs: `/vjailbreak/architecture/*`, `/vjailbreak/reference/compatibility/`, `/vjailbreak/reference/known-limitations/`, `/vjailbreak/guides/how-to/vjailbreak_settings/`, `/vjailbreak/guides/how-to/scaling/`, `/vjailbreak/concepts/credential-management/`
+
+---
+
+# Comparing Two Debug Bundles (Success vs. Fail, or Fail vs. Fail)
+
+The dominant real-world entry point for this skill is an **offline debug-bundle tarball**
+(`/vjb-debug <bundle>.tar.gz`), often with a second bundle from a different run of the same VM
+handed over mid-conversation ("here's a successful run of the same VM"). This file covers that
+specific workflow — see [support-bundle.md](support-bundle.md) for the bundle layout itself.
+
+## Step 1: Confirm identity BEFORE comparing
+
+**Never assume two bundles are the same VM because a filename looks similar, and never assume
+they're different VMs because filenames differ.** Bundle filenames are often just
+`<something>-debug-bundle-<timestamp>.tar.gz` — the timestamp differing is expected for two runs
+of the same VM, not evidence of anything.
+
+Confirm identity from bundle contents, in priority order:
+1. VM UUID / instance UUID in the `Migration` CR YAML (`crds/migration-<name>.yaml`) or in the
+   per-migration debug log header.
+2. VM MAC address(es) — consistent across runs of the same source VM.
+3. Migration/VM name string, if present and not auto-generated per-attempt.
+
+If the user states two bundles are the same VM, take it as given — do not re-litigate it — but
+still use it to anchor the comparison (e.g., disk device paths should be compared 1:1 by role, not
+by raw device letter, since those can shift between attempts).
+
+## Step 2: Extract both bundles in parallel, not serially
+
+Extracting and building a phase timeline from one bundle is independent of doing the same for the
+other. Per SKILL.md's parallel-fan-out rule: dispatch **one agent per bundle**, in the same
+message, each producing a structured phase-by-phase timeline (phase, timestamp, key log lines,
+errors). Only after both return should the diff happen — do this centrally, not inside either
+agent (neither agent has the other's data).
+
+Do not do this serially in the main thread with dozens of individual `tar`/`grep`/`cat` calls
+across both bundles interleaved — that was the actual failure mode observed in a real session
+(65 solo Bash calls to compare two bundles by hand).
+
+## Step 3: Diff phase-by-phase, not error-string-by-error-string
+
+Comparing only the final error line misses the point where the two runs diverge. For each phase
+(Discovery → Mapping → Validate → Data Copy → Convert → Cutover → Post-Migration), compare:
+- Did the phase start/end at all in each run?
+- Same copy method (Normal NFC / XCOPY / Hot-Add Proxy)? Different methods are a legitimate
+  confound — note it, don't assume it's the cause, and don't assume it's irrelevant either. Ask
+  the user which variable they want held constant if it's ambiguous.
+- Same detected guest OS / same device layout (disk count, boot disk index)? Device paths
+  (`/dev/vdb` vs `/dev/vdc`) can shift between attempts even for the same VM — compare by role
+  (boot disk, data disk N), not raw letter.
+- First point of divergence in log timestamps — this is usually more informative than the final
+  error line.
+
+## Step 4: State findings as evidence vs. hypothesis
+
+Per SKILL.md's independent-evidence rule: after the diff, separate what the logs directly show
+(e.g., "failed run's copy method field is empty, successful run's is `XCOPY`") from what you
+believe that means (e.g., "this suggests the copy method affects X — unconfirmed, needs Y to
+verify"). Do not present the second as if it were the first.
+
+---
+
+# vJailbreak Cluster Conversion
+
+**This is a structurally different feature from VM migration** — it converts an entire VMware **cluster**, including the physical ESXi hosts themselves, into PCD hypervisors. Everything else in this skill (`migration-lifecycle.md`, `copy-methods.md`, etc.) is about moving individual VMs; this file is about repurposing the hosts.
+
+## What It Does
+Converts a VMware cluster's ESXi hosts into PCD compute hypervisors, migrating each host's VMs along the way, so that at the end the entire cluster (hosts and VMs) runs on PCD instead of VMware.
+
+## How It Works
+1. User selects a source VMware cluster and a destination PCD cluster.
+2. The wizard shows the cluster's ESXi hosts and their VMs; host setup options (NIC-to-network associations) derive from the **PCD cluster blueprint**.
+3. Per-host sequential loop:
+   - Host enters VMware maintenance mode.
+   - Its running VMs evacuate (VMware live-migrate) to other ESXi hosts still in the source cluster.
+   - The now-empty host is converted into a PCD hypervisor — Canonical **MAAS** performs the bare-metal OS install via IPMI/PXE.
+   - VMs then migrate onto the newly-converted hypervisor.
+   - Repeat for the next host.
+
+## Prerequisites and Constraints
+- The VMware side must be a genuinely **DRS-enabled cluster** — VM evacuation during the per-host loop depends on DRS actually being able to move VMs off the host being converted.
+- **Irreversible.** Converting a host to a PCD hypervisor is explicitly documented as a one-time operation that cannot be undone — once converted, that host and its VMs are permanently PCD.
+
+## Maturity Caveat — Read This Before Reassuring a Customer
+
+Unlike standard VM migration (which is the well-exercised, primary code path), Cluster Conversion has a **documented history of being under-tested and regressing between releases**. Specifically:
+- Engineering has had to actively re-test this feature after unrelated changes broke it — e.g. appending a VM-ID suffix (added to support duplicate-named VMs across folders in standard migration) broke Cluster Conversion's own VM-discovery logic, and open timeout issues were being reworked as of the most recent internal review.
+- A customer-facing regression was found where the converted host's **NIC/interface-naming binding** (matching the PCD blueprint's interface names to the interfaces actually installed on the host) had tested and worked ~10–15 releases earlier, then silently regressed and was untested again by the time a customer needed it — that customer ultimately dropped their plan to use the feature.
+
+**Do not treat Cluster Conversion as production-hardened by default.** Before advising a customer to rely on it:
+- Check the current release notes for the vJailbreak version in use for any Cluster Conversion changes/fixes.
+- Search for open tickets referencing cluster conversion, VM-ID discovery, or interface-name binding on converted hosts.
+- If the customer's use case depends on a specific behavior (e.g. interface names matching the blueprint exactly), explicitly recommend they validate it in a non-production cluster first, rather than assuming it works because it's a documented feature.
+
+## Debugging Pointers
+- Uses the same `migration-controller-manager` and CRD reconciliation model as standard migration (see [architecture.md](architecture.md)) — the `migration-vpwned-sdk` pod backs the REST API specifically for this feature.
+- If VM discovery inside a cluster-conversion wizard behaves inconsistently with duplicate-named VMs, that matches the known VM-ID-append regression above — don't assume it's a new bug, check whether it's already tracked.
+- If a converted host doesn't come up with the expected interface names, that matches the known blueprint/interface-binding regression above.
+
+## References
+- [architecture.md](architecture.md), [migration-lifecycle.md](migration-lifecycle.md)
+- Docs: `/vjailbreak/concepts/cluster-conversion/`, `/vjailbreak/guides/cluster-conversion/cluster-conversion/`, `/vjailbreak/guides/cluster-conversion/maas-enablement/`
+
+---
+
+# vJailbreak Data Copy Methods
+
+Three mechanisms move disk bytes from VMware to PCD. They are selected independently of the hot/cold/mock/periodic-sync scheduling covered in [migration-lifecycle.md](migration-lifecycle.md) — this file is about the wire-level transport.
+
+## Comparison
+
+| Method | Transport | Speed | Requires shared array? | VM state | Datastore types |
+|---|---|---|---|---|---|
+| **Normal (NFC)** | VMware NFC protocol over the network → NBD | ~1 Gbps per VMDK (hard cap) | No | Hot or cold | Any |
+| **Storage-Accelerated (XCOPY)** | Array-level XCOPY, offloaded entirely to the storage array | 10–100x NFC (1 TB disk: ~5–30 min vs ~2.5 hrs) | **Yes** — source and destination must be the SAME physical array | Cold only | VMFS only |
+| **Hot-Add Proxy** | Snapshot disks attached to a proxy VM, streamed via NBD/`qemu-nbd`/`nbdcopy` | Faster than NFC (no protocol middleman); slower than XCOPY | No | Cold only (source powered off before disk attach) | Any (NFS, VMFS, vSAN) |
+
+## Normal (NFC) — Baseline
+
+The traditional path: VMware exposes disk blocks over its NFC port, `v2v-helper` reads them via NBD and streams into a Cinder volume. This is capped at roughly 1 Gbps per VMDK by design — the reason the other two methods exist. No special prerequisites beyond VDDK (see [architecture.md](architecture.md)).
+
+**DNS/hostname troubleshooting**: if migration fails during `nbdcopy` with DNS resolution errors in the debug log, the cause is usually the ESXi hostname not being resolvable from the vJailbreak VM. The fix is to add ESXi host entries to `/etc/hosts` on the vJailbreak VM — but the entries must cover **every** ESXi host in the cluster, not just vCenter, or the same failure recurs against a different host. This is a config change to the vJailbreak VM itself, so confirm it with the user or document it as the fix rather than applying it silently.
+
+## Storage-Accelerated Copy (XCOPY)
+
+### Supported Arrays
+Only **Pure Storage FlashArray** and **NetApp ONTAP** today. The storage SDK is written as a pluggable interface (see below), so more vendors are expected over time — but as of now, anything else falls back to Normal or Hot-Add Proxy.
+
+### Prerequisites
+- Both the VMware datastore and the PCD Cinder backend must be configured against the **same physical array** — this is a hard requirement, not just "compatible arrays."
+- Datastores must be **VMFS** (not NFS).
+- Cinder volume types must already exist for that array backend.
+- SSH enabled on **every** ESXi host in scope, with an **RSA-4096** keypair (Ed25519 is not reliably accepted by ESXi 8.x). Public key must be in `/etc/ssh/keys-root/authorized_keys` on each host.
+- Network: TCP 22 (vJailbreak ↔ ESXi SSH), TCP 3260 (iSCSI) or FC fabric connectivity, TCP 443 (vJailbreak ↔ storage array management API).
+
+### Storage Terminology Primer
+- **HBA** (Host Bus Adapter) — connects an ESXi host to the storage fabric. FC-based HBAs are identified by **WWPN**/**WWNN**; SCSI/iSCSI-based HBAs (hardware or software, via a NIC configured as an iSCSI initiator) are identified by an **IQN**.
+- **LUN** — a logical block device the array exposes to ESXi. A storage admin creates the LUN, then maps it to specific ESXi host identifiers (WWPN/IQN) so it becomes visible after a storage rescan.
+
+### Pure Storage Model
+Two objects: **Host** (represents one ESXi host on the array — holds its WWPN(s)/IQN) and **Host Group** (groups multiple ESXi hosts, typically one per VMware cluster, to simplify volume presentation to the whole cluster at once).
+
+### NetApp ONTAP Model
+More layered: cluster → node controllers → **SVM** (Storage Virtual Machine — a logical, isolated storage server; each SVM looks like a complete standalone array to whoever consumes it, providing per-tenant namespace isolation) → **FlexVol** (a container inside an SVM holding LUNs/NAS shares) → LUN. **Igroup** (initiator group) is NetApp's analog of Pure's host group, but scoped **per-SVM** — an igroup defined in SVM-A is invisible to SVM-B.
+
+### The `StorageProvider` Interface
+vJailbreak's storage code (`sdk/storage/<vendor>`) implements one interface per array vendor:
+
+| Function group | Functions | Purpose |
+|---|---|---|
+| Connection | `Connect`, `Disconnect`, `ValidateCredentials` | Array session lifecycle, used when adding array credentials. |
+| Volume lifecycle | `CreateVolume`, `DeleteVolume`, `GetVolumeInfo`, `ResolveCinderVolumeToLUN` | `ResolveCinderVolumeToLUN` matters because `cinder manage` **renames** the array-native volume (e.g. to `volume-<cinder-id>` on Pure) — this function re-derives the underlying LUN/serial from the Cinder volume ID after that rename. |
+| Host-side mapping | `CreateOrUpdateInitiatorGroup`, `MapVolumeToGroup`, `UnmapVolumeFromGroup`, `GetMapGroups` | The genuinely vendor-specific, complicated part — see the asymmetry below. |
+
+### The Pure-vs-NetApp Host-Group Asymmetry (the single most important fact in this file)
+
+**On Pure, `CreateOrUpdateInitiatorGroup` never creates a new host group — only reuses an existing one.**
+
+Why: a Pure "host" object (representing one ESXi) can belong to **at most one** host group at a time. If vJailbreak created a new `vjailbreak-xcopy` host group and added the ESXi's host object to it, Pure would **evict** that host from whatever production host group it was already in — instantly unmapping every production volume that group was serving to that ESXi. That's a customer-caused outage, not a migration failure.
+
+The code relies on a guarantee instead: because FC zoning and storage-admin onboarding are prerequisites for that ESXi to see the source datastore in the first place, a host object for that ESXi's WWPN/IQN is **guaranteed to already exist** on the array. So vJailbreak always looks up and reuses whatever host group that host object is already in — it never creates one on Pure.
+
+**On NetApp, vJailbreak DOES create its own igroup per SVM when needed**, because an ESXi's WWPN can legitimately belong to multiple igroups simultaneously — no eviction risk. This matters for the **cross-SVM case**: the only hard requirement is "same physical ONTAP array" — SVMs can differ between source and destination. If the source ESXi has an igroup on SVM-A, but the target volume was provisioned on SVM-B, that WWPN mapping in SVM-A's igroup is **invisible to SVM-B** (SVMs are isolated namespaces). vJailbreak creates a fresh `vjailbreak-xcopy` igroup on SVM-B, adds the WWPN to it, and maps the volume there — without touching the existing SVM-A igroup at all.
+
+**If you're debugging an XCOPY mapping failure**: on Pure, ask "does a host object for this ESXi's WWPN/IQN actually exist on the array?" (if not: FC zoning or storage-admin onboarding is incomplete — this is a storage-admin task, not a vJailbreak bug). On NetApp, ask "is the target volume's SVM the same SVM the source ESXi's WWPN is already mapped in?" (if not, and igroup creation on the target SVM failed, check array-side permissions for igroup creation).
+
+### XCOPY Workflow
+1. Validate credentials and connectivity to the array.
+2. Power off the source VM (cold migration only — XCOPY doesn't support hot).
+3. Per disk: create the target volume on the array → `cinder manage` it into Cinder (renames it) → resolve the Cinder volume back to its LUN via `ResolveCinderVolumeToLUN` → create/reuse the initiator group and map the volume to the ESXi host → rescan ESXi storage adapters (`esxcli storage core adapter rescan`) → wait for the block device to appear at `/vmfs/devices/disks/<NAA-id>` → run `vmkfstools -i <src> <dst>` (the actual XCOPY clone) over SSH on the ESXi host → track clone progress.
+4. Unmap the volume from the initiator/host group once the clone completes.
+5. Proceed to the normal convert/attach flow.
+
+### Troubleshooting
+
+| Symptom | Likely cause |
+|---|---|
+| SSH connection failure to ESXi | SSH disabled on the host, wrong key type (must be RSA-4096), or network/firewall blocking TCP 22 |
+| Storage array connection failed | Invalid array credentials, TCP 443 blocked, or insufficient array API permissions |
+| ESXi device/LUN not found after mapping | iSCSI initiator not configured, LUN masking, or VLAN/network misconfiguration |
+| `cinder manage` volume failed | Volume naming mismatch, Cinder backend misconfiguration, or wrong `cinderHost` value |
+| `vmkfstools` clone failed | Datastore connectivity issue, insufficient free space on the array, or source VMDK inaccessible |
+| Clone progress stalled | Array performance/load issue, storage adapter problem, or network instability between ESXi and the array |
+
+## Hot-Add Proxy
+
+Bypasses NFC entirely using a different trick: attach the source VM's disks (as a frozen snapshot) directly to a proxy VM via vCenter's disk-attach API, then stream via NBD.
+
+### Mechanics
+1. Power off the source VM and take a snapshot.
+2. Attach the frozen snapshot's disks to a dedicated Linux **Proxy VM** in the same vCenter.
+3. Match each attached disk to its guest block device by **disk UUID**.
+4. Expose each disk as an NBD export via `qemu-nbd` on the Proxy VM.
+5. Run `nbdcopy` from the Proxy VM's NBD export straight into the destination Cinder volume.
+
+### Prerequisites
+- Proxy VM: Linux (Ubuntu/Alpine/Debian recommended), `openssh-server` + `qemu-nbd` installed, `disk.EnableUUID = TRUE` set in vCenter, root SSH enabled, VMware Tools running (needed so vJailbreak can fetch the proxy's guest IP).
+- Proxy VM and source VM must be managed by the **identical** vCenter instance.
+
+### Key Limitations
+- **Cold-copy only** — the source VM is powered off before disk attachment; there is no live/hot copy of a running VM's active disks with this method.
+- No shared-storage-array requirement — this is the main reason to pick it over XCOPY: works with **any** datastore type (NFS, VMFS, vSAN).
+
+## References
+- [migration-lifecycle.md](migration-lifecycle.md), [support-bundle.md](support-bundle.md)
+- Docs: `/vjailbreak/concepts/storage-accelerated-copy/`, `/vjailbreak/concepts/hot-add-proxy/`
+- SAM deep-dive transcript (internal): storage provider interface + Pure/NetApp initiator-group model
+
+---
+
+# vJailbreak Guest OS Conversion Issues
+
+Quick reference — symptom to section:
+
+| Symptom | Section |
+|---|---|
+| `virt-v2v` fails renaming `/sysroot/etc/resolv.conf` | [resolv.conf Immutable](#resolvconf-immutable-linux) |
+| `No more available PCI slots` during disk attach | [PCI Slot Exhaustion](#pci-slot-exhaustion) |
+| Hivex/registry errors during virt-v2v inspection (Windows) | [Windows Dynamic Disk / LDM](#windows-dynamic-disk-ldm) |
+| Secondary Windows disks show "Offline" post-migration | [Windows Disks Offline](#windows-disks-offline-post-migration) |
+| Leftover VMware driver/registry entries after "Remove VMware Tools" | [VMware Tools Residual Artifacts](#vmware-tools-residual-artifacts) |
+| WSFC `ClusSvc` won't start, Event ID 1289, NetFT adapter missing | [NetFT Adapter Missing (WSFC)](#netft-adapter-missing-wsfc) |
+
+## resolv.conf Immutable (Linux)
+
+**Symptom**: migration fails during `virt-v2v` conversion with an error about being unable to rename `/etc/resolv.conf` ("Operation not permitted").
+
+**Cause**: the file has the immutable attribute set. Verify with `lsattr /etc/resolv.conf` — the `i` flag confirms it.
+
+**Fix**: on the **source** VM, before migrating: `chattr -i /etc/resolv.conf`, confirm with `lsattr` again, then retry the migration. This is a write action on the source VM's guest OS — report it for the customer/operator to run rather than executing it yourself. This is a documented upstream `virt-v2v` limitation, not a vJailbreak bug. If a fleet of VMs consistently hits this, their configuration-management tooling is marking `resolv.conf` immutable — flag that as the systemic fix.
+
+## PCI Slot Exhaustion
+
+**Symptom**: mid-migration disk attach fails with `libvirt.libvirtError: internal error: No more available PCI slots`.
+
+**Cause**: the vJailbreak appliance image (or agent image) defaults to the `virtio-blk` bus, where every attached volume consumes a separate PCI slot — a VM with several disks, or several migrations running in parallel against the same target, exhausts the limited slot count (documented cap of roughly 26 devices under `virtio-blk`).
+
+**Fix**: switch the image to `virtio-scsi` **before** VM creation:
+```bash
+openstack image set \
+  --property hw_disk_bus=scsi \
+  --property hw_scsi_model=virtio-scsi \
+  <vjailbreak-image-name-or-ID>
+```
+This is a write action against OpenStack (the destination image) — report it for the customer/operator to run rather than executing it yourself. Disk bus is chosen at VM-creation time — **existing** VJailbreak/agent VMs must be recreated from the updated image; this must also be applied before scaling out additional agents (see [architecture.md](architecture.md)).
+
+## Windows Dynamic Disk (LDM)
+
+**Symptom**: migration fails during `virt-v2v`'s inspection phase on a Windows VM, with Hivex-related errors reading registry hives.
+
+**Cause**: Windows Dynamic Disks (LDM) store volume metadata in a proprietary 1 MB journaled database at the end of the disk. `libguestfs`/Hivex have limited LDM support — registry hives needed for OS inspection can be fragmented across LDM volumes and fail to assemble. `virt-v2v` only inspects the root/boot disk, so **any** dynamic disk on the boot disk blocks the entire migration at the inspection step — this is a known limitation, not a data-corruption bug.
+
+**Fix** (convert to basic disks before migrating):
+1. Boot the Windows VM in VMware.
+2. Disable Fast Startup: `powercfg /h off`.
+3. Use `diskpart` to convert the dynamic disk(s) to basic.
+4. Perform a clean shutdown.
+5. Proceed with the vJailbreak migration.
+
+This is a write action on the source VM's guest OS — report it for the customer/operator to run rather than executing it yourself. Requires enough free/empty space to perform the conversion — back up data first if the disk is nearly full.
+
+## Windows Disks Offline Post-Migration
+
+**Symptom**: after migration, secondary/data disks (not `C:`) show as **"Offline"** in Disk Management, despite having attached successfully; only the primary boot drive is accessible.
+
+**Cause**: Windows applies a SAN policy based on the detected storage subsystem. Moving from VMware to PCD's storage triggers Windows' default **"Offline Shared"** SAN policy, which proactively keeps non-boot disks offline to avoid corruption on genuinely shared storage — a defensive default, not a migration error.
+
+**Fix (manual)**:
+```
+diskpart
+SAN POLICY=OnlineAll
+online disk
+```
+(repeat `online disk` for each offline disk, after selecting it)
+
+This is a write action on the destination guest OS — report it for the customer/operator to run rather than executing it yourself.
+
+**Fix (automated)**: two scripts under `scripts/firstboot/windows/` in the vJailbreak repo —
+- `check-disks.bat` — diagnostic only, makes no changes.
+- `disk-online-fix.bat` — brings **all** offline disks online automatically.
+
+Either can be pasted into the migration's **Post Migration Script** field to run at first boot. This too is a write action on the destination guest OS — report it for the customer/operator to add via the Post Migration Script field rather than adding it yourself.
+
+**Warning**: `disk-online-fix.bat` is a blanket fix. If the source VM intentionally kept a disk offline (e.g. a backup or warm-standby disk), the automated fix will bring it online too — don't apply it uncritically on VMs where that distinction matters.
+
+Note: recent vJailbreak releases have the "Remove VMware Tools" option also address a related cosmetic offline/error-device quirk automatically — check the release notes for the version in use before assuming manual intervention is still required.
+
+## VMware Tools Residual Artifacts
+
+**Symptom**: after checking "Remove VMware Tools" during migration, some driver files, registry keys, folders, or Device Manager error entries remain on Windows VMs. Older Windows (2012) leaves the most remnants; newer versions (2025) leave minimal traces.
+
+**Cause**: the VMware Tools uninstaller doesn't remove every component it ever wrote.
+
+**Fix: none required.** This is documented as harmless — orphaned drivers don't load, Device Manager error entries are cosmetic only, stale registry keys have no runtime effect, and Windows automatically falls back to a standard driver (e.g. generic HID for mouse/keyboard input) so functionality is unaffected. Tell the customer this is expected and safe to ignore; do not spend time trying to fully scrub it.
+
+## NetFT Adapter Missing (WSFC)
+
+**Symptom**: on a migrated Windows Server Failover Cluster node, `ClusSvc` fails to start. System Event Log shows Event ID 1289 (Critical, FailoverClustering, Cluster Virtual Adapter); the cluster log shows `[CS] Service CreateNodeThread Failed... 'Network interface for NetFT adapter not found.'`, with `GetFaultTolerantAdapter` retrying (20× @ 500ms) before giving up.
+
+**Cause**: the "Microsoft Failover Cluster Virtual Adapter" (NetFT), which the Failover-Clustering feature creates, never got instantiated on the node at all post-migration. Confirm with `Get-NetAdapter -IncludeHidden` — the adapter is **absent entirely**, not merely `Disconnected` (a briefly-`Disconnected`-at-boot adapter is normal and different from this). This is strongly suspected to be caused by `virt-v2v`'s NIC driver swap (VMware vmxnet3 → virtio) disrupting the NetFT PnP binding — it was reproduced independently on both nodes of a 2-node cluster in the source RCA, which rules out node-specific hardware flukiness.
+
+**Fix**: force-recreate the adapter by reinstalling the Failover-Clustering Windows feature:
+```powershell
+Uninstall-WindowsFeature -Name Failover-Clustering -Restart
+# after reboot:
+Install-WindowsFeature -Name Failover-Clustering -IncludeManagementTools -Restart
+```
+Apply independently on each affected node. After reboot, `Get-NetAdapter -IncludeHidden` should show the adapter present (in `Disconnected` state — normal prior to the cluster service starting). This is a write action on the guest OS — report it for the customer/operator to run.
+
+**Gotcha**: this reinstall cycle **also resets `ClusSvc`'s startup type back to `Disabled`** every time. The following must be reapplied after **every** reinstall, or the service won't start despite the adapter now existing:
+```powershell
+Set-Service -Name ClusSvc -StartupType Automatic
+net start clussvc
+```
+
+**Treat as a repeatable pattern, not a one-off**: check NetFT presence on **every** node of a migrated WSFC (or any Microsoft Failover Cluster) — don't stop checking after the first node comes up clean; the RCA source found it missing on both nodes independently, so a single "it worked on node 1" check is not sufficient evidence the cluster is healthy. See the pre/post-migration checklist in [networking.md](networking.md)'s WSFC case study, which this pairs with (that section covers the Cluster-IP-unreachable half of the same class of failure; this section covers the cluster-service/adapter half).
+
+## References
+- [migration-lifecycle.md](migration-lifecycle.md), [networking.md](networking.md), [support-bundle.md](support-bundle.md)
+- Docs: `/vjailbreak/guides/troubleshooting/troubleshooting/`, `/vjailbreak/guides/troubleshooting/windows-dynamic-disk-ldm-migration-issue/`, `/vjailbreak/guides/troubleshooting/windows-offline-disks/`, `/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/`
+- WSFC RCA (internal): full root-cause chain for the NetFT + Neutron GARP failure pair
+
+---
+
+# Known Issues — Confirmed Case Log
+
+Living, append-only log of **confirmed** root causes from real debugging sessions. This is
+distinct from [tool-internals.md](tool-internals.md) (static reference on how tools behave) and
+[SKILL.md](SKILL.md)'s Quick Error Pattern Reference (fast lookup table) — this file is the
+evidence trail behind those entries, and where NEW confirmed cases get recorded.
+
+## Append rules (SKILL.md Step 6)
+
+Only append a row when:
+1. The root cause is **confirmed by evidence** (log lines, doc citation, reproduced behavior) —
+   not a hypothesis, not inherited from a JIRA ticket's own theory. See SKILL.md's
+   independent-evidence rule.
+2. The user has **explicitly confirmed** they want it recorded. Never write silently.
+3. Cite the evidence (log excerpt, file:line, doc URL) so a future reader can verify, not just
+   trust the row.
+
+Format:
+
+```
+### <short symptom title>
+- **Symptom pattern**: <what the log/UI shows>
+- **Confirmed root cause**: <the actual cause>
+- **Evidence**: <log line excerpt, file:line, or doc citation that proves it>
+- **JIRA/ticket ref**: <ref or "none">
+- **Date**: <YYYY-MM-DD>
+```
+
+## Fast-path lookup (SKILL.md Step 2.5)
+
+Before deep investigation, grep this file for the symptom string. A match here means the case is
+already solved — confirm it still applies (same phase, same tool version) before reusing the
+conclusion wholesale.
+
+
+---
+
+# vJailbreak Migration Lifecycle
+
+## Phase Flow
+
+```
+Discovery → Mapping → Validate → Data Copy → Convert → [Cutover] → Post-Migration → Completed
+```
+
+`Migration.status.phase` tracks this. Get the migration name first (see [architecture.md](architecture.md)) — every log file, pod name, and CRD is keyed by it.
+
+## Phase-by-Phase
+
+### 1. Discovery
+User selects a vCenter cluster (or "no cluster" to list every VM in the vCenter, unscoped) and a destination PCD cluster. vJailbreak lists VMs from that scope, marking any it has already migrated **from this vJailbreak instance's own record** — a VM migrated by a *different* vJailbreak instance or a different tool will NOT show as already-migrated here; this is per-instance state, not global.
+
+**Failure signature**: no VMs listed, or listing hangs → almost always a VMware credential/permission problem (wrong vCenter, insufficient RBAC to enumerate VMs) rather than a vJailbreak bug. Check `VMwareCreds` revalidation status first (see [architecture.md](architecture.md)).
+
+### 2. Mapping
+Two independent mappings, both required:
+- **Network mapping**: source vSphere network/port-group → destination PCD network. See [networking.md](networking.md) for the subnet-mismatch failure mode.
+- **Storage mapping**: source VMware datastore → destination PCD Cinder backend/volume-type. Picking a backend with insufficient free space is a common silent failure — it looks like a bug but is actually just "out of space"; check the destination backend's free capacity before assuming code is broken.
+
+### 3. Validate
+For powered-ON VMs, vJailbreak reads OS/network details automatically via VMware Tools. For powered-OFF VMs, VMware Tools can't be queried — the user must manually supply OS type and (optionally) IP address in the migration form. If a powered-off VM's migration fails here with missing-OS-type errors, this is expected — the fix is filling in the form field, not a vJailbreak defect.
+
+### 4. Data Copy
+See [copy-methods.md](copy-methods.md) for the three copy mechanisms (Normal NFC, Storage-Accelerated XCOPY, Hot-Add Proxy) and their distinct failure modes. All three write progress to the `v2v-helper` pod logs; XCOPY additionally has the `pframe/` raw block-copy debug logs (see [support-bundle.md](support-bundle.md)).
+
+### 5. Convert
+`v2v-helper` runs `virt-v2v` in-place on the copied disk: finds the boot device, swaps drivers (VMware vmxnet3/pvscsi → virtio), fixes the bootloader, and detects the OS. Most guest-OS-specific failures (dynamic disks, immutable resolv.conf, PCI slot exhaustion) surface here — see [guest-os-issues.md](guest-os-issues.md).
+
+### 6. Cutover (only relevant for Admin-Initiated cutover)
+Migration parks in `waitForAdminCutover`. Two ways to trigger it:
+- **UI**: open the migration, click "Admin Cutover", confirm in the dialog.
+- **kubectl**: find the pod name (`<migration-name>-v2v-helper`), then patch its label:
+  ```bash
+  kubectl -n migration-system get pods | grep <migration-name>
+  kubectl -n migration-system label pod <migration-name>-v2v-helper startCutover=yes --overwrite
+  ```
+  This is a write action — per this skill's read-only stance, report this command for the user/operator to run rather than executing it yourself.
+- Expect a **10–30 second lag** between triggering cutover and progress resuming — this is the flag propagating into the `v2v-helper` pod's reconciliation loop, not a hang. Don't re-trigger within that window.
+- After cutover starts: final delta-block copy (only the blocks changed since the last sync) → convert → attach → power on.
+
+### 7. Post-Migration
+Optional, configured per-migration: run a custom post-migration script (a comment at the top of the script distinguishes Windows vs Linux execution), rename the source VMware VM (e.g. suffix `_migrated_to_pcd`) for tracking, move the source VM to a vCenter folder, disconnect the source VM's network adapter, persist network interface names (see [networking.md](networking.md)), remove VMware Tools (see [guest-os-issues.md](guest-os-issues.md)).
+
+## Data Copy Methods — Timing/Downtime Summary
+
+| Method | Source powered off? | CBT used? | Downtime |
+|---|---|---|---|
+| Hot (live) | No, until conversion | Yes | Lowest — VM stays up during bulk copy |
+| Cold | Yes, before copy starts | No | Full migration duration |
+| Mock | No, on either side | Yes | None — for testing only; **use a different subnet/network than the source** to avoid IP conflict since both VMs are live simultaneously |
+| Periodic Sync | No, until cutover | Yes | Full initial copy happens once, then only small deltas at cutover — for very large (multi-TB, multi-day) migrations |
+
+## Cutover Scheduling Variants
+
+- **Immediate**: cutover fires automatically right after data copy completes.
+- **Time Window**: cutover only allowed within a configured window (e.g. a maintenance window) — commonly combined with Admin-Initiated.
+- **Admin-Initiated**: waits indefinitely for a human/API trigger (see above).
+
+## Retry vs. Cleanup Decision Tree
+
+This is the actual triage logic engineers use (source: live Q&A with the vJailbreak team) — use it before guessing whether to retry in place or start over.
+
+| Failed phase | Is it a config problem or a runtime/environment blip? | What to do |
+|---|---|---|
+| **Discovery** | Config (bad VMware creds/permissions) | Fix creds/permissions in `VMwareCreds`. No artifacts exist yet — just retry discovery. |
+| **Mapping** | Config (wrong network/subnet or wrong datastore/backend chosen) | There is **no "edit migration" capability** in the UI/CRD model. Refill the migration form and create a fresh `Migration`/`MigrationPlan` — do not try to patch the existing one. |
+| **Mapping — port conflict** ("port already in use") | NOT a config error — it's a side effect (a stale port from a prior attempt, or genuinely in use by another VM) | Detach/free the specific conflicting port on OpenStack if this exact port must belong to this VM, then **retry the SAME migration** — no form refill needed. |
+| **Validate** | Config (something conflicts with the overall migration context, e.g. missing OS for a powered-off VM) | Refill the form and restart. |
+| **Validate** | Runtime/environment (transient network error) | Just retry the same migration after fixing the environment issue. No refill needed. |
+| **Data Copy / Convert** | Usually environment (vCenter connectivity, ESXi DNS resolution) or an unsupported guest condition (unknown filesystem like XFS, unsupported disk layout) | Pull `v2v-helper` pod logs + `pframe/` debug logs + source disk layout. If vCenter/ESXi connectivity — fix and retry. If unsupported filesystem/layout — collect the debug logs and source layout and treat as a product limitation to escalate, not something to retry your way out of. |
+| **Data Copy / Convert — attachment/detachment timeout, backend out of space, Cinder incompatibility** | PCD-side | Check PCD-side logs (Cinder) **before** re-reading vJailbreak logs — the root cause is usually on that side. Hand off to the `cinder` skill (`pcd-common/skills/cinder/`; see [support-bundle.md](support-bundle.md)). |
+| **Cutover** | Usually the same causes as Data Copy/Convert (data-copy or network-connectivity issue) | Retry after confirming environment is healthy; if it keeps failing, use the Data Copy/Convert debug path above. |
+| **Post-Migration** | Depends on which optional feature failed | Source VM is assumed powered off at this point (unless Mock migration) — check the specific feature's documented log location (e.g. custom script exit code, rename/move confirmation in controller logs). |
+
+## Cleanup Behavior on Failure
+
+Two `vjailbreak-settings` flags control whether artifacts from a *failed* migration are cleaned up automatically — see [architecture.md](architecture.md) for the full settings table:
+- `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE`
+- `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE`
+
+**If these are disabled** (check the actual ConfigMap value, don't assume), leftover ports/volumes from a failed attempt are deliberately left behind — a retry is expected to detect and reuse them rather than fail on "already exists." This is why the port-conflict row above says "just retry" rather than "clean up first."
+
+**If a volume is stuck and won't clean up even with the flag enabled**: look for an **attachment/detachment TIMEOUT** log line in the `v2v-helper` logs. A volume can get stuck in Cinder's `detaching`/`reserved`/`in-use` state after a timeout, and vJailbreak cannot force-clean a volume in that state — it requires manual intervention on the OpenStack/Cinder side (hand off to the `cinder` skill (`pcd-common/skills/cinder/`)).
+
+## Post-Migration Options Reference
+
+| Option | Effect |
+|---|---|
+| Post-migration script | Custom script executed at first boot; comment header distinguishes Windows/Linux. |
+| Rename VMware VM | Appends a suffix (e.g. `_migrated_to_pcd`) to the SOURCE VM's name in vCenter, for tracking. |
+| Move to folder | Relocates the source VM to a specified vCenter folder post-migration. |
+| Disconnect source network | Removes the source VM's network adapter after migration (prevents accidental dual-homing). |
+| Persist network interfaces | See [networking.md](networking.md). |
+| Remove VMware Tools | See [guest-os-issues.md](guest-os-issues.md). |
+| GPU-flavor filter bypass | By default vJailbreak filters out GPU-tagged flavors when auto-picking a destination flavor; check this box to allow GPU flavors. |
+| Dynamic hot-plug-enabled flavor | Uses a pre-existing PCD hot-plug flavor automatically instead of a fixed flavor. |
+| Fallback to DHCP | If the mapped network doesn't contain the source IP's subnet (cross-network migration) or the desired port/IP is in conflict, grabs any free IP from the mapped network instead of failing. |
+
+## References
+- [architecture.md](architecture.md), [copy-methods.md](copy-methods.md), [networking.md](networking.md), [guest-os-issues.md](guest-os-issues.md), [support-bundle.md](support-bundle.md)
+- Docs: `/vjailbreak/concepts/migration-options/`, `/vjailbreak/guides/how-to/perform_admin_cutover/`, `/vjailbreak/guides/how-to/vjailbreak_settings/`
+
+---
+
+# vJailbreak Networking
+
+## Network Mapping
+Source VMware network must be a **vSphere Standard or Distributed Port Group** — **NSX-backed networks are not supported** for mapping. The destination PCD network must already exist (vJailbreak does not create networks).
+
+**Common failure**: mapping to a destination network whose subnet doesn't contain the source VM's IP. The Neutron port-create call is "bound to fail" because the requested fixed IP can't belong to that subnet. Recovery is per the retry-vs-cleanup tree in [migration-lifecycle.md](migration-lifecycle.md) (mapping failures require refill-and-retry) — or enable **Fallback to DHCP** so vJailbreak grabs any free IP from the mapped network instead of forcing the original one.
+
+## Storage Mapping
+Source VMware datastore (VMFS or NFS) maps to a destination Cinder backend/volume-type. Unlike network mapping, this is about **data transfer**, not connectivity — the datastore type can differ from the destination backend type (e.g. NFS datastore → iSCSI Cinder backend), **unless** using Storage-Accelerated Copy, which requires the exact same array end-to-end (see [copy-methods.md](copy-methods.md)).
+
+Not compatible: vCenter Storage Policies / vVols. RDM disks are handled by a **separate, dedicated RDM migration feature** (detach from vCenter, `cinder manage` instead) — plain storage mapping does not cover RDM disks.
+
+## Network / Interface Persistence
+
+Only active when **"Persist source network interfaces"** is explicitly enabled.
+
+### Linux
+Statically-configured interfaces keep their **original interface name** post-migration (e.g. `ens3` stays `ens3`). Mechanism: vJailbreak generates a **udev rule binding the interface's MAC address to that specific name**. This works because netplan/ifcfg/network config on disk is keyed by interface name, and normally virt-v2v's NIC driver swap (VMware vmxnet3 → virtio) makes the kernel enumerate the NIC under a **new** default name (e.g. `eth1`), silently orphaning the pre-existing static config. Because the udev rule only touches the naming layer — not the IP config itself — there's no risk of it conflicting with whatever's already on disk; the OS's own network stack picks up the pre-existing config automatically once the name matches again.
+
+DHCP-configured interfaces instead get a freshly generated name (`vjb<random_number>`) since there's nothing meaningful to preserve.
+
+Verified distros: Ubuntu, OpenSUSE, RHEL, CentOS. Rocky is unverified (may work, not confirmed).
+
+### Windows
+- **Server 2016 and later**: static interfaces keep original name, IP, and gateway. DHCP interfaces get renamed to `vjb_<random_number>`.
+- **Server 2012 and earlier**: IP is preserved but the interface **silently converts to DHCP** configuration, and neither the interface name nor the gateway are preserved — a PowerShell capability gap on those OS versions. Server 2008/2012 are considered **unsupported** for full network persistence; expect to fix manually.
+
+### Constraints (apply to both OS families)
+- "Assign IP" and "Persist Network" are **mutually exclusive** UI options.
+- Persistence does **not** work across a cross-network (subnet-changing) migration — the old static config wouldn't be meaningful on a different subnet anyway.
+- Only one IP per interface is settable via the UI's Assign-IP flow.
+
+## Case Study: WSFC Cluster IP Unreachable via Neutron Anti-Spoofing
+
+A fully worked example of a non-obvious PCD-side networking failure, from a real post-migration RCA. Recognize this pattern rather than re-deriving it from scratch.
+
+**Setup**: 2-node Windows Server Failover Cluster (WSFC) with a floating Cluster IP, RDM-backed shared storage, migrated VMware → PCD.
+
+**Symptom chain** (in the order actually encountered):
+1. **Domain trust broken** ("The trust relationship between this workstation and the primary domain failed") on both nodes post-migration. Cause: virt-v2v powers the VM off for conversion, and the AD machine-account password state drifted out of sync with the VM's local state during that offline window. Fix: rejoin both nodes to the domain (`Test-ComputerSecureChannel` should return `True` once fixed). ~30 min per VM.
+2. **The Cluster IP was completely unreachable — this is the actual novel finding.** After rejoining the domain and getting the cluster service running, `ping <cluster-ip>` from the OWNING node's own IP returned "Destination host unreachable," while ping to the gateway, the other node, and the domain controller all worked normally — isolating the failure specifically to the floating Cluster IP.
+
+**Root cause**: When a WSFC Cluster IP resource comes online, Windows sends a **Gratuitous ARP (GARP)** — an unsolicited broadcast announcing "this IP is now at this MAC" — so the network learns where to route traffic for the floating IP. **Neutron enforces port-level anti-spoofing by default**: each port only accepts outbound traffic sourced from the single IP/MAC pair it was created with. Since the floating Cluster IP was never part of either node's Neutron port definition, Neutron **silently dropped the GARP** before it ever reached the OVS uplink — no device on the network ever learned where the floating IP lived. This was never a problem on the original VMware vSwitch, which doesn't enforce equivalent anti-spoofing by default — a classic "worked on vSphere, breaks on OpenStack" gap that has nothing to do with vJailbreak's copy/convert logic itself.
+
+**Fix**: add the Cluster IP as a Neutron **allowed-address-pair** on **both** nodes' ports:
+```bash
+openstack port set --allowed-address ip-address=<cluster-ip> <node1-port-id> --insecure
+openstack port set --allowed-address ip-address=<cluster-ip> <node2-port-id> --insecure
+```
+Verify: `openstack port show <port-id> --insecure | grep allowed_address_pairs`
+
+This is a write action against OpenStack — per this skill's read-only stance, report these exact commands for the customer/operator to run rather than executing them yourself.
+
+**Critical operational nuance — don't skip this when applying the fix**: adding the allowed-address-pair is a **permission change only**. It does **not** retroactively make the network aware of the IP. The GARP has to actually be **re-sent** for the fix to take effect, which happens automatically the next time the cluster service brings the Cluster IP resource online (i.e. on failover, or a cluster-group move/restart). Simply adding the Neutron rule and pinging immediately — without moving or restarting the cluster group — will still fail and look like the fix didn't work.
+
+**Related facts from the same RCA that live elsewhere**: the WSFC's `ClusSvc` startup-type and missing-NetFT-adapter issues are guest-OS/cluster-feature problems, not networking — documented in [guest-os-issues.md](guest-os-issues.md).
+
+**Recommended checklist additions for any WSFC (or other floating-IP) workload migration**:
+- **Pre-migration**: detect the cluster's floating IP(s) from the source VM — `Get-ClusterResource | Where-Object {$_.ResourceType -eq "IP Address"} | Get-ClusterParameter` — and proactively add them as allowed-address-pairs on the destination ports **before** the VM is powered on.
+- **Post-migration**: verify the floating IP is pingable, and verify the NetFT adapter is present on **all** nodes (not just the first one checked) before declaring the migration done — see [guest-os-issues.md](guest-os-issues.md).
+
+## References
+- [migration-lifecycle.md](migration-lifecycle.md), [guest-os-issues.md](guest-os-issues.md)
+- Docs: `/vjailbreak/concepts/network-storage-mapping/`, `/vjailbreak/concepts/network-persistence/`
+- If the root cause is confirmed Neutron-side (port/subnet/anti-spoofing), hand off to the `neutron` pcd-v skill for deeper Neutron/OVN log analysis.
+
+---
+
+# vJailbreak Support Bundle & Log Map
+
+**Get the migration name first** (see [architecture.md](architecture.md)) — every artifact below is keyed by it.
+
+## On the vJailbreak VM (namespace `migration-system`)
+
+| Artifact | Location / command | Use for |
+|---|---|---|
+| Per-migration debug log | `/var/log/pf9/<migration-name>.log` | The human-readable summary of what happened for THIS migration. Start here. |
+| Install log | `/var/log/pf9-install.log` | vJailbreak VM installation problems only (image pull errors, auth issues, YAML apply failures, proxy/network errors during initial setup). Re-run safely with `sudo bash /etc/pf9/install.sh` if needed. |
+| Raw block-copy debug logs | `pframe/<v2v-helper-pod-name>/` on the VM | Block-level NBD/XCOPY copy detail — deliberately kept OUT of the normal per-migration log due to volume. Pull this specifically for Data-Copy-phase failures. |
+| Controller logs | `kubectl -n migration-system logs -l control-plane=controller-manager -f` | Kubernetes-level reconciliation: phase transitions, CRD-level errors. Filter by the migration name to skip normal controller-runtime chatter. |
+| v2v-helper pod logs | `kubectl -n migration-system logs <migration-name>-v2v-helper` | **First place to check** for any Data-Copy/Convert/Cutover failure — phase-by-phase trace (port creation, copy start/end, conversion start/end, cutover events) lives here, before reaching for the raw `pframe/` logs. |
+| CRDs | `kubectl get <crd> -n migration-system -o yaml`; `kubectl describe <crd> <name> -n migration-system` | `Migration`, `MigrationPlan`, `VMwareCreds`, `OpenstackCreds`, `NetworkMapping`, `StorageMapping`, `MigrationTemplate`. `describe` gives `.status` conditions and last errors in human-readable form. |
+| Credential secrets | `kubectl get secret <vmwarecreds-or-openstackcreds-name> -n migration-system -o jsonpath='{.data.<field>}' \| base64 -d` | Distinguishes "wrong password" from "wrong endpoint" from "network unreachable". Field names: `username`, `password`, `OS_AUTH_URL`, etc. |
+| Settings | `kubectl get configmap vjailbreak-settings -n migration-system -o yaml` | Confirm actual values of `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE`, `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE`, `PERIODIC_SYNC_*`, etc. before concluding vJailbreak should have auto-cleaned something. |
+
+## Expected Support-Bundle ZIP Layout
+
+```
+support-bundle/
+├── pf9-install.log
+└── migration-system/
+    ├── <migration-name>.log                  # per-migration debug log
+    ├── pframe/<v2v-helper-pod-name>/          # raw block-copy debug logs
+    ├── controller-manager.log                 # kubectl logs -l control-plane=controller-manager
+    ├── <migration-name>-v2v-helper.log        # kubectl logs <pod>
+    ├── crds/
+    │   ├── migration-<name>.yaml
+    │   ├── migrationplan-<name>.yaml
+    │   ├── vmwarecreds-<name>.yaml            # secret VALUES should be redacted/excluded
+    │   ├── openstackcreds-<name>.yaml         # secret VALUES should be redacted/excluded
+    │   ├── networkmapping-<name>.yaml
+    │   └── storagemapping-<name>.yaml
+    └── vjailbreak-settings-configmap.yaml
+```
+
+## PCD-Side Investigation (OpenStack CLI)
+
+When the trail crosses from vJailbreak into OpenStack, use the OpenStack CLI directly — no skill handoff needed:
+
+| Symptom | Commands |
+|---|---|
+| Volume stuck in `detaching`/`reserved`/`in-use` | `openstack volume show <id> --insecure` — look for `attachments`, `status`. Force-reset if needed: `openstack volume set --state available <id> --insecure` |
+| Neutron port-create failing / subnet mismatch | `openstack port list --fixed-ip subnet=<subnet-id> --insecure`; `openstack subnet show <id> --insecure` |
+| Port already in use / stale port | `openstack port show <port-id> --insecure`; `openstack port delete <port-id> --insecure` |
+| Floating / secondary IP unreachable (WSFC) | `openstack port show <port-id> --insecure \| grep allowed_address_pairs`; add with `openstack port set --allowed-address ip-address=<cluster-ip> <port-id> --insecure` |
+| Destination VM boot failure / "no valid host" | `openstack server show <id> --insecure`; `openstack server event list <id> --insecure` |
+| Cinder backend out of space | `openstack volume service list --insecure`; check backend capacity in Cinder logs on the PCD host |
+
+## Source Code Pointers (for bug investigation)
+
+| Area | Location |
+|---|---|
+| Migration phase state machine | `k8s/migration/internal/controller/migration_controller.go` |
+| VMwareCreds reconciliation | `k8s/migration/internal/controller/vmwarecreds_controller.go` |
+| NBD/NFC copy | `v2v-helper/pkg/nbdcopy/` |
+| Storage-Accelerated Copy (XCOPY) | `v2v-helper/pkg/storage/` |
+| Hot-Add Proxy | `v2v-helper/pkg/hotadd/` |
+| virt-v2v conversion | `v2v-helper/pkg/virtv2v/` |
+| Network/interface persistence scripts | `scripts/generate-udev-mapping.sh`, `scripts/generate-mount-persistence.sh` |
+| Firstboot scripts (Windows disks offline, etc.) | `scripts/firstboot/windows/` |
+| CRD types | `k8s/migration/api/v1alpha1/` |
+
+## References
+- [architecture.md](architecture.md), [migration-lifecycle.md](migration-lifecycle.md)
+- Docs: https://platform9.github.io/vjailbreak/guides/troubleshooting/debuglogs/
+
+---
+
+# Tool Internals Reference
+
+Underlying tool behavior explanations for Convert/Data Copy failures.
+When a tool error surfaces, use this file to answer **WHY** the tool behaves that way.
+
+
+## libguestfs `inspect-os` internals {#inspect-os}
+
+`inspect-os` is a high-level libguestfs call that:
+1. Calls `list-filesystems` to enumerate all filesystems
+2. Mounts each filesystem (read-only) and looks for OS signatures
+3. Btrfs special handling: enumerates subvolumes, may mount each to inspect
+
+**Btrfs subvolume enumeration**: libguestfs sees Btrfs subvolumes as separate mountable filesystems. On OpenSUSE with Snapper:
+- Root subvolume `@` → looks like OS root
+- `@/.snapshots/1/snapshot` → also looks like OS root (contains full `/usr`, `/etc`)
+- Both get counted → `inspect-os` returns list of 2+ roots → guestfish `-i` fails
+
+**Workaround** (for manual guestfish sessions):
+```bash
+# Instead of -i, use:
+guestfish --rw -a /dev/vdb : run : list-filesystems
+# Then manually mount the root:
+guestfish --rw -a /dev/vdb : run : mount /dev/vdb2 / : <command>
+```
+
+---
+
+## virt-v2v-in-place conversion pipeline {#virt-v2v}
+
+**vJailbreak calls `virt-v2v-in-place` specifically** (`v2v-helper/virtv2v/virtv2vops.go:493`),
+not plain `virt-v2v`. The in-place variant operates on the guest's disk(s) directly rather than
+producing a separately-converted output image, auto-detects the OS location (LVM or regular
+partition — see comment at `v2v-helper/migrate/conversion.go:132`), and has its own man page
+(`virt-v2v-in-place(1)`) with a different option set than plain virt-v2v. When checking behavior
+against upstream docs, use `virt-v2v-in-place(1)` and `virt-v2v-support(1)`, not the generic
+`virt-v2v(1)` page — options and some behavior differ. For anything not resolved by this file, see
+the `vjb-virtv2v-inplace-behavior` and `vjb-guestfs-behavior` specialist agents, which fetch the
+live docs rather than relying on this static summary.
+
+Guest-side conversion steps (same underlying libguestfs machinery as plain virt-v2v, hence the
+same multi-boot risk below):
+
+```
+Input disk(s)
+    ↓
+inspect-os (same libguestfs call — same multi-boot risk)
+    ↓
+Mount guest root filesystem
+    ↓
+Inject virtio drivers (Linux: dracut rebuild; Windows: install-virtio-win12.ps1)
+    ↓
+Remove VMware Tools remnants
+    ↓
+Fix bootloader (grub2 device.map, /boot/grub2/grub.cfg)
+    ↓
+Fix /etc/fstab device references
+    ↓
+Rebuild initramfs (dracut or mkinitrd)
+    ↓
+Output: guest ready for KVM boot
+```
+
+**Key failure points:**
+
+| Step | Common failure | Why |
+|---|---|---|
+| inspect-os | multi-boot / no root found | Btrfs subvolumes, multi-disk, missing OS markers |
+| initramfs rebuild | virtio modules missing | dracut not finding virtio-blk/scsi/net modules |
+| /etc/resolv.conf rename | immutable attribute | `chattr +i` set on source — virt-v2v tries to rename it |
+| Fix bootloader | wrong device in grub.cfg | grub.cfg references `/dev/sda`; virtio disk is `/dev/vda` |
+| VirtIO driver inject (Windows) | PCI slot exhaustion | `virtio-blk` driver uses 1 slot per disk; >~24 disks exhausts slots. Use `virtio-scsi`. |
+
+### OpenSUSE-specific: mkinitrd vs dracut
+
+OpenSUSE 15.x uses **dracut** (modern). Older SUSE used `mkinitrd`.
+vJailbreak has `FixLegacyMkinitrd` at `v2v-helper/virtv2v/virtv2vops.go:1143` that detects old `mkinitrd` (no dracut) and wraps it.
+
+If dracut is present: uses dracut directly → no issue.
+If only `mkinitrd`: LVM path translation needed → wrapper installed automatically.
+
+---
+
+## nbdkit / nbdcopy {#nbdkit}
+
+nbdkit serves VMware VDDK disk images over NBD protocol. nbdcopy reads them.
+
+**Connection chain:**
+```
+VMware ESXi (NFC protocol, port 902)
+    ↓ VDDK
+nbdkit vddk plugin (unix socket in /tmp/nbdkit-*/nbdkit.sock)
+    ↓ NBD
+nbdcopy (reads blocks, writes to /dev/vdX)
+```
+
+**Key failure modes:**
+
+| Error | Cause |
+|---|---|
+| nbdkit connection refused | ESXi NFC port 902 blocked, or VDDK libs not found at `/home/fedora/vmware-vix-disklib-distrib` |
+| DNS lookup failure in nbdkit log | ESXi hostname not in `/etc/hosts` or DNS — add entry on vJailbreak VM |
+| nbdcopy stalls at X% | Network partition to ESXi, NFC throttling, or ESXi host under load |
+| VDDK: failed to open disk | Snapshot deleted mid-copy (another process?), or wrong moref |
+| `transports=file:nbdssl:nbd` all fail | VDDK transport negotiation failed — check thumbprint mismatch |
+
+**VDDK thumbprint mismatch**: if vCenter thumbprint in migration form doesn't match ESXi thumbprint during copy, VDDK silently falls back to plain NBD or fails. Check thumbprint with:
+```bash
+openssl s_client -connect <esxi-host>:443 </dev/null 2>/dev/null | openssl x509 -fingerprint -sha1 -noout
+```
+
+---
+
+## Second-order diagnostic checklist
+
+After finding a surface error in the log, run through:
+
+1. **Which tool emitted it?** (guestfish / libguestfs / virt-v2v / nbdkit / nbdcopy / VDDK)
+2. **What internal step of that tool was running?** (inspect-os, initramfs rebuild, disk copy, transport negotiation)
+3. **What is that tool's assumption that broke?** (single OS root, dracut present, ESXi reachable by hostname, etc.)
+4. **Is this a guest-OS characteristic** (Btrfs/Snapper, dynamic disk, immutable resolv.conf) **or an environment issue** (DNS, network, VDDK path)?
+5. **Is it reproducible on disk 1 alone?** (isolate multi-disk interactions)

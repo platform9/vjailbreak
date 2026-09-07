@@ -443,6 +443,9 @@ jobs:
         run: |
           echo "VPWNED_IMG=${{ needs.determine-release.outputs.vpwned_img }}" >> $GITHUB_ENV
 
+      - name: Check skill freshness
+        run: make check-skill-freshness
+
       - name: Build vpwned image
         run: make build-vpwned
         

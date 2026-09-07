@@ -70,8 +70,38 @@ generate-manifests: setup-hooks vjail-controller ui
 	cp deploy/volumeimageprofile-defaults.yaml image_builder/configs/volumeimageprofile-defaults.yaml
 	envsubst < vjailbreak-ai/deploy/vjailbreak-ai.yaml > image_builder/deploy/08vjailbreak-ai.yaml
 	
+.PHONY: generate-debug-prompt
+generate-debug-prompt:
+	bash scripts/build-debug-prompt.sh
+
+.PHONY: check-skill-freshness
+SKILL_WATCHED_FILES := \
+	k8s/migration/api/v1alpha1/migration_types.go \
+	k8s/migration/api/v1alpha1/migrationplan_types.go \
+	v2v-helper/virtv2v/virtv2vops.go \
+	pkg/vpwned/server/ai_handler.go
+
+check-skill-freshness:
+	@SKILL_DATE=$$(awk '/^last-updated:/{print $$2; exit}' .claude/skills/vjb-debug/SKILL.md); \
+	if [ -z "$$SKILL_DATE" ]; then \
+	  echo "ERROR: last-updated field not found in SKILL.md" >&2; exit 2; \
+	fi; \
+	FAIL=0; \
+	for f in $(SKILL_WATCHED_FILES); do \
+	  if [ ! -f "$$f" ]; then \
+	    echo "ERROR: watched file not found: $$f" >&2; FAIL=1; continue; \
+	  fi; \
+	  FILE_DATE=$$(git log -1 --format=%ci -- "$$f" 2>/dev/null | awk '{print $$1}'); \
+	  if [ -z "$$FILE_DATE" ]; then continue; fi; \
+	  if [ "$$FILE_DATE" \> "$$SKILL_DATE" ]; then \
+	    echo "SKILL STALE: $$f modified ($$FILE_DATE) after skill last-updated date ($$SKILL_DATE). Bump version and last-updated in SKILL.md." >&2; \
+	    FAIL=1; \
+	  fi; \
+	done; \
+	exit $$FAIL
+
 .PHONY: build-vpwned
-build-vpwned: setup-hooks
+build-vpwned: setup-hooks generate-debug-prompt
 	make -C pkg/vpwned docker-build
 
 .PHONY: vjailbreak-ai
