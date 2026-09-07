@@ -115,7 +115,7 @@ test.describe('GS-PROXY-AUTH-001 — Proxy authentication toggle and save flow',
     await page.getByTestId('global-settings-toggle-PROXY_AUTH_ENABLED').click()
 
     await expect(page.getByLabel('Proxy Username')).toBeVisible()
-    await expect(page.getByLabel('Proxy Password')).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'Proxy Password' })).toBeVisible()
   })
 
   test('the HTTPS override toggle reveals a second credential pair', async ({ page }) => {
@@ -127,7 +127,7 @@ test.describe('GS-PROXY-AUTH-001 — Proxy authentication toggle and save flow',
     await page.getByTestId('global-settings-toggle-PROXY_AUTH_HTTPS_OVERRIDE').click()
 
     await expect(page.getByLabel('HTTPS Proxy Username')).toBeVisible()
-    await expect(page.getByLabel('HTTPS Proxy Password')).toBeVisible()
+    await expect(page.getByRole('textbox', { name: 'HTTPS Proxy Password' })).toBeVisible()
   })
 
   test('save is rejected with a validation toast when the password is missing', async ({ page }) => {
@@ -148,10 +148,10 @@ test.describe('GS-PROXY-AUTH-001 — Proxy authentication toggle and save flow',
     await goToNetworkTabWithAuthOn(page)
 
     await page.getByLabel('Proxy Username').fill('proxyuser')
-    await page.getByLabel('Proxy Password').fill('proxypass')
+    await page.getByRole('textbox', { name: 'Proxy Password' }).fill('proxypass')
 
-    const credsRequest = page.waitForRequest(
-      (req) => req.url().includes('/vpw/v1/proxy/credentials') && req.method() === 'POST',
+    const credsRequest = page.waitForResponse(
+      (res) => res.url().includes('/vpw/v1/proxy/credentials') && res.request().method() === 'POST',
     )
     await page.getByTestId('global-settings-save').click()
     await credsRequest
@@ -174,8 +174,8 @@ test.describe('GS-PROXY-AUTH-001 — Proxy authentication toggle and save flow',
     await page.getByTestId('global-settings-tab-network').click()
     await expect(page.getByText('Proxy credentials are configured.')).toBeVisible()
 
-    const deleteRequest = page.waitForRequest(
-      (req) => req.url().includes('/vpw/v1/proxy/credentials') && req.method() === 'DELETE',
+    const deleteRequest = page.waitForResponse(
+      (res) => res.url().includes('/vpw/v1/proxy/credentials') && res.request().method() === 'DELETE',
     )
     await page.getByTestId('global-settings-toggle-PROXY_AUTH_ENABLED').click()
     await expect(page.getByLabel('Proxy Username')).not.toBeVisible()
