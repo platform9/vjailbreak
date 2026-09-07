@@ -291,6 +291,40 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Component Diagram
+
+The pieces involved and how they talk to each other:
+
+```mermaid
+architecture-beta
+    service admin(internet)[Admin UI]
+
+    group vjb(cloud)[vJailbreak Appliance]
+        service ctrl(server)[Controller] in vjb
+        service pod(server)[Migration Pod] in vjb
+
+    group vmw(cloud)[VMware Environment]
+        service vc(server)[vCenter] in vmw
+        service proxy(server)[Proxy VM] in vmw
+
+    group pcd(cloud)[Platform9 PCD]
+        service os(disk)[Cinder Volume] in pcd
+
+    admin:R -- L:ctrl
+    ctrl:R -- L:vc
+    ctrl:B -- T:proxy
+    vc:B -- L:proxy
+    pod:L -- R:proxy
+    pod:B -- T:os
+```
+
+- **Admin UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
+- **Controller → vCenter/ESXi**: deploy/register the Proxy VM (OVA import), read host inventory
+- **Controller → Proxy VM**: push/verify SSH key, confirm `qemu-nbd` and `disk.EnableUUID`
+- **vCenter/ESXi → Proxy VM**: hot-add the frozen source-VM disks
+- **Migration Pod → Proxy VM**: SSH — identify block devices, start `qemu-nbd`, run `nbdcopy`
+- **Migration Pod → Cinder Volume**: write the copied disk data to the destination
+
 ### Sequence Diagram
 
 The same flow as a sequence diagram, including Proxy VM onboarding (only the operations specific to vJailbreak Accelerated Copy are shown — disk conversion and target VM creation follow the same path as every other copy method):
