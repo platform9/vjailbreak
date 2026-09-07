@@ -466,6 +466,21 @@ if [ "$IS_MASTER" == "true" ]; then
   check_command "Creating vjailbreak-ai-secret"
   log "vjailbreak-ai admin key generated and stored in secret"
 
+  log "Installing cert-manager"
+  if [ -d "/etc/pf9/yamls/cert-manager" ]; then
+      sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
+      check_command "Applying cert-manager manifests"
+      log "Waiting for cert-manager deployments to become available"
+      sudo kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
+      check_command "Waiting for cert-manager deployments"
+      if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
+          sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
+          check_command "Applying private CA setup"
+      fi
+    else
+      log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
+  fi
+
   sudo kubectl --request-timeout=300s apply -f /etc/pf9/yamls/
   check_command "Applying additional manifests"
 
@@ -481,21 +496,6 @@ if [ "$IS_MASTER" == "true" ]; then
   kubectl create configmap pf9-env -n migration-system --from-file=/etc/pf9/env
   check_command "Creating config map from env file"
   log "Config map created successfully."
-
-  log "Installing cert-manager"
-  if [ -d "/etc/pf9/yamls/cert-manager" ]; then
-      sudo kubectl apply -f /etc/pf9/yamls/cert-manager/cert-manager.yaml
-      check_command "Applying cert-manager manifests"
-      log "Waiting for cert-manager deployments to become available"
-      sudo kubectl -n cert-manager wait --for=condition=Available deployment --all --timeout=300s
-      check_command "Waiting for cert-manager deployments"
-      if [ -f "/etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml" ]; then
-          sudo kubectl apply -f /etc/pf9/yamls/cert-manager/00-selfsigned-issuer.yaml
-          check_command "Applying private CA setup"
-      fi
-    else
-      log "WARNING: /etc/pf9/yamls/cert-manager not found. Skipping cert-manager installation."
-  fi
 
   if [ -f "/etc/pf9/volumeimageprofile-defaults.yaml" ]; then
     log "Waiting for VolumeImageProfile CRD to be Established"
