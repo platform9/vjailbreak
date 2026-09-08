@@ -186,10 +186,11 @@ func (migobj *Migrate) attachDiskToProxy(ctx context.Context, proxyVMObj *object
 	return 0, fmt.Errorf("could not determine device key for newly attached disk %s", vmdkPath)
 }
 
-// findPreferredDiskController prefers a PVSCSI controller with a free slot --
+// findPreferredDiskController requires a PVSCSI controller with a free slot --
 // PVSCSI reliably passes WWIDs through to the guest (readGuestWWIDs depends on
-// this), LSI/BusLogic don't (VJAILB-232). Falls back to any controller with
-// room if no PVSCSI one is available.
+// this), LSI/BusLogic don't. Errors out rather than falling back to
+// a non-PVSCSI controller, since attaching there would silently break WWID-based
+// disk identification later on.
 func findPreferredDiskController(deviceList object.VirtualDeviceList) (govmomitypes.BaseVirtualController, error) {
 	// Count occupied unit numbers per controller key so "has a PVSCSI
 	// controller" doesn't wrongly match one that's already full.
@@ -226,8 +227,7 @@ func findPreferredDiskController(deviceList object.VirtualDeviceList) (govmomity
 		}
 	}
 
-	// No PVSCSI controller with room -- fall back to whatever's available.
-	return deviceList.FindDiskController("")
+	return nil, errors.New("no PVSCSI controller with a free slot found on proxy VM")
 }
 
 // getDiskKeys returns a set of VirtualDisk device keys currently on a VM.
@@ -549,9 +549,10 @@ func (migobj *Migrate) PrepareHotAddSource(ctx context.Context, vminfo vm.VMInfo
 		return nil, errors.Wrap(err, "failed to get Hot-Add SSH private key")
 	}
 
-	// 1. Remove any pre-existing snapshot with the same name, then take a fresh one.
-	// VMops.TakeSnapshot uses quiesce=false which works for both cold (VM already
-	// powered off, quiescing is a no-op) and mock (VM on, crash-consistent is correct).
+	// 1. Remove any pre-existing snapshot with the same name, then take a fresh,
+	// quiesced one. Quiescing is a no-op on the powered-off VM this path runs
+	// against today, but costs nothing and protects against a future caller
+	// reusing this against a still-running guest.
 	migobj.logMessage(constants.EventMessageHotAddSnapshotCreate)
 	if snapshots, err := migobj.VMops.ListSnapshots(); err == nil {
 		for _, snap := range snapshots {
@@ -564,7 +565,7 @@ func (migobj *Migrate) PrepareHotAddSource(ctx context.Context, vminfo vm.VMInfo
 			}
 		}
 	}
-	if err := migobj.VMops.TakeSnapshot(hotAddSnapName); err != nil {
+	if err := migobj.VMops.TakeSnapshotQuiesced(hotAddSnapName); err != nil {
 		return nil, errors.Wrap(err, "failed to create source VM snapshot")
 	}
 

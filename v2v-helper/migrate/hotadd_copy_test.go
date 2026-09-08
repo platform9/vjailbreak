@@ -96,6 +96,7 @@ func TestFindPreferredDiskController(t *testing.T) {
 		devices    object.VirtualDeviceList
 		wantKey    int32
 		wantPVSCSI bool
+		wantErr    bool
 	}{
 		{
 			name:       "PVSCSI with room is chosen",
@@ -104,14 +105,15 @@ func TestFindPreferredDiskController(t *testing.T) {
 			wantPVSCSI: true,
 		},
 		{
-			name: "full PVSCSI is skipped, falls back to the other controller",
+			// A non-PVSCSI controller with room must never be used as a substitute --
+			// it would silently break WWID-based disk identification later on.
+			name: "full PVSCSI, no other PVSCSI free -> error even though an LSI controller has room",
 			devices: func() object.VirtualDeviceList {
 				pvscsi := pvscsiController(1000)
 				lsiLogic := lsiLogicController(1001)
 				return devs(pvscsi, lsiLogic, fillDisks(pvscsi))
 			}(),
-			wantKey:    1001,
-			wantPVSCSI: false,
+			wantErr: true,
 		},
 		{
 			name: "first PVSCSI full, second PVSCSI free -> second is chosen",
@@ -124,16 +126,21 @@ func TestFindPreferredDiskController(t *testing.T) {
 			wantPVSCSI: true,
 		},
 		{
-			name:       "no PVSCSI controller falls back to FindDiskController",
-			devices:    devs(lsiLogicController(1000)),
-			wantKey:    1000,
-			wantPVSCSI: false,
+			name:    "no PVSCSI controller at all -> error",
+			devices: devs(lsiLogicController(1000)),
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := findPreferredDiskController(tt.devices)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("findPreferredDiskController() = %v, want error", got)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("findPreferredDiskController() error = %v", err)
 			}

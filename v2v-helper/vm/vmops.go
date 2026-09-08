@@ -42,6 +42,7 @@ type VMOperations interface {
 	GetHardwareVersion() (int, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
+	TakeSnapshotQuiesced(name string) error
 	DeleteSnapshot(name string) error
 	DeleteSnapshotByRef(snap *types.ManagedObjectReference) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
@@ -623,6 +624,36 @@ func (vmops *VMOps) TakeSnapshot(name string) error {
 	vm := vmops.VMObj
 
 	task, err := vm.CreateSnapshot(vmops.ctx, name, "", false, false)
+	if err != nil {
+		if !vcenter.IsTransientVCenterError(err) {
+			return fmt.Errorf("failed to take snapshot: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		task, err = vm.CreateSnapshot(vmops.ctx, name, "", false, true)
+		if err != nil {
+			return fmt.Errorf("failed to take snapshot: %s", err)
+		}
+	}
+
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
+	return nil
+}
+
+// TakeSnapshotQuiesced is TakeSnapshot with quiesce=true on every attempt --
+// on a running guest with VMware Tools, this flushes filesystem I/O through the
+// sync driver first so the snapshot is filesystem-consistent rather than merely
+// crash-consistent. On a powered-off VM (no live guest to quiesce) vCenter treats
+// it as a no-op, so this is also safe to call regardless of power state.
+func (vmops *VMOps) TakeSnapshotQuiesced(name string) error {
+	vm := vmops.VMObj
+
+	task, err := vm.CreateSnapshot(vmops.ctx, name, "", false, true)
 	if err != nil {
 		if !vcenter.IsTransientVCenterError(err) {
 			return fmt.Errorf("failed to take snapshot: %s", err)
