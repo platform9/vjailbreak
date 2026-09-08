@@ -345,7 +345,7 @@ func (r *ProxyVMReconciler) failVerification(ctx context.Context, proxyVM *vjail
 // (WWID) through to the guest the way PVSCSI does, which silently breaks disk
 // identification during every migration through this Proxy VM (see VJAILB-232).
 // Gating onboarding on this catches a misconfigured or BYO Proxy VM before it's
-// ever selectable for a migration, instead of failing deep into HotAddCopyDisks
+// ever selectable for a migration, instead of failing deep into HotAddCopyDisksCold
 // after the source VM has already been powered off and snapshotted.
 func hasParaVirtualController(ctx context.Context, vmObj *object.VirtualMachine) (bool, string, error) {
 	deviceList, err := vmObj.Device(ctx)

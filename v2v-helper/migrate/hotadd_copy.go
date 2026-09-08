@@ -659,8 +659,9 @@ func (migobj *Migrate) ReleaseHotAddSource(ctx context.Context, prepared *hotAdd
 	}
 }
 
-// HotAddCopyDisks powers off the source VM, then runs Prepare -> copy -> Release once.
-func (migobj *Migrate) HotAddCopyDisks(ctx context.Context, vminfo vm.VMInfo) error {
+// HotAddCopyDisksCold powers off the source VM, then runs Prepare -> copy -> Release
+// once. Cold-only: hot/mock share LiveReplicateDisks instead (see migrate.go).
+func (migobj *Migrate) HotAddCopyDisksCold(ctx context.Context, vminfo vm.VMInfo) error {
 	migobj.logMessage("Starting Hot-Add disk copy")
 
 	if migobj.ProxyVMIP == "" || migobj.ProxyVMName == "" {

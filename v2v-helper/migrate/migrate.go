@@ -304,7 +304,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 		if migobj.MigrationType == "cold" {
 			// Cold never needs incremental sync, so it keeps the original one-shot
 			// power-off-then-copy path: attach destination volumes up front, then
-			// HotAddCopyDisks does a single pass with no CBT involved.
+			// HotAddCopyDisksCold does a single pass with no CBT involved.
 			for idx, vmdisk := range vminfo.VMDisks {
 				path, err := migobj.AttachVolume(ctx, vmdisk)
 				if err != nil {
@@ -315,7 +315,7 @@ func (migobj *Migrate) MigrateVM(ctx context.Context) error {
 				}
 				vminfo.VMDisks[idx].Path = path
 			}
-			if err := migobj.HotAddCopyDisks(ctx, vminfo); err != nil {
+			if err := migobj.HotAddCopyDisksCold(ctx, vminfo); err != nil {
 				if cleanuperror := migobj.cleanup(ctx, vminfo, fmt.Sprintf("failed to perform HotAdd disk copy: %s", err), portids, vcenterSettings); cleanuperror != nil {
 					return errors.Wrapf(err, "failed to cleanup after HotAdd disk copy failure: %s", cleanuperror)
 				}
