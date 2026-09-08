@@ -119,6 +119,13 @@ export async function selectProxyVM(page: Page, vmName: string): Promise<void> {
   await page.getByRole('option', { name: new RegExp(vmName) }).click()
 }
 
+// Storage copy method radios (Standard / Storage Accelerated / vJailbreak Accelerated)
+// live in NetworkAndStorageMappingStep. `label` matches the radio's accessible name,
+// so callers can pass e.g. /vJailbreak Accelerated Copy/i for the Hot-Add option.
+export async function selectStorageCopyMethod(page: Page, label: string | RegExp): Promise<void> {
+  await page.getByRole('radio', { name: label }).check()
+}
+
 // ─── Route mocking helpers ────────────────────────────────────────────────────
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'

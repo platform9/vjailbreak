@@ -237,6 +237,20 @@ func (mr *MockVMOperationsMockRecorder) TakeSnapshot(name interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TakeSnapshot", reflect.TypeOf((*MockVMOperations)(nil).TakeSnapshot), name)
 }
 
+// TakeSnapshotQuiesced mocks base method.
+func (m *MockVMOperations) TakeSnapshotQuiesced(name string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TakeSnapshotQuiesced", name)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TakeSnapshotQuiesced indicates an expected call of TakeSnapshotQuiesced.
+func (mr *MockVMOperationsMockRecorder) TakeSnapshotQuiesced(name interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TakeSnapshotQuiesced", reflect.TypeOf((*MockVMOperations)(nil).TakeSnapshotQuiesced), name)
+}
+
 // UpdateDiskInfo mocks base method.
 func (m *MockVMOperations) UpdateDiskInfo(arg0 *VMInfo, arg1 VMDisk, arg2 bool) error {
 	m.ctrl.T.Helper()
