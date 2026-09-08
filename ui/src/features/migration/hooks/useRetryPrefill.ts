@@ -18,6 +18,7 @@ import type {
   SelectedMigrationOptionsType
 } from '../types'
 import { buildRetryFormState } from '../utils/retryFormState'
+import type { PcdClusterOption } from '../utils/pcdClusterLookup'
 
 interface RetryResources {
   plan: MigrationPlan
@@ -45,7 +46,7 @@ export interface RetryPrefillState {
 interface UseRetryPrefillParams {
   open: boolean
   retryConfig?: RetryMigrationConfig
-  pcdData: Array<{ id: string; name?: string }>
+  pcdData: PcdClusterOption[]
   updateParams: (values: Partial<FormValues>) => void
   updateSelectedOptions: (values: Partial<SelectedMigrationOptionsType>) => void
   form: UseFormReturn<MigrationDrawerRHFValues>

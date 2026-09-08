@@ -39,6 +39,7 @@ import { useSectionTracking } from '../hooks/useSectionTracking'
 import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
 import { hasAnySubnetMismatch, hasAnyPreserveIpDisabled } from '../utils/subnetMismatch'
+import { findPcdClusterByName } from '../utils/pcdClusterLookup'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
@@ -345,9 +346,19 @@ export default function MigrationFormDrawer({
     if (!isRetryMode || !pcdData.length || !params.pcdCluster) return
     const alreadyId = pcdData.some((p) => p.id === params.pcdCluster)
     if (alreadyId) return
-    const match = pcdData.find((p) => p.name === params.pcdCluster)
+    const match = findPcdClusterByName(
+      pcdData,
+      params.pcdCluster,
+      params.openstackCreds?.existingCredName
+    )
     if (match) updateParams({ pcdCluster: match.id })
-  }, [pcdData, isRetryMode, params.pcdCluster, updateParams])
+  }, [
+    pcdData,
+    isRetryMode,
+    params.pcdCluster,
+    params.openstackCreds?.existingCredName,
+    updateParams
+  ])
 
   // When target cluster changes in retry mode, reset network/storage mappings because
   // the previously mapped networks/volume-types may not exist on the new cluster.

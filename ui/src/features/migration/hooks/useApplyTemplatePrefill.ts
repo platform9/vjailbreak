@@ -2,11 +2,12 @@ import { useEffect, useRef } from 'react'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
 import type { SourceDataItem } from './useClusterData'
+import { findPcdClusterByName, type PcdClusterOption } from '../utils/pcdClusterLookup'
 
 interface UseApplyTemplatePrefillParams {
   open: boolean
   templatePrefill: SavedTemplate | undefined
-  pcdData: Array<{ id: string; name?: string }>
+  pcdData: PcdClusterOption[]
   sourceData: SourceDataItem[]
   currentPcdCluster?: string
   currentVmwareCluster?: string
@@ -40,7 +41,13 @@ export function useApplyTemplatePrefill({
     if (appliedRef.current === templatePrefill.name) return
     appliedRef.current = templatePrefill.name
 
-    const pcd = pcdData.find((p) => p.name === templatePrefill.targetCluster)
+    // Scope to the credential the template targets — another tenant may expose a cluster
+    // with the same name, and the blueprint only stores the name.
+    const pcd = findPcdClusterByName(
+      pcdData,
+      templatePrefill.targetCluster,
+      templatePrefill.destination
+    )
 
     const sourceItem = sourceData.find((item) => item.credName === templatePrefill.sourceVCenter)
     // Match against displayName first (what newly-saved templates store) and fall
@@ -124,7 +131,11 @@ export function useApplyTemplatePrefill({
       currentPcdCluster === templatePrefill.targetCluster &&
       !pcdData.some((p) => p.id === currentPcdCluster)
     ) {
-      const match = pcdData.find((p) => p.name === templatePrefill.targetCluster)
+      const match = findPcdClusterByName(
+        pcdData,
+        templatePrefill.targetCluster,
+        templatePrefill.destination
+      )
       if (match) updateParams({ pcdCluster: match.id })
     }
 

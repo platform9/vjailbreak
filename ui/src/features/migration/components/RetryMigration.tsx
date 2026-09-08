@@ -10,6 +10,7 @@ import {
 } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { FieldLabel } from 'src/components/design-system/ui'
+import { findPcdClusterByName } from '../utils/pcdClusterLookup'
 import '@cds/core/icon/register.js'
 import { ClarityIcons, clusterIcon, searchIcon } from '@cds/core/icon'
 
@@ -54,9 +55,12 @@ export function RetrySourceDestinationSummary({
   const [pcdSearchTerm, setPcdSearchTerm] = React.useState('')
   const [pcdDropdownOpen, setPcdDropdownOpen] = React.useState(false)
 
+  // The form may still hold the raw cluster name (prefill ran before pcdData loaded).
+  // Resolve it within this migration's credential — another tenant may expose a cluster
+  // with the same name, and picking that one would retry against the wrong tenant.
   const resolvedClusterId =
     pcdClusters.find((c) => c.id === selectedPcdClusterId)?.id ||
-    pcdClusters.find((c) => c.name === selectedPcdClusterId)?.id ||
+    findPcdClusterByName(pcdClusters, selectedPcdClusterId, openstackCredName)?.id ||
     selectedPcdClusterId
 
   const filteredPcdClusters = React.useMemo(() => {

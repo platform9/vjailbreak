@@ -581,6 +581,54 @@ export const MOCK_PCD_CLUSTERS_LIST = {
   items: [MOCK_PCD_CLUSTER_1],
 }
 
+// Two credentials/tenants each expose a cluster named "pcd-cluster-1".
+// PCDCluster object names stay unique (k8s requires it) but spec.clusterName collides,
+// which is exactly what the retry form and "use template" used to match on.
+export const MOCK_PCD_CLUSTER_SAME_NAME_OTHER_TENANT = {
+  apiVersion: API_VERSION,
+  kind: 'PCDCluster',
+  metadata: {
+    ...baseMeta('pcd-cluster-1-beta'),
+    labels: { 'vjailbreak.k8s.pf9.io/openstackcreds': 'pcd-cred-2' },
+  },
+  spec: {
+    clusterName: 'pcd-cluster-1',
+    hosts: ['pcd-host-2'],
+  },
+  status: {},
+}
+
+// The other tenant's cluster is listed FIRST so a name-only match returns the wrong one.
+export const MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES = {
+  apiVersion: API_VERSION,
+  kind: 'PCDClusterList',
+  metadata: listMeta(),
+  items: [MOCK_PCD_CLUSTER_SAME_NAME_OTHER_TENANT, MOCK_PCD_CLUSTER_1],
+}
+
+// projectName is what the cluster dropdown renders as "Tenant: <name>", so the two
+// credentials need distinguishable tenants for the assertion to mean anything.
+export const MOCK_OPENSTACK_CRED_1_WITH_TENANT = {
+  ...MOCK_OPENSTACK_CRED_1,
+  spec: { ...MOCK_OPENSTACK_CRED_1.spec, projectName: 'tenant-alpha' },
+}
+
+export const MOCK_OPENSTACK_CRED_2_OTHER_TENANT = {
+  ...MOCK_OPENSTACK_CRED_1,
+  metadata: {
+    ...baseMeta('pcd-cred-2'),
+    labels: { 'vjailbreak.k8s.pf9.io/is-pcd': 'true' },
+  },
+  spec: { ...MOCK_OPENSTACK_CRED_1.spec, projectName: 'tenant-beta' },
+}
+
+export const MOCK_OPENSTACK_CREDS_LIST_TWO_TENANTS = {
+  apiVersion: API_VERSION,
+  kind: 'OpenstackCredsList',
+  metadata: listMeta(),
+  items: [MOCK_OPENSTACK_CRED_1_WITH_TENANT, MOCK_OPENSTACK_CRED_2_OTHER_TENANT],
+}
+
 // ─── VMware hosts (for rolling migration ESXi host step) ─────────────────────
 
 export const MOCK_VMWARE_HOST_1 = {

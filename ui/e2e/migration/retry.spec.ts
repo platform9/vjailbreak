@@ -27,6 +27,8 @@ import {
   MOCK_VMWARE_CREDS_LIST,
   MOCK_OPENSTACK_CREDS_LIST,
   MOCK_MIGRATION_PLANS_LIST_EMPTY,
+  MOCK_OPENSTACK_CREDS_LIST_TWO_TENANTS,
+  MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES,
   MOCK_RETRY_MIGRATION_NAME,
   MOCK_RETRY_MIGRATION_NAME_2,
   MOCK_RETRY_PLAN_NAME,
@@ -986,5 +988,39 @@ test.describe('RET-008 — bulk retry from the migrations table', () => {
 
     // Button must not appear because not ALL selected are retryable Failed.
     await expect(page.getByTestId('bulk-retry-button')).not.toBeVisible()
+  })
+})
+
+// ─── RET-010: target cluster resolves inside the migration's credential ───────
+
+test.describe("RET-010 — target cluster resolves within the migration's credential (GHI #2273)", () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRetryPrefillRoutes(page)
+    // Registered after the shared helper so these win — Playwright matches the most
+    // recently registered route first. Two tenants, both exposing "pcd-cluster-1".
+    await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST_TWO_TENANTS)
+    await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES)
+  })
+
+  // Sole assertion site for the retry path's cluster resolution — the unit tests in
+  // src/features/migration/utils/pcdClusterLookup.test.ts deliberately do not repeat it.
+  test("prefills the cluster owned by the migration's credential, not another tenant's same-named cluster", async ({
+    page,
+  }) => {
+    await openRetryDrawer(page)
+
+    const summary = page.getByTestId('retry-source-destination-summary')
+    await expect(summary).toBeVisible()
+    await expect(summary).toContainText('pcd-cluster-1')
+
+    // The failed migration's template references pcd-cred-1, so the selected cluster must
+    // be tenant-alpha's. Before the fix the name-only match returned tenant-beta's cluster,
+    // which is listed first in MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES.
+    await expect(summary).toContainText('Tenant: tenant-alpha', { timeout: 10_000 })
+    await expect(summary).not.toContainText('tenant-beta')
+
+    // Resolving to a real cluster id (not the raw name) is what keeps the prefilled config
+    // valid — an unresolved dropdown would leave the retry button disabled.
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
   })
 })
