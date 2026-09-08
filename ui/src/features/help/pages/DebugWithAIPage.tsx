@@ -85,9 +85,13 @@ function OtherAgentsTab({
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(prompt).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+    try {
+      navigator.clipboard.writeText(prompt).catch(() => {})
+    } catch {
+      // clipboard unavailable
+    }
   }
 
   return (

@@ -92,10 +92,14 @@ test('US2: clicking Copy button changes label to Copied! then reverts', async ({
   // Wait for the prompt content to load before interacting with the copy button
   await expect(page.getByText(MOCK_DEBUG_PROMPT.prompt)).toBeVisible()
 
-  const copyBtn = page.getByRole('button', { name: /copy system prompt/i })
-  await copyBtn.click()
-  await expect(copyBtn).toHaveText(/copied!/i)
+  await page.getByRole('button', { name: /copy system prompt/i }).click()
+
+  // After clicking the button text changes to "Copied!" — use a fresh locator that matches
+  // the new accessible name; the original locator becomes stale as its text changed.
+  await expect(page.getByRole('button', { name: /copied!/i })).toBeVisible({ timeout: 5000 })
 
   // Reverts after 2 seconds
-  await expect(copyBtn).toHaveText(/copy system prompt/i, { timeout: 4000 })
+  await expect(page.getByRole('button', { name: /copy system prompt/i })).toBeVisible({
+    timeout: 4000,
+  })
 })
