@@ -721,8 +721,8 @@ func (migobj *Migrate) HotAddCopyDisksCold(ctx context.Context, vminfo vm.VMInfo
 			}
 			t.NBDPid = pid
 
-			migobj.logMessage(fmt.Sprintf("%s nbd://%s:%d → %s (disk %d/%d)",
-				constants.EventMessageHotAddCopying, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
+			migobj.logMessage(fmt.Sprintf("%s for disk %d, nbd://%s:%d → %s (disk %d/%d)",
+				constants.EventMessageHotAddCopying, idx+1, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
 			if err := migobj.runNBDCopy(ctx, migobj.ProxyVMIP, t.NBDPort, t.DestDevice); err != nil {
 				errCh <- errors.Wrapf(err, "disk %d: nbdcopy failed", idx+1)
 				return
