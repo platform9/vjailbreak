@@ -173,6 +173,27 @@ spec:
                     properties:
                       UserAssignedIP:
                         type: string
+                      allowedAddressPairs:
+                        description: AllowedAddressPairs lists IPs for this NIC that
+                          must be attached to the created port as Neutron allowed-address-pairs
+                          rather than fixed IPs.
+                        items:
+                          description: AddressPairs is a secondary/virtual IP attached
+                            to a NIC as a Neutron allowed-address-pair instead of
+                            a fixed IP.
+                          properties:
+                            ip:
+                              description: IP is the secondary/virtual IP address
+                                to allow on the port.
+                              type: string
+                            mac:
+                              description: MAC optionally overrides the MAC advertised
+                                for this pair; empty defaults to the port's own MAC.
+                              type: string
+                          required:
+                          - ip
+                          type: object
+                        type: array
                       interfaceIndex:
                         description: InterfaceIndex is the zero-based index of the
                           NIC

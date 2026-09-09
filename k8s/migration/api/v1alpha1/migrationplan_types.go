@@ -85,6 +85,14 @@ type PostMigrationAction struct {
 	FolderName   string `json:"folderName,omitempty"`
 }
 
+// AddressPairs is a secondary/virtual IP attached to a NIC as a Neutron allowed-address-pair instead of a fixed IP.
+type AddressPairs struct {
+	// IP is the secondary/virtual IP address to allow on the port.
+	IP string `json:"ip"`
+	// MAC optionally overrides the MAC advertised for this pair; empty defaults to the port's own MAC.
+	MAC string `json:"mac,omitempty"`
+}
+
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
 	// InterfaceIndex is the zero-based index of the NIC
@@ -97,6 +105,9 @@ type NICOverride struct {
 	PreserveMAC *bool `json:"preserveMAC,omitempty"`
 
 	UserAssignedIP string `json:"UserAssignedIP,omitempty"`
+
+	// AllowedAddressPairs lists IPs for this NIC that must be attached to the created port as Neutron allowed-address-pairs rather than fixed IPs.
+	AllowedAddressPairs []AddressPairs `json:"allowedAddressPairs,omitempty"`
 }
 
 // MigrationPlanSpec defines the desired state of MigrationPlan including

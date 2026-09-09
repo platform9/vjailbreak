@@ -116,12 +116,19 @@ const (
 	imagePropDiskBus = "hw_disk_bus"
 )
 
+// Allowed address pairs
+type AddressPairs struct {
+	IP  string `json:"ip"`
+	MAC string `json:"mac,omitempty"`
+}
+
 // NICOverride defines per-NIC overrides for IP and MAC preservation during migration
 type NICOverride struct {
-	InterfaceIndex int    `json:"interfaceIndex"`
-	PreserveIP     *bool  `json:"preserveIP,omitempty"`
-	PreserveMAC    *bool  `json:"preserveMAC,omitempty"`
-	UserAssignedIP string `json:"UserAssignedIP,omitempty"`
+	InterfaceIndex      int            `json:"interfaceIndex"`
+	PreserveIP          *bool          `json:"preserveIP,omitempty"`
+	PreserveMAC         *bool          `json:"preserveMAC,omitempty"`
+	UserAssignedIP      string         `json:"UserAssignedIP,omitempty"`
+	AllowedAddressPairs []AddressPairs `json:"allowedAddressPairs,omitempty"`
 }
 
 type MigrationTimes struct {
