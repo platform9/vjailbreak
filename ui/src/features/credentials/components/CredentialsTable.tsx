@@ -600,7 +600,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     } catch (error) {
       console.error('Error deleting credentials:', error)
 
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      // Backend validation errors (e.g. the VMwareCreds deletion webhook
+      // rejecting an in-progress migration) put the real reason in the
+      // response body; error.message is just Axios's generic status text.
+      const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message
+      const errorMessage =
+        apiMessage || (error instanceof Error ? error.message : String(error))
       const vmwareCreds = selectedForDeletion.filter((cred) => cred.type === 'VMware')
       const openstackCreds = selectedForDeletion.filter((cred) => cred.type === 'OpenStack')
 
@@ -631,7 +637,11 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           action: 'delete-credentials'
         }
       })
-      setDeleteError(error instanceof Error ? error.message : 'Unknown error occurred')
+      // Rethrow so ConfirmationDialog's onConfirm() rejects: it must not call
+      // onClose() on failure, since onClose() also wipes deleteError back to
+      // null, which would close the dialog and erase the error in the same
+      // tick — silently discarding it before the user ever sees it.
+      throw error
     } finally {
       setDeleting(false)
     }
@@ -639,6 +649,11 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
 
   const getCustomErrorMessage = useCallback((error: Error | string) => {
     const baseMessage = 'Failed to delete credentials'
+    const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data
+      ?.message
+    if (apiMessage) {
+      return `${baseMessage}: ${apiMessage}`
+    }
     if (error instanceof Error) {
       return `${baseMessage}: ${error.message}`
     }
