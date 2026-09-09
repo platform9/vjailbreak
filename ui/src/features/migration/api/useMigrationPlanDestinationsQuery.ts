@@ -7,6 +7,7 @@ import type { MigrationTemplateStatus } from 'src/api/migration-templates/model'
 import { getOpenstackCredentialsList } from 'src/api/openstack-creds/openstackCreds'
 import { getPCDClusters } from 'src/api/pcd-clusters/pcdClusters'
 import type { Migration } from './migrations'
+import { buildDestinationTenantResolver } from '../utils/pcdClusterLookup'
 
 export type MigrationPlanDestination = {
   destinationCluster: string
@@ -81,68 +82,22 @@ export const useMigrationPlanDestinationsQuery = (
             safeGet(() => getPCDClusters(namespace))
           ])
 
-          const openstackCredNameToProjectName = new Map<string, string>()
-          for (const cred of openstackCredsList || []) {
-            const name = String(cred?.metadata?.name || '').trim()
-            const projectName = String((cred?.spec as any)?.projectName || '').trim()
-            if (name && projectName) openstackCredNameToProjectName.set(name, projectName)
-          }
-
-          const destinationClusterToOpenstackCredName = new Map<string, string>()
-          const pcdClusters = (pcdClustersList as any)?.items || []
-          for (const cluster of pcdClusters || []) {
-            const clusterName = String((cluster as any)?.spec?.clusterName || '').trim()
-            const openstackCredName = String(
-              (cluster as any)?.metadata?.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
-            ).trim()
-            if (clusterName && openstackCredName) {
-              destinationClusterToOpenstackCredName.set(clusterName, openstackCredName)
-            }
-          }
-
-          const destinationClusterToProjectNameFromHostConfig = new Map<string, string>()
-          for (const cred of openstackCredsList || []) {
-            const projectName = String((cred?.spec as any)?.projectName || '').trim()
-            if (!projectName) continue
-            const hostConfigs = ((cred?.spec as any)?.pcdHostConfig as any[]) || []
-            for (const cfg of hostConfigs) {
-              const clusterName = String((cfg as any)?.clusterName || '').trim()
-              if (clusterName && !destinationClusterToProjectNameFromHostConfig.has(clusterName)) {
-                destinationClusterToProjectNameFromHostConfig.set(clusterName, projectName)
-              }
-            }
-          }
-
+          // One resolver per namespace: the credential ref is authoritative, cluster-name
+          // lookups stay as fallbacks. See buildDestinationTenantResolver.
           return [
             namespace,
-            {
-              openstackCredNameToProjectName,
-              destinationClusterToOpenstackCredName,
-              destinationClusterToProjectNameFromHostConfig
-            }
+            buildDestinationTenantResolver(openstackCredsList, pcdClustersList?.items),
           ] as const
         })
       )
 
       const lookupByNamespace = new Map(namespaceLookups)
 
-      const resolveDestinationTenant = (namespace: string, destinationCluster: string): string => {
-        const lookup = lookupByNamespace.get(namespace)
-        if (!lookup) return 'N/A'
-        const clusterName = String(destinationCluster || '').trim()
-        if (!clusterName || clusterName === 'N/A') return 'N/A'
-
-        const mappedCredName = lookup.destinationClusterToOpenstackCredName.get(clusterName)
-        if (mappedCredName) {
-          const projectName = lookup.openstackCredNameToProjectName.get(mappedCredName)
-          if (projectName) return projectName
-        }
-
-        const fromHostConfig = lookup.destinationClusterToProjectNameFromHostConfig.get(clusterName)
-        if (fromHostConfig) return fromHostConfig
-
-        return 'N/A'
-      }
+      const resolveDestinationTenant = (
+        namespace: string,
+        openstackRef: string,
+        destinationCluster: string
+      ): string => lookupByNamespace.get(namespace)?.(openstackRef, destinationCluster) ?? 'N/A'
 
       const planKeys = Array.from(
         new Set(
@@ -168,10 +123,16 @@ export const useMigrationPlanDestinationsQuery = (
             : null
           const templateSpec = (template?.spec as any) || {}
           const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
-          const destinationTenant = resolveDestinationTenant(namespace, destinationCluster)
+          const destinationOpenstackRef = (templateSpec?.destination?.openstackRef as string) || 'N/A'
+          // The ref identifies the tenant exactly; resolving from the cluster name alone
+          // returns another credential's tenant when two share a cluster name.
+          const destinationTenant = resolveDestinationTenant(
+            namespace,
+            destinationOpenstackRef,
+            destinationCluster
+          )
           const sourceVmwareRef = (templateSpec?.source?.vmwareRef as string) || 'N/A'
           const sourceDatacenter = (templateSpec?.source?.datacenter as string) || 'N/A'
-          const destinationOpenstackRef = (templateSpec?.destination?.openstackRef as string) || 'N/A'
           const templateStatus = template?.status as MigrationTemplateStatus | undefined
           const vmOsByName: Record<string, string> = {}
           for (const vm of templateStatus?.vmware || []) {

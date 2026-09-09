@@ -29,6 +29,8 @@ import {
   MOCK_MIGRATION_PLANS_LIST_EMPTY,
   MOCK_OPENSTACK_CREDS_LIST_TWO_TENANTS,
   MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES,
+  MOCK_PCD_CLUSTER_1,
+  MOCK_PCD_CLUSTER_SAME_NAME_OTHER_TENANT,
   MOCK_RETRY_MIGRATION_NAME,
   MOCK_RETRY_MIGRATION_NAME_2,
   MOCK_RETRY_PLAN_NAME,
@@ -1022,5 +1024,46 @@ test.describe("RET-010 — target cluster resolves within the migration's creden
     // Resolving to a real cluster id (not the raw name) is what keeps the prefilled config
     // valid — an unresolved dropdown would leave the retry button disabled.
     await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
+  })
+
+  // The migrations table derived the tenant from targetPCDClusterName, so a
+  // duplicate cluster name showed one credential beside another credential's tenant.
+  test("migrations table tooltip shows the tenant of the migration's own credential", async ({
+    page,
+  }) => {
+    // The pre-fix table built a cluster-name -> credential map where the LAST duplicate
+    // won, so the wrong credential has to come last here for this to be a real regression
+    // test. (The retry prefill matched first-wins, hence the opposite order in the shared
+    // fixture.) With the fix the tenant comes from the ref, so order is irrelevant.
+    await mockRoute(page, API.pcdClusters, 'GET', {
+      ...MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES,
+      items: [MOCK_PCD_CLUSTER_1, MOCK_PCD_CLUSTER_SAME_NAME_OTHER_TENANT],
+    })
+    await goToMigrations(page)
+
+    // The tenant reaches the user through the Destination tooltip on the name cell (the
+    // sourceDestination column is hidden by default).
+    const row = page.getByRole('row').filter({ hasText: 'test-vm-retry' }).first()
+    await expect(row).toBeVisible()
+    await row.getByText('test-vm-retry').first().hover()
+
+    const tooltip = page.getByRole('tooltip')
+    await expect(tooltip).toContainText('Tenant: tenant-alpha', { timeout: 10_000 })
+    await expect(tooltip).not.toContainText('tenant-beta')
+  })
+
+  // Retry inherits destination.openstackRef, so a cluster from another
+  // credential cannot be honoured and must not be offered.
+  test("target cluster dropdown offers only the migration's credential", async ({ page }) => {
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('retry-target-cluster-select')).toBeVisible()
+
+    // The testid sits on the Select's hidden input; the combobox is the clickable surface.
+    await page.getByTestId('retry-source-destination-summary').getByRole('combobox').click()
+    const options = page.getByRole('option')
+
+    await expect(options.filter({ hasText: 'Credential: pcd-cred-1' })).toHaveCount(1)
+    await expect(options.filter({ hasText: 'pcd-cred-2' })).toHaveCount(0)
+    await expect(options.filter({ hasText: 'tenant-beta' })).toHaveCount(0)
   })
 })

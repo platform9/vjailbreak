@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { findPcdClusterByName } from './pcdClusterLookup'
+import {
+  buildDestinationTenantResolver,
+  findPcdClusterByName,
+  pcdClustersForCredential
+} from './pcdClusterLookup'
 import { useApplyTemplatePrefill } from '../hooks/useApplyTemplatePrefill'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
 import type { SourceDataItem } from '../hooks/useClusterData'
@@ -105,5 +109,118 @@ describe('useApplyTemplatePrefill — target PCD cluster', () => {
   it('falls back to the raw cluster name when pcdData has not loaded yet', () => {
     // The hook's second effect swaps in the real id once pcdData arrives.
     expect(applyTemplate(makeTemplate(), []).pcdCluster).toBe('shared-cluster')
+  })
+})
+
+// ─── The dropdown must only offer what retry can honour ────────────
+
+describe('pcdClustersForCredential', () => {
+  it("offers only the credential's own clusters", () => {
+    expect(pcdClustersForCredential(PCD_DATA, 'creds-b').map((c) => c.id)).toEqual([
+      'id-tenant-b',
+      'id-unique'
+    ])
+  })
+
+  it('offers everything when the credential is unknown', () => {
+    expect(pcdClustersForCredential(PCD_DATA, undefined)).toHaveLength(3)
+  })
+
+  it('offers only the current selection when the credential owns no labelled cluster', () => {
+    // Keeps the control populated without reopening a cross-credential pick.
+    expect(
+      pcdClustersForCredential(PCD_DATA, 'creds-with-none', 'id-tenant-a').map((c) => c.id)
+    ).toEqual(['id-tenant-a'])
+  })
+
+  it('offers everything only when nothing at all can be offered for the credential', () => {
+    // No scoped clusters and no current selection: a full list beats an empty dropdown.
+    expect(pcdClustersForCredential(PCD_DATA, 'creds-with-none')).toHaveLength(3)
+  })
+
+  it("keeps the current selection even when it belongs to another credential", () => {
+    // Otherwise MUI renders the Select blank for a migration whose cluster predates the
+    // openstackcreds label.
+    const offered = pcdClustersForCredential(PCD_DATA, 'creds-b', 'id-tenant-a').map((c) => c.id)
+    expect(offered).toContain('id-tenant-a')
+    expect(offered).toContain('id-tenant-b')
+  })
+
+  it('does not duplicate the selection when it already belongs to the credential', () => {
+    const offered = pcdClustersForCredential(PCD_DATA, 'creds-b', 'id-tenant-b')
+    expect(offered.filter((c) => c.id === 'id-tenant-b')).toHaveLength(1)
+  })
+})
+
+// ─── Tenant comes from the credential ref, not the cluster name ────
+
+const CREDS = [
+  { metadata: { name: 'openstack' }, spec: { projectName: 'service' } },
+  { metadata: { name: 'other-cred' }, spec: { projectName: 'sarikatenant' } },
+  {
+    metadata: { name: 'hostconfig-cred' },
+    spec: { projectName: 'from-host-config', pcdHostConfig: [{ clusterName: 'hc-cluster' }] }
+  }
+]
+
+// Both credentials expose "vjb-punesimple"; other-cred is listed last, which is what used
+// to win in a name-keyed map.
+const CLUSTERS = [
+  {
+    metadata: { labels: { 'vjailbreak.k8s.pf9.io/openstackcreds': 'openstack' } },
+    spec: { clusterName: 'vjb-punesimple' }
+  },
+  {
+    metadata: { labels: { 'vjailbreak.k8s.pf9.io/openstackcreds': 'other-cred' } },
+    spec: { clusterName: 'vjb-punesimple' }
+  },
+  {
+    metadata: { labels: { 'vjailbreak.k8s.pf9.io/openstackcreds': 'other-cred' } },
+    spec: { clusterName: 'only-on-other' }
+  }
+]
+
+describe('buildDestinationTenantResolver', () => {
+  const resolve = buildDestinationTenantResolver(CREDS, CLUSTERS)
+
+  it('resolves the tenant from the credential ref, not the shared cluster name', () => {
+    expect(resolve('openstack', 'vjb-punesimple')).toBe('service')
+    expect(resolve('other-cred', 'vjb-punesimple')).toBe('sarikatenant')
+  })
+
+  it('resolves from the ref even when the cluster name is unknown', () => {
+    expect(resolve('openstack', 'cluster-that-vanished')).toBe('service')
+  })
+
+  it('falls back to the cluster name when the ref is missing or unknown', () => {
+    expect(resolve(undefined, 'only-on-other')).toBe('sarikatenant')
+    expect(resolve('deleted-cred', 'only-on-other')).toBe('sarikatenant')
+  })
+
+  it("treats the caller's 'N/A' placeholders as absent", () => {
+    expect(resolve('N/A', 'only-on-other')).toBe('sarikatenant')
+    expect(resolve('N/A', 'N/A')).toBe('N/A')
+  })
+
+  it('falls back to pcdHostConfig when no cluster carries the label', () => {
+    expect(resolve(undefined, 'hc-cluster')).toBe('from-host-config')
+  })
+
+  it('returns N/A when nothing resolves', () => {
+    expect(resolve(undefined, undefined)).toBe('N/A')
+    expect(resolve('unknown', 'unknown')).toBe('N/A')
+  })
+
+  it('tolerates missing credential and cluster lists', () => {
+    const empty = buildDestinationTenantResolver(null, undefined)
+    expect(empty('openstack', 'vjb-punesimple')).toBe('N/A')
+  })
+
+  it('ignores credentials that have no projectName yet', () => {
+    const pending = buildDestinationTenantResolver(
+      [{ metadata: { name: 'openstack' }, spec: {} }],
+      CLUSTERS
+    )
+    expect(pending('openstack', 'vjb-punesimple')).toBe('N/A')
   })
 })
