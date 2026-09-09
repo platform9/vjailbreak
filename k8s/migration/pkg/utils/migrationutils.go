@@ -78,9 +78,7 @@ func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList
 func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
 	for i := 0; i < len(eventList.Items); i++ {
-		msg := eventList.Items[i].Message
-		isCopyEvent := strings.Contains(msg, "Copying disk") || strings.Contains(msg, constants.EventMessageHotAddCopying)
-		if eventList.Items[i].Reason != constants.MigrationReason || !isCopyEvent {
+		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "Copying disk") {
 			continue
 		}
 		reason, message := SplitEventStringOnComma(eventList.Items[i].Message)

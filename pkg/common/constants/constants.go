@@ -817,7 +817,7 @@ const (
 	EventMessageHotAddAttachDisks    = "Attaching snapshot disks to Proxy VM"
 	EventMessageHotAddIdentify       = "Identifying block devices on Proxy VM"
 	EventMessageHotAddServing        = "Serving disk via NBD on Proxy VM"
-	EventMessageHotAddCopying        = "Copying data via nbdcopy"
+	EventMessageHotAddCopying        = "Copying disk via nbdcopy"
 	EventMessageHotAddCleanup        = "Cleaning up snapshot and disk attachments"
 
 	// Port range for qemu-nbd on Proxy VM
