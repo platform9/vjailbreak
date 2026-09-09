@@ -165,7 +165,7 @@ func TestBuildPortCreateOptions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			builder := buildPortCreateOptions(tt.createOpts, tt.isL2Network)
+			builder := buildPortCreateOptions(tt.createOpts, tt.isL2Network, nil)
 
 			body, err := builder.ToPortCreateMap()
 			if err != nil {
@@ -329,7 +329,7 @@ func TestCreatePortWithDHCP_MarksEntriesAsDHCP(t *testing.T) {
 	gatewayIP := map[string]string{}
 	createOpts := ports.CreateOpts{Name: "port-test", NetworkID: networkID}
 
-	port, err := client.CreatePortWithDHCP(t.Context(), network, ipPerMac, mac, gatewayIP, createOpts)
+	port, err := client.CreatePortWithDHCP(t.Context(), network, ipPerMac, mac, gatewayIP, createOpts, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -638,5 +638,73 @@ func TestGetCreateOpts_MultipleNICsSameSubnet_IndexIncrements(t *testing.T) {
 	}
 	if opts1.Name == opts2.Name {
 		t.Fatalf("both NICs on the same subnet got identical port names: %q", opts1.Name)
+	}
+}
+
+// TestBuildPortCreateOptions_AllowedAddressPairs verifies that
+// buildPortCreateOptions attaches the Neutron allowed-address-pairs
+// extension when pairs are given, composing correctly with the other two
+// extensions, and attaches nothing when there are none.
+func TestBuildPortCreateOptions_AllowedAddressPairs(t *testing.T) {
+	withGroups := []string{"sg-1"}
+
+	tests := []struct {
+		name  string
+		pairs []AllowedAddressPair
+		want  []map[string]any
+	}{
+		{
+			name:  "no pairs => key absent",
+			pairs: nil,
+			want:  nil,
+		},
+		{
+			name:  "one pair without a MAC",
+			pairs: []AllowedAddressPair{{IP: "10.102.164.58"}},
+			want:  []map[string]any{{"ip_address": "10.102.164.58"}},
+		},
+		{
+			name:  "one pair with an explicit MAC",
+			pairs: []AllowedAddressPair{{IP: "10.102.164.58", MAC: "00:00:5e:00:01:01"}},
+			want:  []map[string]any{{"ip_address": "10.102.164.58", "mac_address": "00:00:5e:00:01:01"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			createOpts := ports.CreateOpts{NetworkID: "net-1", SecurityGroups: &withGroups}
+			builder := buildPortCreateOptions(createOpts, false, tt.pairs)
+
+			body, err := builder.ToPortCreateMap()
+			if err != nil {
+				t.Fatalf("ToPortCreateMap() returned error: %v", err)
+			}
+			port, ok := body["port"].(map[string]any)
+			if !ok {
+				t.Fatalf("expected body[\"port\"] to be map[string]any, got %T", body["port"])
+			}
+
+			got, hasPairs := port["allowed_address_pairs"]
+			if tt.want == nil {
+				if hasPairs {
+					t.Fatalf("did not expect allowed_address_pairs to be set, got %v", got)
+				}
+				return
+			}
+			if !hasPairs {
+				t.Fatalf("expected allowed_address_pairs to be set, got none")
+			}
+			gotPairs, ok := got.([]map[string]any)
+			if !ok || len(gotPairs) != len(tt.want) {
+				t.Fatalf("allowed_address_pairs = %#v, want %#v", got, tt.want)
+			}
+			for i := range tt.want {
+				for k, v := range tt.want[i] {
+					if gotPairs[i][k] != v {
+						t.Fatalf("allowed_address_pairs[%d][%q] = %v, want %v", i, k, gotPairs[i][k], v)
+					}
+				}
+			}
+		})
 	}
 }

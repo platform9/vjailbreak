@@ -34,6 +34,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/allowedaddresspairs"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
@@ -828,7 +829,7 @@ func (osclient *OpenStackClients) GetCreateOpts(ctx context.Context, network *ne
 // a single map shared across all NICs of the same VM (see GetCreateOpts) so
 // that multiple NICs on the same subnet get distinct port names; pass nil if
 // that guarantee isn't needed (e.g. a one-off, non-VM-scoped port creation).
-func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string, subnetPortIndex map[string]int) (*ports.Port, error) {
+func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, network *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string, subnetPortIndex map[string]int, allowedAddressPairs []AllowedAddressPair) (*ports.Port, error) {
 	pkgutils.PrintLog(fmt.Sprintf("OPENSTACK API: Creating port for network %s, authurl %s, tenant %s with MAC address %s and IP addresses %v", network.ID, osclient.AuthURL, osclient.Tenant, mac, ipPerMac[mac]))
 	Existingport, err := osclient.CheckIfPortExists(ctx, ipPerMac[mac], mac, network, gatewayIP)
 	if err != nil {
@@ -850,30 +851,40 @@ func (osclient *OpenStackClients) ValidateAndCreatePort(ctx context.Context, net
 
 	// if currentInstanceID is not nill that means this is an L2 network, we should continue
 
+	// L2 networks have no Neutron-managed subnets or port security, so ignore allowed-address-pairs here too, same as fixed IPs.
+	if isL2Network {
+		allowedAddressPairs = nil
+	}
+	for _, pair := range allowedAddressPairs {
+		if _, err := osclient.GetSubnet(ctx, network.Subnets, pair.IP); err != nil {
+			return nil, errors.Wrapf(err, "invalid allowed-address-pair IP %s for network %s", pair.IP, network.ID)
+		}
+	}
+
 	createOpts, err := osclient.GetCreateOpts(ctx, network, mac, ipPerMac[mac], vmname, securityGroups, gatewayIP, subnetPortIndex)
 	if err != nil {
 		if !fallbackToDHCP {
 			return nil, errors.Wrapf(err, "failed to create port options with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		} else {
 			pkgutils.PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
-			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
+			return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts, allowedAddressPairs)
 		}
 	}
-	port, err := osclient.createPortLowLevel(ctx, createOpts)
+	port, err := osclient.createPortLowLevel(ctx, createOpts, allowedAddressPairs)
 	if err != nil {
 		if !fallbackToDHCP {
 			return nil, errors.Wrapf(err, "failed to create port with static IP %v, and fallback to DHCP is disabled", ipPerMac[mac])
 		}
 		pkgutils.PrintLog(fmt.Sprintf("Could Not Use IP: %v, using DHCP to create Port", ipPerMac[mac]))
 		createOpts.FixedIPs = nil
-		return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts)
+		return osclient.CreatePortWithDHCP(ctx, network, ipPerMac, mac, gatewayIP, createOpts, allowedAddressPairs)
 	}
 	return port, nil
 }
 
-func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts) (*ports.Port, error) {
+func (osclient *OpenStackClients) CreatePortWithDHCP(ctx context.Context, network *networks.Network, ipPerMac map[string][]vm.IpEntry, mac string, gatewayIP map[string]string, createOpts ports.CreateOpts, allowedAddressPairs []AllowedAddressPair) (*ports.Port, error) {
 
-	dhcpPort, dhcpErr := osclient.createPortLowLevel(ctx, createOpts)
+	dhcpPort, dhcpErr := osclient.createPortLowLevel(ctx, createOpts, allowedAddressPairs)
 
 	if dhcpErr != nil {
 		return nil, errors.Wrap(dhcpErr, "failed to create port with DHCP after static IP failed")
@@ -921,7 +932,7 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 		// Create with DHCP by removing fixed IPs
 		createOpts.FixedIPs = nil
 	}
-	return osclient.createPortLowLevel(ctx, createOpts)
+	return osclient.createPortLowLevel(ctx, createOpts, nil)
 }
 
 // l2PortBindingProfileKey is the binding profile flag PCD expects on ports that
@@ -932,16 +943,23 @@ func (osclient *OpenStackClients) CreatePort(ctx context.Context, networkid *net
 //	pcdctl port create ... --binding-profile '{"l2-port": true}'
 const l2PortBindingProfileKey = "l2-port"
 
+// AllowedAddressPair is a secondary/virtual IP (with an optional MAC) attached to a port as a Neutron allowed-address-pair instead of a fixed IP.
+type AllowedAddressPair struct {
+	IP  string
+	MAC string
+}
+
 // buildPortCreateOptions layers the OpenStack port extensions required by
 // vJailbreak onto the base create options:
 //   - L2-only networks get the {"l2-port": true} binding profile so PCD treats
 //     the port as belonging to an L2 network.
 //   - Ports with no security groups get port security disabled.
+//   - NICs with allowed-address-pairs get them attached via the Neutron allowed-address-pairs extension.
 //
-// Both extensions implement ports.CreateOptsBuilder and compose, so they can be
-// layered together when both conditions apply. Kept as a pure function so the
+// All three extensions implement ports.CreateOptsBuilder and compose, so they can be
+// layered together when multiple conditions apply. Kept as a pure function so the
 // option-building logic can be unit tested without an OpenStack client.
-func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool) ports.CreateOptsBuilder {
+func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool, allowedAddressPairs []AllowedAddressPair) ports.CreateOptsBuilder {
 	var optsBuilder ports.CreateOptsBuilder = createOpts
 
 	// For L2-only networks, attach the binding profile expected by PCD.
@@ -961,10 +979,22 @@ func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool) ports
 		}
 	}
 
+	// Attach any virtual/secondary IPs as Neutron allowed-address-pairs.
+	if len(allowedAddressPairs) > 0 {
+		pairs := make([]allowedaddresspairs.AddressPair, len(allowedAddressPairs))
+		for i, pair := range allowedAddressPairs {
+			pairs[i] = allowedaddresspairs.AddressPair{IPAddress: pair.IP, MACAddress: pair.MAC}
+		}
+		optsBuilder = allowedaddresspairs.CreateOptsExt{
+			CreateOptsBuilder:   optsBuilder,
+			AllowedAddressPairs: pairs,
+		}
+	}
+
 	return optsBuilder
 }
 
-func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts) (*ports.Port, error) {
+func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, createOpts ports.CreateOpts, allowedAddressPairs []AllowedAddressPair) (*ports.Port, error) {
 	var port *ports.Port
 	var err error
 
@@ -978,7 +1008,7 @@ func (osclient *OpenStackClients) createPortLowLevel(ctx context.Context, create
 	}
 
 	for i := 0; i < constants.DeleteOperationRetryCount; i++ {
-		opts := buildPortCreateOptions(createOpts, isL2Network)
+		opts := buildPortCreateOptions(createOpts, isL2Network, allowedAddressPairs)
 		port, err = ports.Create(ctx, osclient.NetworkingClient, opts).Extract()
 		if err == nil {
 			return port, nil
