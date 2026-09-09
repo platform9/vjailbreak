@@ -354,6 +354,87 @@ func TestCreateDataCopiedCondition(t *testing.T) {
 	}
 }
 
+func TestCreateDataCopyCondition(t *testing.T) {
+	t.Run("NFC-style 'Copying disk N, ...' event creates a DataCopy condition", func(t *testing.T) {
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent(constants.MigrationReason, "Copying disk 0, Completed: 5%"),
+		}}
+
+		got := CreateDataCopyCondition(makeMigration(), eventList)
+
+		if len(got) != 1 || got[0].Type != constants.MigrationConditionTypeDataCopy {
+			t.Fatalf("got %+v, want one DataCopy condition", got)
+		}
+		if got[0].Reason != "Copying disk 0" {
+			t.Errorf("Reason = %q, want %q", got[0].Reason, "Copying disk 0")
+		}
+	})
+
+	t.Run("Hot-Add copying event creates a DataCopy condition with a stable per-disk reason", func(t *testing.T) {
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent(constants.MigrationReason,
+				"Copying disk via nbdcopy 1, nbd://10.0.0.5:10809 → /dev/sdb (disk 1/2)"),
+		}}
+
+		got := CreateDataCopyCondition(makeMigration(), eventList)
+
+		if len(got) != 1 || got[0].Type != constants.MigrationConditionTypeDataCopy {
+			t.Fatalf("got %+v, want one DataCopy condition", got)
+		}
+		// The reason (everything before the first comma) must be stable per disk index -
+		// no ephemeral NBD port or destination device path baked in - otherwise a retried
+		// migration logging a new port for the same disk won't match this condition by
+		// reason and will append a duplicate instead of updating it in place.
+		wantReason := "Copying disk via nbdcopy 1"
+		if got[0].Reason != wantReason {
+			t.Errorf("Reason = %q, want %q", got[0].Reason, wantReason)
+		}
+		if strings.Contains(got[0].Reason, "10809") || strings.Contains(got[0].Reason, "/dev/sdb") {
+			t.Errorf("Reason %q leaks ephemeral connection details, should be disk-index-only", got[0].Reason)
+		}
+	})
+
+	t.Run("Hot-Add retry with a different NBD port updates the same disk's condition in place", func(t *testing.T) {
+		firstAttempt := makeEvent(constants.MigrationReason,
+			"Copying disk via nbdcopy 1, nbd://10.0.0.5:10809 → /dev/sdb (disk 1/2)")
+		existing := CreateDataCopyCondition(makeMigration(), &corev1.EventList{Items: []corev1.Event{firstAttempt}})
+		if len(existing) != 1 {
+			t.Fatalf("setup: got %d conditions after first attempt, want 1", len(existing))
+		}
+
+		migration := makeMigration()
+		migration.Status.Conditions = existing
+
+		retryTs := metav1.NewTime(firstAttempt.LastTimestamp.Add(time.Minute))
+		retryEvent := corev1.Event{
+			Reason:        constants.MigrationReason,
+			Message:       "Copying disk via nbdcopy 1, nbd://10.0.0.5:19999 → /dev/sdb (disk 1/2)",
+			LastTimestamp: retryTs,
+		}
+
+		got := CreateDataCopyCondition(migration, &corev1.EventList{Items: []corev1.Event{retryEvent}})
+
+		if len(got) != 1 {
+			t.Fatalf("got %d DataCopy conditions after retry, want 1 (updated in place, not appended)", len(got))
+		}
+		if !got[0].LastTransitionTime.Time.Equal(retryTs.Time) {
+			t.Errorf("LastTransitionTime not updated: got %v, want %v", got[0].LastTransitionTime.Time, retryTs.Time)
+		}
+	})
+
+	t.Run("unrelated event ignored", func(t *testing.T) {
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent(constants.MigrationReason, "VM created successfully"),
+		}}
+
+		got := CreateDataCopyCondition(makeMigration(), eventList)
+
+		if len(got) != 0 {
+			t.Errorf("got %d conditions, want 0", len(got))
+		}
+	})
+}
+
 func TestCreatePodRunningCondition(t *testing.T) {
 	startedAt := metav1.Now()
 
