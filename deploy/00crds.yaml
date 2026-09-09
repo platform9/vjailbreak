@@ -3300,6 +3300,14 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackName:
+                description: |-
+                  OpenstackName is the name of the VM as it exists in OpenStack/PCD.
+                  For the master node, this is fetched from the OpenStack server object.
+                  For worker (agent) nodes, this is the name the VM was created with,
+                  derived from the master node's OpenstackName so agents are identifiable
+                  as belonging to their primary vjailbreak VM.
+                type: string
               openstackUUID:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
@@ -5169,6 +5177,54 @@ spec:
     app: vpwned-sdk
   type: ClusterIP
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-webhook-service
+  namespace: migration-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: migration
+  name: migration-serving-cert
+  namespace: migration-system
+spec:
+  dnsNames:
+  - migration-webhook-service.migration-system.svc
+  - migration-webhook-service.migration-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: migration-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-selfsigned-issuer
+  namespace: migration-system
+spec:
+  selfSigned: {}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5196,6 +5252,41 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: validating-webhook-configuration
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: validatingwebhookconfiguration
+    app.kubernetes.io/part-of: migration
+  name: migration-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-openstackcreds
+  failurePolicy: Fail
+  name: vopenstackcreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - openstackcreds
+  sideEffects: None
 
 ---
 apiVersion: v1

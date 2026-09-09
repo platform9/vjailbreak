@@ -1,4 +1,4 @@
-# vJailbreak Constitution (v1.4.0)
+# vJailbreak Constitution (v1.5.0)
 
 This document establishes governance principles for the vJailbreak migration orchestration project.
 
@@ -68,6 +68,41 @@ A new CRD needs no code change here: cleanup and re-apply discover CRDs dynamica
 
 Tests in `pkg/vpwned/upgrade/` MUST iterate `DeploymentConfigs` rather than hardcode workload names, so an unwired workload fails the suite instead of shipping.
 
+### XI. UI Test Coverage Is Two Layers, One Runner Each (NON-NEGOTIABLE)
+The UI has exactly two test layers, and each has exactly one runner. Adding a third runner, or
+writing a UI change with no test at either layer, is not permitted.
+
+| Layer | Runner | Location | Discovery |
+|-------|--------|----------|-----------|
+| End-to-end (browser, user flows) | **Playwright** | `ui/e2e/**/*.spec.ts` | `testDir: './e2e'` — recursive, automatic |
+| Unit (pure functions, hooks, reducers, single components) | **Vitest** | `ui/src/**/*.test.ts(x)` | `include: ['src/**/*.test.{ts,tsx}']` — automatic |
+
+**Cypress is retired.** `ui/cypress/` no longer exists and `cypress` is not a dependency. Do not
+reintroduce it, and do not add a third E2E runner.
+
+Obligations for any PR touching `ui/`:
+
+- A user-visible change (component, page, form, flow) requires a **Playwright** spec under
+  `ui/e2e/`. This is the default expectation — not optional.
+- A change to a pure helper, hook, reducer or util requires a **Vitest** test alongside it.
+- Both layers are required when a change spans both, e.g. a new form field with a validation
+  helper: Vitest for the helper, Playwright for the field's behavior in the form.
+- Specs must stub their own backend calls with `page.route()`. Never let an E2E spec reach a real
+  vCenter, OpenStack or Kubernetes API.
+- A new E2E spec MUST live under `ui/e2e/` and a new unit test under `ui/src/`. Files placed
+  anywhere else are silently not executed by CI.
+
+**No GitHub Actions change is needed when a test is added.** Both runners discover files by
+pattern, and Playwright's `--shard` splits by test count, so new specs are picked up and
+rebalanced automatically. The workflow only needs attention when:
+
+- the suite grows enough that a shard approaches its `timeout-minutes` (tune the shard count in
+  the `ui-e2e` matrix — a throughput concern, never a correctness one); or
+- a test is added outside `ui/e2e/` or `ui/src/`, which means it will not run at all.
+
+AI agents MUST state which layer(s) a UI change requires before writing code, and MUST reject a
+UI PR that adds no test at either layer.
+
 ## Critical Requirements
 
 - Pre-commit hooks must activate via `make setup-hooks`
@@ -77,10 +112,11 @@ Tests in `pkg/vpwned/upgrade/` MUST iterate `DeploymentConfigs` rather than hard
 - PRs adding a migration form field must satisfy the four-surface table in Principle VIII
 - PRs adding a UI-side Kubernetes read must satisfy Principle IX (RBAC entry or proxy allowlist entry)
 - PRs adding a workload, image, or `deploy/` manifest must satisfy Principle X (wire the upgrade and rollback paths, or link a tracking issue)
+- PRs touching `ui/` must satisfy Principle XI (a Playwright spec for user-visible behavior, a Vitest test for helpers/hooks, and no new E2E runner)
 
 ## Governance
 
 Constitution supersedes all other documentation. Amendments require maintainer approval.
 
 
-**Version**: 1.4.0 | **Last Amended**: 2026-08-12 | **Source**: branch `private/main/sarika/constitution-update-upgrade`
+**Version**: 1.5.0 | **Last Amended**: 2026-08-26 | **Source**: branch `private/main/sarika/ui-test-consolidation`

@@ -8,6 +8,7 @@ import {
   submitMigrationForm,
   selectVmwareCluster,
   selectPcdCluster,
+  selectProxyVM,
   mockRoute,
   expectToast,
   expectDrawerOpen,
@@ -44,6 +45,7 @@ import {
   MOCK_BM_CONFIGS_LIST,
   MOCK_ROLLING_MIGRATION_PLAN_CREATED,
   MOCK_VMWARE_MACHINES_LIST,
+  MOCK_PROXY_VMS_LIST,
   NS,
 } from './helpers/migration.fixtures'
 
@@ -58,6 +60,7 @@ async function mockStandardFormApis(page: Page) {
   await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST)
   await mockRoute(page, API.openstackCredByName('pcd-cred-1'), 'GET', MOCK_OPENSTACK_CRED_1)
   await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST)
+  await mockRoute(page, API.proxyVMs, 'GET', MOCK_PROXY_VMS_LIST)
   // Template: POST returns pending; GET returns ready (polling resolves immediately);
   // PATCH returns ready (updateMigrationTemplate on submit must succeed to proceed to createMigrationPlan)
   await page.route(`**migrationtemplates**`, (route) => {
@@ -209,6 +212,8 @@ test.describe('MIG-004 — complete standard migration', () => {
     await page.getByTestId('section-nav-item-map-resources').click()
     await mapAllNetworks(page)
     await mapAllStorage(page)
+    // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required before submit.
+    await selectProxyVM(page, 'proxy-vm-1')
 
     // Submit
     const planCreated = waitForMigrationPlanCreated(page)
@@ -235,6 +240,8 @@ test.describe('MIG-004 — complete standard migration', () => {
     await page.getByTestId('section-nav-item-map-resources').click()
     await mapAllNetworks(page)
     await mapAllStorage(page)
+    // storageCopyMethod defaults to HotAdd — a Ready Proxy VM is required before submit.
+    await selectProxyVM(page, 'proxy-vm-1')
     const planCreated = waitForMigrationPlanCreated(page)
     await submitMigrationForm(page)
 

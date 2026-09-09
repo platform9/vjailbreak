@@ -72,7 +72,7 @@ const defaultMigrationOptions = {
   }
 }
 
-const defaultValues: Partial<FormValues> = { removeVMwareTools: true }
+const defaultValues: Partial<FormValues> = { removeVMwareTools: true, storageCopyMethod: 'HotAdd' }
 
 export default function MigrationFormDrawer({
   open,

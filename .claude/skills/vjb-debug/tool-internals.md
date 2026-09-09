@@ -68,9 +68,20 @@ guestfish --rw -a /dev/vdb : run : mount /dev/vdb2 / : <command>
 
 ---
 
-## virt-v2v conversion pipeline {#virt-v2v}
+## virt-v2v-in-place conversion pipeline {#virt-v2v}
 
-virt-v2v converts VMware disk format + guest OS internals to KVM-compatible:
+**vJailbreak calls `virt-v2v-in-place` specifically** (`v2v-helper/virtv2v/virtv2vops.go:493`),
+not plain `virt-v2v`. The in-place variant operates on the guest's disk(s) directly rather than
+producing a separately-converted output image, auto-detects the OS location (LVM or regular
+partition — see comment at `v2v-helper/migrate/conversion.go:132`), and has its own man page
+(`virt-v2v-in-place(1)`) with a different option set than plain virt-v2v. When checking behavior
+against upstream docs, use `virt-v2v-in-place(1)` and `virt-v2v-support(1)`, not the generic
+`virt-v2v(1)` page — options and some behavior differ. For anything not resolved by this file, see
+the `vjb-virtv2v-inplace-behavior` and `vjb-guestfs-behavior` specialist agents, which fetch the
+live docs rather than relying on this static summary.
+
+Guest-side conversion steps (same underlying libguestfs machinery as plain virt-v2v, hence the
+same multi-boot risk below):
 
 ```
 Input disk(s)

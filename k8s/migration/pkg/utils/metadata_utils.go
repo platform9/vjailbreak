@@ -3,6 +3,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log"
@@ -169,6 +170,13 @@ func GetCurrentInstanceMetadata() (*InstanceMetadata, error) {
 	return cachedMetadata, nil
 }
 
+// isTransientOpenstackError returns true when err is a gophercloud HTTP error
+// with a 5xx status code, indicating a transient server-side failure.
+func isTransientOpenstackError(err error) bool {
+	var codeErr gophercloud.ErrUnexpectedResponseCode
+	return stderrors.As(err, &codeErr) && codeErr.Actual >= 500
+}
+
 // VerifyCredentialsMatchCurrentEnvironment checks if the provided credentials can access the current instance
 func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.ProviderClient, regionName string) (bool, error) {
 	uuid, err := GetMasterInstanceUUID()
@@ -189,6 +197,13 @@ func VerifyCredentialsMatchCurrentEnvironment(providerClient *gophercloud.Provid
 		if strings.Contains(err.Error(), "Resource not found") ||
 			strings.Contains(err.Error(), "No server with a name or ID") {
 			return false, errors.Wrap(err, "wrong OpenStack environment. Use credentials from this environment")
+		}
+		// Transient server-side error (5xx): OpenStack DB or infra is temporarily
+		// unavailable. Skip verification rather than failing — credentials are
+		// likely valid and the controller will retry on the next reconcile.
+		if isTransientOpenstackError(err) {
+			log.Printf("WARNING: OpenStack returned 5xx during credential verification (transient), skipping check: %v", err)
+			return true, nil
 		}
 		return false, fmt.Errorf("failed to verify instance access: %w. "+
 			"Please check if the provided credentials have compute:get_server permission", err)

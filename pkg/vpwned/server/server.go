@@ -237,6 +237,18 @@ func getHTTPServer(ctx context.Context, port, grpcSocket string) (*http.ServeMux
 		mux.Handle("/vpw/v1/ai/key", &aiKeyHandler{k8sClient: aiK8sClient, rawK8s: rawK8s})
 	}
 
+	// Proxy credentials endpoint
+	proxyCredsK8sClient, credsErr := CreateInClusterClient()
+	if credsErr != nil {
+		logrus.Warnf("proxy creds handler: failed to create k8s client (non-cluster env): %v", credsErr)
+	} else {
+		proxyCredsRawK8s, rawErr := CreateRawK8sClient()
+		if rawErr != nil {
+			logrus.Warnf("proxy creds handler: failed to create raw k8s client: %v", rawErr)
+		}
+		mux.Handle("/vpw/v1/proxy/credentials", &proxyCredsHandler{k8sClient: proxyCredsK8sClient, rawK8s: proxyCredsRawK8s})
+	}
+
 	// Wrap gatewayMuxer to handle all other routes
 	mux.HandleFunc("/vpw/", func(w http.ResponseWriter, r *http.Request) {
 		// Skip VDDK endpoints - they're already registered

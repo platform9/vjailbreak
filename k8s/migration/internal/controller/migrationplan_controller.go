@@ -735,11 +735,6 @@ func (r *MigrationPlanReconciler) ReconcileMigrationPlanJob(ctx context.Context,
 		if migrationtemplate.Spec.ProxyVMRef == nil {
 			return ctrl.Result{}, errors.New("StorageCopyMethod is HotAdd but ProxyVMRef is not set in MigrationTemplate")
 		}
-		if migrationplan.Spec.MigrationStrategy.Type == "hot" {
-			return ctrl.Result{}, errors.Errorf(
-				"StorageCopyMethod HotAdd does not support migration type 'hot' — use 'cold' or 'mock'",
-			)
-		}
 		proxyVM = &vjailbreakv1alpha1.ProxyVM{}
 		if err := r.Get(ctx, types.NamespacedName{Name: migrationtemplate.Spec.ProxyVMRef.Name, Namespace: migrationtemplate.Namespace}, proxyVM); err != nil {
 			return ctrl.Result{}, errors.Wrapf(err, "failed to get ProxyVM '%s'", migrationtemplate.Spec.ProxyVMRef.Name)
@@ -1160,6 +1155,55 @@ func (r *MigrationPlanReconciler) CreateMigration(ctx context.Context,
 	return migrationobj, nil
 }
 
+// buildV2VHelperEnvFrom assembles the v2v-helper container's EnvFrom sources:
+// the VMware and OpenStack credential secrets (always present), the array
+// credentials secret (only when storage array migration is in play), the
+// shared pf9-env settings ConfigMap, and the optional proxy credentials secret.
+func buildV2VHelperEnvFrom(vmwareSecretRef, openstackSecretRef, arrayCredsSecretRef string) []corev1.EnvFromSource {
+	optionalTrue := true
+	envFrom := []corev1.EnvFromSource{
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: vmwareSecretRef,
+				},
+			},
+		},
+		{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: openstackSecretRef,
+				},
+			},
+		},
+	}
+	if arrayCredsSecretRef != "" {
+		envFrom = append(envFrom, corev1.EnvFromSource{
+			SecretRef: &corev1.SecretEnvSource{
+				LocalObjectReference: corev1.LocalObjectReference{
+					Name: arrayCredsSecretRef,
+				},
+			},
+		})
+	}
+	envFrom = append(envFrom, corev1.EnvFromSource{
+		ConfigMapRef: &corev1.ConfigMapEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "pf9-env",
+			},
+		},
+	})
+	envFrom = append(envFrom, corev1.EnvFromSource{
+		SecretRef: &corev1.SecretEnvSource{
+			LocalObjectReference: corev1.LocalObjectReference{
+				Name: "pf9-proxy-creds",
+			},
+			Optional: &optionalTrue,
+		},
+	})
+	return envFrom
+}
+
 // CreateJob creates a job to run v2v-helper
 func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 	migrationplan *vjailbreakv1alpha1.MigrationPlan,
@@ -1260,42 +1304,8 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								SecurityContext: &corev1.SecurityContext{
 									Privileged: &pointtrue,
 								},
-								Env: envVars,
-								EnvFrom: func() []corev1.EnvFromSource {
-									envFrom := []corev1.EnvFromSource{
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: vmwareSecretRef,
-												},
-											},
-										},
-										{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: openstackSecretRef,
-												},
-											},
-										},
-									}
-									if arrayCredsSecretRef != "" {
-										envFrom = append(envFrom, corev1.EnvFromSource{
-											SecretRef: &corev1.SecretEnvSource{
-												LocalObjectReference: corev1.LocalObjectReference{
-													Name: arrayCredsSecretRef,
-												},
-											},
-										})
-									}
-									envFrom = append(envFrom, corev1.EnvFromSource{
-										ConfigMapRef: &corev1.ConfigMapEnvSource{
-											LocalObjectReference: corev1.LocalObjectReference{
-												Name: "pf9-env",
-											},
-										},
-									})
-									return envFrom
-								}(),
+								Env:     envVars,
+								EnvFrom: buildV2VHelperEnvFrom(vmwareSecretRef, openstackSecretRef, arrayCredsSecretRef),
 								VolumeMounts: []corev1.VolumeMount{
 									{
 										Name:      "vddk",
@@ -1343,7 +1353,7 @@ func (r *MigrationPlanReconciler) CreateJob(ctx context.Context,
 								VolumeSource: corev1.VolumeSource{
 									HostPath: &corev1.HostPathVolumeSource{
 										Path: "/home/ubuntu/vmware-vix-disklib-distrib",
-										Type: utils.NewHostPathType("Directory"),
+										Type: utils.NewHostPathType("DirectoryOrCreate"),
 									},
 								},
 							},
@@ -2358,9 +2368,13 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		//nolint:gocritic // err is already declared above
-		if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
-			return err
+		// VDDK is only used by the default ("normal") CBT/NBD copy method; skip
+		// the precheck for StorageAcceleratedCopy and HotAdd, which don't need it.
+		if requiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
+			//nolint:gocritic // err is already declared above
+			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
+				return err
+			}
 		}
 
 		arraycredsSecretRef := ""
@@ -2427,6 +2441,16 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		)).
 		WithOptions(controller.Options{MaxConcurrentReconciles: r.MaxConcurrentReconciles}).
 		Complete(r)
+}
+
+// requiresVDDK reports whether the given MigrationTemplate storage copy method
+// needs the VDDK library. Only the default ("normal", i.e. empty/unset) CBT/NBD
+// copy method invokes nbdkit's vddk plugin against the ESXi/vCenter NFC service.
+// StorageAcceleratedCopy clones disks array-side via SSH+XCOPY, and HotAdd
+// ("vJailbreak Accelerated Copy") streams via qemu-nbd on the Proxy VM — neither
+// touches the VDDK library.
+func requiresVDDK(storageCopyMethod string) bool {
+	return storageCopyMethod != StorageCopyMethod && storageCopyMethod != constants.HotAddCopyMethod
 }
 
 func (r *MigrationPlanReconciler) validateVDDKPresence(

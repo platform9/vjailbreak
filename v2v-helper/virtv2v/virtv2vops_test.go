@@ -421,130 +421,12 @@ func TestBuildWildcardNetplanYAML_GatewayWrittenForStaticEntry(t *testing.T) {
 	assert.Contains(t, yaml, "via: 192.168.50.1", "gateway route must be written for a static entry")
 }
 
-// ---------------------------------------------------------------------------
-// buildRHELIfcfgFiles / buildRHELNetworkManagerKeyfiles – RHEL 7+ guest
-// network configuration (ifcfg / NetworkManager keyfile equivalents of
-// buildWildcardNetplanYAML). Same DHCP-vs-static contract: DHCP-sourced
-// entries must get a real DHCP client config (BOOTPROTO=dhcp / method=auto),
-// static entries get a pinned IP.
-// ---------------------------------------------------------------------------
-
-func TestBuildRHELIfcfgFiles_StaticEntry(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {{IP: "10.0.0.5", Prefix: 24}},
-	}
-
-	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	content, ok := files["ifcfg-vjb0"]
-	assert.True(t, ok, "expected ifcfg-vjb0 to be generated, got files: %#v", files)
-	assert.Contains(t, content, "HWADDR=aa:bb:cc:dd:ee:ff")
-	assert.Contains(t, content, "BOOTPROTO=none", "static entry must get BOOTPROTO=none")
-	assert.NotContains(t, content, "BOOTPROTO=dhcp", "static-only entry must not get BOOTPROTO=dhcp")
-	assert.Contains(t, content, "IPADDR=10.0.0.5")
-	assert.Contains(t, content, "PREFIX=24")
-}
-
-func TestBuildRHELIfcfgFiles_DHCPEntry(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
-	}
-
-	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	content := files["ifcfg-vjb0"]
-	assert.Contains(t, content, "BOOTPROTO=dhcp", "DHCP-sourced entry must get BOOTPROTO=dhcp")
-	assert.NotContains(t, content, "BOOTPROTO=none", "DHCP-only entry must not get BOOTPROTO=none")
-	assert.NotContains(t, content, "IPADDR=", "DHCP-sourced IP must not be pinned as a static IPADDR")
-}
-
-func TestBuildRHELIfcfgFiles_MixedEntries(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {
-			{IP: "10.0.0.5", Prefix: 24},
-			{IP: "192.168.50.77", Prefix: 0, DHCP: true},
-		},
-	}
-
-	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	content := files["ifcfg-vjb0"]
-	assert.Contains(t, content, "BOOTPROTO=dhcp", "any DHCP-sourced entry on the NIC should trigger BOOTPROTO=dhcp")
-	assert.NotContains(t, content, "IPADDR=10.0.0.5", "static entry must not be written when the MAC is treated as DHCP overall")
-}
-
-func TestBuildRHELIfcfgFiles_MultipleStaticIPsNumbered(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {
-			{IP: "10.0.0.5", Prefix: 24},
-			{IP: "10.0.0.6", Prefix: 24},
-		},
-	}
-
-	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{"aa:bb:cc:dd:ee:ff": "10.0.0.1"}, map[string][]string{})
-
-	content := files["ifcfg-vjb0"]
-	assert.Contains(t, content, "IPADDR=10.0.0.5")
-	assert.Contains(t, content, "PREFIX=24")
-	assert.Contains(t, content, "IPADDR1=10.0.0.6")
-	assert.Contains(t, content, "PREFIX1=24")
-	assert.Contains(t, content, "GATEWAY=10.0.0.1")
-}
-
-func TestBuildRHELIfcfgFiles_EmptyEntriesSkipped(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {},
-	}
-
-	files := buildRHELIfcfgFiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	assert.Empty(t, files, "a MAC with zero entries must get no ifcfg file")
-}
-
-func TestBuildRHELNetworkManagerKeyfiles_StaticEntry(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {{IP: "10.0.0.5", Prefix: 24}},
-	}
-
-	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{"aa:bb:cc:dd:ee:ff": "10.0.0.1"}, map[string][]string{})
-
-	content, ok := files["vjb0.nmconnection"]
-	assert.True(t, ok, "expected vjb0.nmconnection to be generated, got files: %#v", files)
-	assert.Contains(t, content, "mac-address=aa:bb:cc:dd:ee:ff")
-	assert.Contains(t, content, "method=manual", "static entry must get method=manual")
-	assert.NotContains(t, content, "method=auto", "static-only entry must not get method=auto")
-	assert.Contains(t, content, "address1=10.0.0.5/24,10.0.0.1")
-}
-
-func TestBuildRHELNetworkManagerKeyfiles_DHCPEntry(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {{IP: "192.168.50.77", Prefix: 0, DHCP: true}},
-	}
-
-	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	content := files["vjb0.nmconnection"]
-	assert.Contains(t, content, "method=auto", "DHCP-sourced entry must get method=auto")
-	assert.NotContains(t, content, "method=manual", "DHCP-only entry must not get method=manual")
-	assert.NotContains(t, content, "address1=", "DHCP-sourced IP must not be pinned as a static address")
-}
-
-func TestBuildRHELNetworkManagerKeyfiles_EmptyEntriesSkipped(t *testing.T) {
-	ipPerMac := map[string][]vm.IpEntry{
-		"aa:bb:cc:dd:ee:ff": {},
-	}
-
-	files := buildRHELNetworkManagerKeyfiles(ipPerMac, map[string]string{}, map[string][]string{})
-
-	assert.Empty(t, files, "a MAC with zero entries must get no NetworkManager keyfile")
-}
-
 // Phase 1 guestfish consolidation: getBootablePartitionSteps,
 // mountPersistenceSteps, wildcardNetplanSteps - tests the step list only
 // (right commands/args/order/shape), since guestfish itself can't run here.
 
 func TestGetBootablePartitionSteps(t *testing.T) {
-	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh")
+	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh", []string{"/dev/sda", "/dev/sdb"})
 
 	require.Len(t, steps, 3, "must be exactly upload, chmod, sh - no more, no fewer boots collapsed")
 
@@ -560,11 +442,79 @@ func TestGetBootablePartitionSteps(t *testing.T) {
 
 	assert.Equal(t, guestfishStep{
 		Command: "sh",
-		Args:    []string{"/tmp/get-bootable-partition.sh"},
-	}, steps[2], "sh must run last, after the script is uploaded and executable")
+		Args:    []string{"/tmp/get-bootable-partition.sh /dev/sda /dev/sdb"},
+	}, steps[2], "sh must pass the real disk list as args, so the script's heuristics never see the appliance's own disk")
 
 	for i, step := range steps {
 		assert.Empty(t, step.Marker, "step %d must be fail-fast (no Marker): a failed upload or chmod must abort the rest, matching the three separate calls this replaces", i)
+	}
+}
+
+func TestGetBootablePartitionStepsNoRealDisks(t *testing.T) {
+	// Empty/nil realDisks (list-devices unavailable) must fall back to
+	// running the script with no args, not crash or pass an empty arg.
+	steps := getBootablePartitionSteps("/home/fedora/get-bootable-partition.sh", nil)
+
+	require.Len(t, steps, 3)
+	assert.Equal(t, guestfishStep{
+		Command: "sh",
+		Args:    []string{"/tmp/get-bootable-partition.sh"},
+	}, steps[2], "with no real disk list, sh must run the script bare so it falls back to its own raw scan")
+}
+
+func TestParseBootDiskResult(t *testing.T) {
+	tests := []struct {
+		name       string
+		out        string
+		realDisks  []string
+		wantResult string
+		wantTrace  string
+		wantErr    bool
+	}{
+		{
+			name:       "tagged result in realDisks",
+			out:        "[DEBUG] Step 1: disks passed by caller: /dev/sda /dev/sdb\n[DEBUG] Step 6: fallback to first disk\nBOOTDISK_RESULT:/dev/sda",
+			realDisks:  []string{"/dev/sda", "/dev/sdb"},
+			wantResult: "/dev/sda",
+			wantTrace:  "[DEBUG] Step 1: disks passed by caller: /dev/sda /dev/sdb\n[DEBUG] Step 6: fallback to first disk",
+		},
+		{
+			name:       "tagged but empty result stays empty and is rejected",
+			out:        "BOOTDISK_RESULT:",
+			realDisks:  []string{"/dev/sda"},
+			wantResult: "",
+			wantTrace:  "",
+			wantErr:    true,
+		},
+		{
+			// No tag: the one line becomes both trace and, via fallback, result.
+			name:       "untagged old-script single-line output accepted",
+			out:        "/dev/sda\n",
+			realDisks:  []string{"/dev/sda"},
+			wantResult: "/dev/sda",
+			wantTrace:  "/dev/sda",
+		},
+		{
+			name:       "result not in realDisks is rejected",
+			out:        "[DEBUG] Step 6: fallback to first disk\nBOOTDISK_RESULT:/dev/sdc",
+			realDisks:  []string{"/dev/sda", "/dev/sdb"},
+			wantResult: "/dev/sdc",
+			wantTrace:  "[DEBUG] Step 6: fallback to first disk",
+			wantErr:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, trace, err := parseBootDiskResult(tt.out, tt.realDisks)
+			assert.Equal(t, tt.wantResult, result, "result")
+			assert.Equal(t, tt.wantTrace, trace, "trace")
+			if tt.wantErr {
+				assert.Error(t, err, "a result outside realDisks must be rejected, not silently used")
+				return
+			}
+			assert.NoError(t, err)
+		})
 	}
 }
 

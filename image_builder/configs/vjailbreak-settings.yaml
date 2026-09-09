@@ -35,4 +35,5 @@ data:
   NTP_SERVERS: ""
   HTTP_TIMEOUT_SECONDS: "30" # timeout for http calls in seconds
   PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova" # OVA template URL for deploying the Hot-Add Proxy VM
-  
+  VDDK_REQUIRED: "false" # if true, force users to the VDDK upload page until present; if false, VDDK is optional and no redirect/tour happens
+

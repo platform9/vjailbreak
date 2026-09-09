@@ -17,6 +17,7 @@ import StorageManagementPage from './features/storageManagement/pages/StorageMan
 import EsxiSshKeysPage from './features/esxiSshKeys/pages/EsxiSshKeysPage'
 import ImageProfilesPage from './features/imageProfiles/pages/ImageProfilesPage'
 import { useVddkStatusQuery } from './hooks/api/useVddkStatusQuery'
+import { useSettingsConfigMapQuery } from './hooks/api/useSettingsConfigMapQuery'
 import { useOpenstackCredentialsQuery } from './hooks/api/useOpenstackCredentialsQuery'
 import { useVmwareCredentialsQuery } from './hooks/api/useVmwareCredentialsQuery'
 import {
@@ -87,16 +88,26 @@ function useHasAnyCredentials() {
   return { hasVmwareCredentials, hasPcdCredentials, isLoading, isError }
 }
 
+// VDDK_REQUIRED defaults to false: absent key, load error, or "false" all mean
+// VDDK is optional and the app must never force-redirect/tour to the upload page.
+function useVddkRequired() {
+  const settingsQuery = useSettingsConfigMapQuery()
+  const isLoading = settingsQuery.isLoading
+  const vddkRequired = settingsQuery.data?.data?.VDDK_REQUIRED === 'true'
+  return { vddkRequired, isLoading }
+}
+
 function DashboardIndexRedirect() {
   const { hasVmwareCredentials, hasPcdCredentials, isLoading, isError } = useHasAnyCredentials()
   const vddkStatusQuery = useVddkStatusQuery({ refetchOnWindowFocus: false })
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
+  const { vddkRequired, isLoading: vddkRequiredLoading } = useVddkRequired()
 
   const hasAllCredentials = hasVmwareCredentials && hasPcdCredentials
 
-  if (isLoading || vddkLoading) return null
+  if (isLoading || vddkLoading || vddkRequiredLoading) return null
   if (isError) return <Navigate to="/dashboard/migrations" replace />
 
   // If the status endpoint fails, don't hard-block navigation.
@@ -109,7 +120,7 @@ function DashboardIndexRedirect() {
     )
   }
 
-  if (!vddkUploaded) {
+  if (vddkRequired && !vddkUploaded) {
     return <Navigate to="/dashboard/global-settings" state={{ tab: 'vddk' }} replace />
   }
 
@@ -150,11 +161,12 @@ function App() {
   const vddkLoading = vddkStatusQuery.isLoading
   const vddkError = vddkStatusQuery.isError
   const vddkUploaded = vddkStatusQuery.data?.uploaded === true
+  const { vddkRequired, isLoading: vddkRequiredLoading } = useVddkRequired()
 
   const missingVmwareCredentials = !hasVmwareCredentials
   const missingPcdCredentials = !hasPcdCredentials
   const missingCredentials = missingVmwareCredentials || missingPcdCredentials
-  const missingVddk = !vddkUploaded
+  const missingVddk = vddkRequired && !vddkUploaded
   const shouldShowGuide = missingCredentials || missingVddk
 
   const guideMode: GuideMode = useMemo(() => {
@@ -276,7 +288,7 @@ function App() {
   }, [guideConfig.target, isOnExpectedPage])
 
   useEffect(() => {
-    if (credsLoading || vddkLoading) return
+    if (credsLoading || vddkLoading || vddkRequiredLoading) return
     const dismissed = localStorage.getItem(GETTING_STARTED_DISMISSED_KEY) === 'true'
 
     if (!shouldShowGuide) {
@@ -324,6 +336,7 @@ function App() {
   }, [
     credsLoading,
     vddkLoading,
+    vddkRequiredLoading,
     vddkError,
     location.pathname,
     joyrideSnoozed,

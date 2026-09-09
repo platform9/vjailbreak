@@ -109,6 +109,7 @@ func CheckAndCreateMasterNodeEntry(ctx context.Context, k3sclient client.Client,
 func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local bool) error {
 	var imageID string
 	var flavorID string
+	var serverName string
 
 	vjNode := vjailbreakv1alpha1.VjailbreakNode{}
 	err := k3sclient.Get(ctx, types.NamespacedName{
@@ -128,6 +129,7 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 		// Local mode
 		imageID = "fake-image-id"
 		flavorID = "fake-flavor-id"
+		serverName = "fake-server-name"
 	} else {
 		// Controller manager is always on the master node due to pod affinity
 		imageID, err = GetImageIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
@@ -137,6 +139,10 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 		flavorID, err = GetFlavorIDFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
 		if err != nil {
 			return errors.Wrap(err, "failed to get flavor id of master node")
+		}
+		serverName, err = GetServerNameFromVM(ctx, k3sclient, vjNode.Status.OpenstackUUID, openstackcreds)
+		if err != nil {
+			return errors.Wrap(err, "failed to get server name of master node")
 		}
 	}
 
@@ -151,6 +157,12 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 	err = k3sclient.Update(ctx, &vjNode)
 	if err != nil {
 		return errors.Wrap(err, "failed to update vjailbreak node")
+	}
+
+	vjNode.Status.OpenstackName = serverName
+	err = k3sclient.Status().Update(ctx, &vjNode)
+	if err != nil {
+		return errors.Wrap(err, "failed to update vjailbreak node status")
 	}
 	return nil
 }
@@ -372,9 +384,14 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		hostEntries = []commonutils.HostEntry{}
 	}
 
+	// Derive the OpenStack instance name from the master's OpenstackName so the
+	// agent VM is identifiable as belonging to its primary vjailbreak VM.
+	instanceName := ComputeAgentInstanceName(masterVjNode.Status.OpenstackName, vjNode.Name)
+	vjNode.Status.OpenstackName = instanceName
+
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
-		Name:             vjNode.Name,
+		Name:             instanceName,
 		FlavorRef:        vjNode.Spec.OpenstackFlavorID,
 		Networks:         networkIDs,
 		SecurityGroups:   securityGroups,
@@ -716,6 +733,35 @@ func GetFlavorIDFromVM(ctx context.Context, k3sclient client.Client, uuid string
 		return flavorID, nil
 	}
 	return "", fmt.Errorf("failed to get flavor ID from server")
+}
+
+// GetServerNameFromVM retrieves the OpenStack server name of a virtual machine using its UUID
+func GetServerNameFromVM(ctx context.Context, k3sclient client.Client, uuid string, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (string, error) {
+	if uuid == "" {
+		return "", fmt.Errorf("instance UUID is required to look up server name")
+	}
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	// Fetch the VM details
+	server, err := servers.Get(ctx, openstackClients.ComputeClient, uuid).Extract()
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get server details")
+	}
+	return server.Name, nil
+}
+
+// ComputeAgentInstanceName derives the OpenStack instance name for a new agent
+// VM by prefixing the master's OpenStack name, so the agent is identifiable as
+// belonging to its primary vjailbreak VM (e.g. "<master-name>-vjailbreak-agent-<hash>").
+// Falls back to agentCRName alone if the master's OpenstackName isn't known yet.
+func ComputeAgentInstanceName(masterOpenstackName, agentCRName string) string {
+	if masterOpenstackName == "" {
+		return agentCRName
+	}
+	return fmt.Sprintf("%s-%s", masterOpenstackName, agentCRName)
 }
 
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID

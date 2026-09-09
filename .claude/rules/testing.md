@@ -1,7 +1,7 @@
 ---
 paths:
   - "**/*_test.go"
-  - "ui/cypress/**/*"
+  - "ui/e2e/**/*.spec.ts"
   - "**/*.test.ts"
   - "**/*.test.tsx"
 ---
@@ -160,34 +160,50 @@ describe('MigrationForm', () => {
 });
 ```
 
-### E2E Tests (Cypress)
+### E2E Tests (Playwright)
 
-**Location**: `ui/cypress/e2e/`
+**Location**: `ui/e2e/` — recursive, discovered automatically via `testDir: './e2e'`
+
+**Cypress is retired.** `ui/cypress/` no longer exists and `cypress` is not a dependency. Do not
+reintroduce it or add a third E2E runner (Constitution Principle XI).
 
 **Running tests**:
 ```bash
 cd ui
-yarn cypress:open  # Interactive mode
-yarn cypress:run   # Headless mode
+yarn pw:run                       # whole suite, starts the dev server itself
+yarn pw:run e2e/migration/        # one directory
+yarn pw:open                      # interactive UI mode
+yarn pw:run --shard=1/8           # what CI runs, per shard
 ```
 
 **Test critical user flows**:
-- Migration creation workflow
-- Migration status monitoring
-- Error handling and validation
+- Migration creation workflow (standard and rolling)
+- Migration status monitoring, pod logs, admin cutover
+- Retry flow, error handling and validation
 - Network and storage mapping
+- Global Settings and credentials
 
-**Example**:
+**Stub every backend call** — specs must never reach a real vCenter, OpenStack or Kubernetes API.
+Reuse the shared helpers rather than hand-rolling routes:
+
 ```typescript
-describe('Migration Creation', () => {
-  it('creates a new migration', () => {
-    cy.visit('/migrations/new');
-    cy.get('[data-testid="vm-name"]').type('test-vm');
-    cy.get('[data-testid="submit"]').click();
-    cy.contains('Migration created successfully');
-  });
-});
+import { goToMigrations, mockRoute, API } from './helpers/migration.helpers'
+import { MOCK_MIGRATIONS_LIST } from './helpers/migration.fixtures'
+
+test('migrations table renders', async ({ page }) => {
+  await mockRoute(page, API.migrations, 'GET', MOCK_MIGRATIONS_LIST)
+  await goToMigrations(page)
+  await expect(page.getByTestId('migrations-table')).toBeVisible()
+})
 ```
+
+**Gotchas learned the hard way**:
+- Playwright matches the **most recently registered** route first. A trailing `**` glob on a list
+  endpoint will swallow by-name requests — anchor list routes with a regex (see the `API` map)
+- `mockRoute` falls back (not `continue`) on method mismatch, so GET + PATCH + DELETE can be
+  stacked on one URL
+- CI has no API host, so `vite.config.ts` points the dev proxy at a dead local port. Requests a
+  spec forgets to stub are refused instantly instead of stalling on DNS
 
 ## Testing Best Practices
 
@@ -283,7 +299,9 @@ Pre-commit hooks will:
 ### Test Execution in CI
 - Controller tests run automatically
 - v2v-helper tests run in Linux environment
-- UI tests run with Cypress
+- UI unit tests (vitest) run in the `ui-unit` job of `packer.yml`
+- UI E2E tests (Playwright) run in the `ui-e2e` job of `packer.yml`, split across 8 shards; both
+  jobs only run when the change touches `ui/`, and both gate `build-ui`
 - Integration tests run against test deployments
 
 ## Debugging Tests

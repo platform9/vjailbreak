@@ -64,6 +64,14 @@ type VjailbreakNodeStatus struct {
 	// OpenstackUUID is the UUID of the VM in OpenStack
 	OpenstackUUID string `json:"openstackUUID,omitempty"`
 
+	// OpenstackName is the name of the VM as it exists in OpenStack/PCD.
+	// For the master node, this is fetched from the OpenStack server object.
+	// For worker (agent) nodes, this is the name the VM was created with,
+	// derived from the master node's OpenstackName so agents are identifiable
+	// as belonging to their primary vjailbreak VM.
+	// +optional
+	OpenstackName string `json:"openstackName,omitempty"`
+
 	// VMIP  is the IP address of the VM
 	VMIP string `json:"vmIP"`
 

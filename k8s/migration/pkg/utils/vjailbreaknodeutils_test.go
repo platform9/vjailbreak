@@ -213,3 +213,91 @@ func TestGetAgentHostEntries_ConfigMapMissing(t *testing.T) {
 		t.Error("expected error when ConfigMap is missing, got nil")
 	}
 }
+
+func TestComputeAgentInstanceName(t *testing.T) {
+	tests := []struct {
+		name                string
+		masterOpenstackName string
+		agentCRName         string
+		want                string
+	}{
+		{
+			name:                "empty masterOpenstackName returns agentCRName as-is",
+			masterOpenstackName: "",
+			agentCRName:         "vjailbreak-agent-x9k2p1",
+			want:                "vjailbreak-agent-x9k2p1",
+		},
+		{
+			name:                "non-empty masterOpenstackName returns joined name",
+			masterOpenstackName: "vjb-appliance-01",
+			agentCRName:         "vjailbreak-agent-x9k2p1",
+			want:                "vjb-appliance-01-vjailbreak-agent-x9k2p1",
+		},
+		{
+			name:                "both empty returns empty string",
+			masterOpenstackName: "",
+			agentCRName:         "",
+			want:                "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ComputeAgentInstanceName(tt.masterOpenstackName, tt.agentCRName)
+			if got != tt.want {
+				t.Errorf("ComputeAgentInstanceName(%q, %q) = %q, want %q", tt.masterOpenstackName, tt.agentCRName, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVjailbreakNodeOpenstackNameField(t *testing.T) {
+	ctx := context.Background()
+	s := testNodeScheme(t)
+
+	tests := []struct {
+		name          string
+		openstackName string
+	}{
+		{name: "empty openstack name", openstackName: ""},
+		{name: "openstack name set", openstackName: "vjb-appliance-01-vjailbreak-agent-x9k2p1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			node := &vjailbreakv1alpha1.VjailbreakNode{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-agent-" + tt.name,
+					Namespace: constants.NamespaceMigrationSystem,
+				},
+				Spec: vjailbreakv1alpha1.VjailbreakNodeSpec{
+					NodeRole: "worker",
+				},
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(s).
+				WithStatusSubresource(&vjailbreakv1alpha1.VjailbreakNode{}).
+				Build()
+
+			if err := fakeClient.Create(ctx, node); err != nil {
+				t.Fatalf("Create VjailbreakNode: %v", err)
+			}
+
+			node.Status.OpenstackName = tt.openstackName
+			if err := fakeClient.Status().Update(ctx, node); err != nil {
+				t.Fatalf("Status().Update VjailbreakNode: %v", err)
+			}
+
+			got := &vjailbreakv1alpha1.VjailbreakNode{}
+			if err := fakeClient.Get(ctx, types.NamespacedName{
+				Name:      node.Name,
+				Namespace: node.Namespace,
+			}, got); err != nil {
+				t.Fatalf("Get VjailbreakNode: %v", err)
+			}
+
+			if got.Status.OpenstackName != tt.openstackName {
+				t.Errorf("OpenstackName = %q, want %q", got.Status.OpenstackName, tt.openstackName)
+			}
+		})
+	}
+}

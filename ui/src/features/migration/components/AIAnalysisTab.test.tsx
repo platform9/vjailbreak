@@ -115,6 +115,7 @@ describe('AIAnalysisTab', () => {
     mockAnalyze.mockResolvedValueOnce(initial).mockResolvedValueOnce({
       ...initial,
       root_cause: 'Follow-up answered',
+      raw_response: 'Follow-up answered in the conversation thread',
     })
     renderTab()
     await waitFor(() => {
@@ -126,7 +127,13 @@ describe('AIAnalysisTab', () => {
     const input = screen.getByPlaceholderText(/ask a follow-up/i)
     fireEvent.change(input, { target: { value: 'Why did DNS fail?' } })
     fireEvent.submit(input.closest('form')!)
-    expect(await screen.findByText(/follow-up answered/i)).toBeInTheDocument()
+
+    // A follow-up appends to the conversation thread; it does not replace the analysis
+    // panel, so assert on the rendered turn (raw_response) rather than root_cause.
+    expect(
+      await screen.findByText(/follow-up answered in the conversation thread/i)
+    ).toBeInTheDocument()
+    expect(screen.getByText('Why did DNS fail?')).toBeInTheDocument()
 
     expect(mockAnalyze).toHaveBeenCalledTimes(2)
     const secondCall = mockAnalyze.mock.calls[1][0]
@@ -179,11 +186,9 @@ describe('AIAnalysisTab', () => {
 
     expect(mockAnalyze).toHaveBeenCalledTimes(2)
     const secondCall = mockAnalyze.mock.calls[1][0]
-    // After handleAnalyse resets history and then runAnalysis is called,
-    // history should be empty for fresh analysis (the closure captures the reset state)
-    expect(secondCall.conversation_history).toHaveLength(1)
-    expect(secondCall.conversation_history[0].role).toBe('assistant')
-    expect(secondCall.conversation_history[0].content).toBe('first response')
+    // handleAnalyse starts a fresh conversation: it clears history and passes an explicit
+    // empty override, so a re-analysis never carries the previous exchange.
+    expect(secondCall.conversation_history).toHaveLength(0)
     expect(secondCall.question).toBeUndefined()
   })
 
@@ -200,7 +205,7 @@ describe('AIAnalysisTab', () => {
     mockAnalyze.mockResolvedValueOnce(initial).mockResolvedValueOnce({
       ...initial,
       root_cause: 'Follow-up answered',
-      raw_response: 'follow-up response',
+      raw_response: 'follow-up response text',
     })
 
     renderTab()
@@ -211,14 +216,20 @@ describe('AIAnalysisTab', () => {
     const input = screen.getByPlaceholderText(/ask a follow-up/i)
     fireEvent.change(input, { target: { value: 'What does this mean?' } })
     fireEvent.submit(input.closest('form')!)
-    await screen.findByText(/follow-up answered/i)
+    await screen.findByText(/follow-up response text/i)
 
     expect(mockAnalyze).toHaveBeenCalledTimes(2)
     const secondCall = mockAnalyze.mock.calls[1][0]
-    // history should contain the assistant's initial response
-    expect(secondCall.conversation_history).toHaveLength(1)
-    expect(secondCall.conversation_history[0].role).toBe('assistant')
-    expect(secondCall.conversation_history[0].content).toBe('initial assistant response')
+    // The initial analysis seeds two turns: the implied user request, and a human-readable
+    // rendering of the analysis (root cause / fix steps / summary) rather than raw_response,
+    // so follow-ups do not prompt the model with JSON.
+    expect(secondCall.conversation_history).toHaveLength(2)
+    expect(secondCall.conversation_history[0].role).toBe('user')
+    expect(secondCall.conversation_history[0].content).toBe('Analyse this failed migration')
+    expect(secondCall.conversation_history[1].role).toBe('assistant')
+    expect(secondCall.conversation_history[1].content).toContain('Root cause: DNS failure')
+    expect(secondCall.conversation_history[1].content).toContain('add to /etc/hosts')
+    expect(secondCall.conversation_history[1].content).toContain('Summary: DNS issue')
     expect(secondCall.question).toBe('What does this mean?')
   })
 

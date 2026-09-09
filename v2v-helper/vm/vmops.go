@@ -16,6 +16,7 @@ import (
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
 	"github.com/platform9/vjailbreak/v2v-helper/vcenter"
+	"github.com/vmware/govmomi/fault"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
@@ -41,6 +42,7 @@ type VMOperations interface {
 	GetHardwareVersion() (int, error)
 	EnableCBT() error
 	TakeSnapshot(name string) error
+	TakeSnapshotQuiesced(name string) error
 	DeleteSnapshot(name string) error
 	DeleteSnapshotByRef(snap *types.ManagedObjectReference) error
 	GetSnapshot(name string) (*types.ManagedObjectReference, error)
@@ -643,6 +645,36 @@ func (vmops *VMOps) TakeSnapshot(name string) error {
 	return nil
 }
 
+// TakeSnapshotQuiesced is TakeSnapshot with quiesce=true on every attempt --
+// on a running guest with VMware Tools, this flushes filesystem I/O through the
+// sync driver first so the snapshot is filesystem-consistent rather than merely
+// crash-consistent. On a powered-off VM (no live guest to quiesce) vCenter treats
+// it as a no-op, so this is also safe to call regardless of power state.
+func (vmops *VMOps) TakeSnapshotQuiesced(name string) error {
+	vm := vmops.VMObj
+
+	task, err := vm.CreateSnapshot(vmops.ctx, name, "", false, true)
+	if err != nil {
+		if !vcenter.IsTransientVCenterError(err) {
+			return fmt.Errorf("failed to take snapshot: %s", err)
+		}
+		if err := vmops.RefreshVM(); err != nil {
+			return fmt.Errorf("failed to refresh VM reference: %s", err)
+		}
+		vm = vmops.VMObj
+		task, err = vm.CreateSnapshot(vmops.ctx, name, "", false, true)
+		if err != nil {
+			return fmt.Errorf("failed to take snapshot: %s", err)
+		}
+	}
+
+	err = task.Wait(vmops.ctx)
+	if err != nil {
+		return fmt.Errorf("failed while waiting for task: %s", err)
+	}
+	return nil
+}
+
 func (vmops *VMOps) DeleteSnapshot(name string) error {
 	vm := vmops.VMObj
 
@@ -880,30 +912,62 @@ func (vmops *VMOps) VMPowerOff() error {
 	}
 
 	// First try a clean guest shutdown
-	err = vmops.VMGuestShutdown()
-	if err == nil {
+	shutdownErr := vmops.VMGuestShutdown()
+	if shutdownErr == nil {
 		// Guest shutdown succeeded
 		return nil
 	}
 
 	// If guest shutdown failed, log the error and fall back to power off
-	fmt.Printf("Guest shutdown failed, falling back to power off: %s\n", err)
+	log.Printf("Guest shutdown failed, falling back to power off: %s", shutdownErr)
 
+	return vmops.forcePowerOff(shutdownErr)
+}
+
+// forcePowerOff force powers off the VM after a graceful guest shutdown attempt
+// failed. shutdownErr is that attempt's error; it is carried into every error
+// returned here so the cause behind the fallback is not lost.
+func (vmops *VMOps) forcePowerOff(shutdownErr error) error {
 	// Use RefreshVM to re-login and get a fresh VM reference before force power-off.
 	if err := vmops.RefreshVM(); err != nil {
-		return fmt.Errorf("failed to refresh VM reference: %s", err)
+		return fmt.Errorf("failed to refresh VM reference: %s (guest shutdown error: %s)", err, shutdownErr)
 	}
-	vm = vmops.VMObj
 
+	// The guest may have finished shutting down after the shutdown wait expired —
+	// the power state poll can miss the transition. Re-check before forcing a power
+	// off, otherwise vCenter rejects the request with an InvalidPowerState fault.
+	if state, err := vmops.GetVmPowerState(); err == nil && state == types.VirtualMachinePowerStatePoweredOff {
+		return nil
+	}
+
+	vm := vmops.VMObj
 	task, err := vm.PowerOff(vmops.ctx)
 	if err != nil {
-		return fmt.Errorf("failed to power off VM: %s", err)
+		if vmops.poweredOffAfterFault(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to power off VM: %s (guest shutdown error: %s)", err, shutdownErr)
 	}
-	err = task.Wait(vmops.ctx)
-	if err != nil {
-		return fmt.Errorf("failed while waiting for power off task: %s", err)
+	if err := task.Wait(vmops.ctx); err != nil {
+		if vmops.poweredOffAfterFault(err) {
+			return nil
+		}
+		return fmt.Errorf("failed while waiting for power off task: %s (guest shutdown error: %s)", err, shutdownErr)
 	}
 	return nil
+}
+
+// poweredOffAfterFault reports whether err is an InvalidPowerState fault raised
+// because the VM had already reached poweredOff — the guest can shut down in the
+// window between the power off request and vCenter running it. The state is
+// confirmed against vCenter, so an InvalidPowerState for any other state is still
+// treated as a failure.
+func (vmops *VMOps) poweredOffAfterFault(err error) bool {
+	if err == nil || !fault.Is(err, &types.InvalidPowerState{}) {
+		return false
+	}
+	state, stateErr := vmops.GetVmPowerState()
+	return stateErr == nil && state == types.VirtualMachinePowerStatePoweredOff
 }
 
 func (vmops *VMOps) VMPowerOn() error {

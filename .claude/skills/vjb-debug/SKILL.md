@@ -26,6 +26,31 @@ vJailbreak migrates VMs from VMware vSphere to Platform9 PCD. It spans three dis
 
 **The single most important correlation ID is the migration/VM name.** It threads through the `Migration` CRD's name, the `<migration-name>-v2v-helper` pod, and the debug log file `/var/log/pf9/<migration-name>.log`. Get it first — from the UI's migration list or `kubectl get migration -n migration-system`.
 
+## Ground Rules (apply throughout every step below)
+
+- **Independent-evidence rule.** A JIRA/GitHub issue title, a customer-authored RCA doc, or a
+  reporter's stated theory is **one input, not ground truth**. It may be wrong, biased toward a
+  convenient explanation ("must be a regression"), or simply guessing. Refer to it, cite it, but
+  verify independently before adopting its conclusion. State every finding as one of: **evidence
+  observed** (a specific log line, doc citation, or reproduced behavior) vs. **hypothesis
+  proposed** (unconfirmed, needs more evidence) vs. **hypothesis confirmed/refuted** (evidence
+  now settles it). Never present the second as the third.
+- **Verify-before-assert rule.** Do not state how an underlying tool (guestfish/libguestfs/
+  virt-v2v-in-place/nbdkit/vCenter/OpenStack) behaves from memory. Check it — against the actual
+  log evidence in front of you, or against the tool's own docs/source (see the specialist agents
+  in Step 3.5). If you can't verify a claim, say it's unverified rather than stating it with
+  confidence.
+- **Diagnosis-first gate.** Your job by default is to explain what happened, not to fix it. Reach
+  and report a root cause, then **stop and wait for explicit go-ahead** before editing any source
+  file. Do not jump from "root cause found" straight into `Edit` calls. See Step 4.
+- **Parallel-fan-out rule.** When investigation splits into N genuinely independent pieces — N
+  debug bundles to summarize, N migrations to RCA, N competing hypotheses to check, N tool
+  domains a failure might touch — dispatch N agents together rather than one at a time. Each
+  agent's prompt should itself carry the independent-evidence rule (explicit "do not assume X is
+  causal," "do not accept the reporter's theory uncritically," "report facts only, no fix
+  proposals," a word-count cap). Only synthesize/diff the results afterward, centrally — no
+  single agent has the full picture.
+
 ## Architecture / Flow
 
 ```
@@ -77,30 +102,59 @@ Cluster Conversion specific                       → cluster-conversion.md
 Nova/Neutron/Cinder failures                      → run openstack CLI directly (see support-bundle.md)
 ```
 
+### Step 2.5: Check Known Issues First
+
+Grep [known-issues.md](known-issues.md) for the symptom pattern (error string, phase, guest OS)
+before starting a fresh deep investigation. A match means this case has been confirmed before —
+but still confirm it still applies (same phase, same tool version, same migration path) rather
+than reusing the conclusion wholesale. If nothing matches, proceed to Step 3 as normal; this is a
+fast-path, not a gate.
+
 ### Step 3: vJailbreak-VM-Side Investigation (Always First)
 
 Pull the per-migration debug log and the `v2v-helper` pod logs before anything else — see [support-bundle.md](support-bundle.md). Check the `vjailbreak-settings` ConfigMap for the `CLEANUP_*` and `PERIODIC_SYNC_*` values relevant to the phase in question.
+
+**Offline debug bundle instead of a live cluster?** Same steps, reading files from the extracted
+bundle instead of `kubectl`. If you're given a second bundle to compare against (e.g. "here's a
+successful run of the same VM"), see [bundle-comparison.md](bundle-comparison.md) before diffing
+them — confirming VM identity and diffing phase-by-phase, in parallel per the fan-out rule above,
+not by hand.
 
 ### Step 3.5: Second-Order Analysis (MANDATORY for Convert and Data Copy failures)
 
 **Identifying the error string is NOT the end of debugging.** After classifying the phase and finding the error, you MUST answer:
 
-> "WHY does the underlying tool (guestfish / libguestfs / virt-v2v / nbdkit) behave this way for THIS guest OS and disk layout?"
+> "WHY does the underlying tool (guestfish / libguestfs / virt-v2v-in-place / nbdkit / vCenter / OpenStack) behave this way for THIS guest OS, disk layout, and environment?"
 
-Route by tool error:
+Route by tool error. Check [tool-internals.md](tool-internals.md) first (fast, static); escalate
+to the cited specialist agent when the claim is contested, unprecedented, or tool-internals.md
+doesn't cover it — the specialist fetches live docs instead of relying on a cached summary:
 
-| Error contains | Ask | Reference |
-|---|---|---|
-| `guestfish: multi-boot` | How many OS roots does each disk have individually? Is this Btrfs/Snapper? | [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) |
-| `inspect-os` failure | Is guest using Btrfs? Multiple disks? Snapshots? | [tool-internals.md §inspect-os](tool-internals.md#inspect-os) |
-| `resolv.conf` immutable | Did source have `chattr +i` set? | [guest-os-issues.md](guest-os-issues.md) |
-| `No more available PCI slots` | Is image using `virtio-blk` vs `virtio-scsi`? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) |
-| `initramfs` / dracut / mkinitrd | Does guest use dracut or legacy mkinitrd? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) |
-| `nbdkit` / VDDK / transports | Is ESXi reachable by hostname? Thumbprint match? | [tool-internals.md §nbdkit](tool-internals.md#nbdkit) |
+| Error contains | Ask | Static reference | Specialist agent (if escalating) |
+|---|---|---|---|
+| `guestfish: multi-boot` | How many OS roots does each disk have individually? Is this Btrfs/Snapper? | [tool-internals.md §guestfish-i](tool-internals.md#guestfish-i) | `vjb-guestfs-behavior` |
+| `inspect-os` failure | Is guest using Btrfs? Multiple disks? Snapshots? | [tool-internals.md §inspect-os](tool-internals.md#inspect-os) | `vjb-guestfs-behavior` |
+| `resolv.conf` immutable | Did source have `chattr +i` set? | [guest-os-issues.md](guest-os-issues.md) | `vjb-virtv2v-inplace-behavior` |
+| `No more available PCI slots` | Is image using `virtio-blk` vs `virtio-scsi`? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) | `vjb-virtv2v-inplace-behavior` |
+| `initramfs` / dracut / mkinitrd | Does guest use dracut or legacy mkinitrd? | [tool-internals.md §virt-v2v](tool-internals.md#virt-v2v) | `vjb-virtv2v-inplace-behavior` |
+| `nbdkit` / VDDK / transports | Is ESXi reachable by hostname? Thumbprint match? | [tool-internals.md §nbdkit](tool-internals.md#nbdkit) | `vjb-guestfs-behavior` (nbdkit) or `vjb-vcenter-behavior` (VDDK/ESXi-side) |
+| NFC / vpxa / snapshot / moref errors | Is this documented vCenter/ESXi behavior, or unexpected? | — | `vjb-vcenter-behavior` |
+| Nova/Neutron/Cinder errors reaching this deep | Capacity/quota/admin-config on target cloud, or vjailbreak bug? | [support-bundle.md](support-bundle.md) PCD-side table | `vjb-openstack-behavior` |
+
+**When the failure could plausibly originate in more than one domain** (e.g. "is this a vCenter
+snapshot quirk or a guestfs multi-boot false-positive?"), dispatch the relevant specialists **in
+parallel, one message**, per the fan-out rule — don't check them one at a time.
 
 **Do not stop at "code bug in X.go".** Explain what guest-OS or environment characteristic triggered the bug.
 
-### Step 4: Decide Retry vs. Refill-and-Restart vs. Fix Code
+### Step 4: Report Root Cause — Stop Here
+
+Per the diagnosis-first ground rule: present the root cause (evidence observed vs. hypothesis
+confirmed — see ground rules) and **stop**. Do not proceed to editing source files in the same
+turn. Wait for the user to explicitly ask for a fix, a retry, or further investigation before
+continuing to Step 4.5.
+
+### Step 4.5: Decide Retry vs. Refill-and-Restart vs. Fix Code (after user confirms)
 
 Use the retry-vs-cleanup decision tree in [migration-lifecycle.md](migration-lifecycle.md) — it is keyed by phase and by whether the failure is a config problem or a runtime/environment blip. If the failure points to a code bug, identify the owning source file:
 
@@ -132,6 +186,14 @@ openstack volume list --status error --insecure
 openstack server show <server-id> --insecure
 openstack server event list <server-id> --insecure
 ```
+
+### Step 6: Record Confirmed Findings (only with user confirmation)
+
+If the root cause reached **confirmed** status (per the independent-evidence ground rule — actual
+evidence, not an inherited hypothesis), ask the user whether to record it in
+[known-issues.md](known-issues.md). **Never append without an explicit yes** — this file is
+checked into git and read by future debugging sessions, so a wrong or premature entry compounds.
+If confirmed, append a row using the format in known-issues.md's own header.
 
 ## Quick Error Pattern Reference
 
@@ -176,11 +238,27 @@ openstack server event list <server-id> --insecure
 - [guest-os-issues.md](guest-os-issues.md) — Windows/Linux conversion quirks
 - [cluster-conversion.md](cluster-conversion.md) — ESXi-to-PCD-hypervisor conversion
 - [support-bundle.md](support-bundle.md) — log/CRD map, support-bundle ZIP layout
+- [bundle-comparison.md](bundle-comparison.md) — diffing two offline debug bundles (identity check, phase-by-phase timeline)
+- [known-issues.md](known-issues.md) — living, confirmed-case log; check first (Step 2.5), append with user confirmation (Step 6)
+
+### Specialist Agents
+- `vjb-debug-triage` — controller + v2v-helper log triage; live (kubectl) or bundle (offline tarball) mode
+- `vjb-module-investigator` — cross-module code locator (all 4 Go modules)
+- `vjb-vcenter-behavior` — vCenter/ESXi/govmomi behavior, cites vSphere API docs + govmomi
+- `vjb-guestfs-behavior` — libguestfs/guestfish/nbdkit internals, cites libguestfs.org/nbdkit.1.html
+- `vjb-virtv2v-inplace-behavior` — `virt-v2v-in-place` specifically, cites virt-v2v-in-place(1)/virt-v2v-support(1)
+- `vjb-openstack-behavior` — Nova/Neutron/Cinder behavior, cites docs.openstack.org
+
+Dispatch the relevant specialists in parallel (one message) when a hypothesis spans domains — see
+the parallel-fan-out ground rule.
 
 ### Public Documentation
 - vJailbreak docs: https://platform9.github.io/vjailbreak/
-- virt-v2v: https://libguestfs.org/virt-v2v.1.html
+- virt-v2v-in-place: https://libguestfs.org/virt-v2v-in-place.1.html
 - virt-v2v support matrix: https://libguestfs.org/virt-v2v-support.1.html
 - libguestfs: https://libguestfs.org/
 - nbdkit: https://libguestfs.org/nbdkit.1.html
+- vSphere API reference: https://developer.vmware.com/apis/vsphere-automation/latest/
+- govmomi: https://github.com/vmware/govmomi
+- OpenStack docs: https://docs.openstack.org/
 - Architecture deep-dive: https://deepwiki.com/platform9/vjailbreak

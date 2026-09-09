@@ -172,7 +172,10 @@ describe('derivePhaseStates — active migration', () => {
     } as unknown as Migration
     const states = derivePhaseStates(migration)
 
-    expect(states[4].detail).toBe('Converting disk format…')
+    // #2200 replaced "Converting disk <n> of <total>" with a count-free message. The point
+    // of this test is that neither currentDisk nor totalDisks leaks into the detail line.
+    expect(states[4].detail).toBe('Converting disk.')
+    expect(states[4].detail).not.toMatch(/\d/)
   })
 
   it('pauses at cutover while awaiting admin', () => {

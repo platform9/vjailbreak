@@ -338,6 +338,7 @@ func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
 
 	statusPatch := client.MergeFrom(vjNode.DeepCopy())
 	vjNode.Status.OpenstackUUID = ""
+	vjNode.Status.OpenstackName = ""
 	vjNode.Status.Phase = ""
 	if err := r.Client.Status().Patch(ctx, vjNode, statusPatch); err != nil {
 		return false, errors.Wrap(err, "failed to clear OpenstackUUID for reprovision")
