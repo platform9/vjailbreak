@@ -34,7 +34,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
-	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/allowedaddresspairs"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/portsecurity"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
@@ -949,17 +948,25 @@ type AllowedAddressPair struct {
 	MAC string
 }
 
-// buildPortCreateOptions layers the OpenStack port extensions required by
-// vJailbreak onto the base create options:
+// buildPortCreateOptions sets allowed-address-pairs directly on the base create options,
+// then layers the OpenStack port extensions required by vJailbreak on top:
 //   - L2-only networks get the {"l2-port": true} binding profile so PCD treats
 //     the port as belonging to an L2 network.
 //   - Ports with no security groups get port security disabled.
-//   - NICs with allowed-address-pairs get them attached via the Neutron allowed-address-pairs extension.
 //
-// All three extensions implement ports.CreateOptsBuilder and compose, so they can be
+// The two extensions implement ports.CreateOptsBuilder and compose, so they can be
 // layered together when multiple conditions apply. Kept as a pure function so the
 // option-building logic can be unit tested without an OpenStack client.
 func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool, allowedAddressPairs []AllowedAddressPair) ports.CreateOptsBuilder {
+	// AllowedAddressPairs is a plain field on ports.CreateOpts, so set it before wrapping with other extensions.
+	if len(allowedAddressPairs) > 0 {
+		pairs := make([]ports.AddressPair, len(allowedAddressPairs))
+		for i, pair := range allowedAddressPairs {
+			pairs[i] = ports.AddressPair{IPAddress: pair.IP, MACAddress: pair.MAC}
+		}
+		createOpts.AllowedAddressPairs = pairs
+	}
+
 	var optsBuilder ports.CreateOptsBuilder = createOpts
 
 	// For L2-only networks, attach the binding profile expected by PCD.
@@ -976,18 +983,6 @@ func buildPortCreateOptions(createOpts ports.CreateOpts, isL2Network bool, allow
 		optsBuilder = portsecurity.PortCreateOptsExt{
 			CreateOptsBuilder:   optsBuilder,
 			PortSecurityEnabled: &disabled,
-		}
-	}
-
-	// Attach any virtual/secondary IPs as Neutron allowed-address-pairs.
-	if len(allowedAddressPairs) > 0 {
-		pairs := make([]allowedaddresspairs.AddressPair, len(allowedAddressPairs))
-		for i, pair := range allowedAddressPairs {
-			pairs[i] = allowedaddresspairs.AddressPair{IPAddress: pair.IP, MACAddress: pair.MAC}
-		}
-		optsBuilder = allowedaddresspairs.CreateOptsExt{
-			CreateOptsBuilder:   optsBuilder,
-			AllowedAddressPairs: pairs,
 		}
 	}
 

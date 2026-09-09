@@ -642,9 +642,9 @@ func TestGetCreateOpts_MultipleNICsSameSubnet_IndexIncrements(t *testing.T) {
 }
 
 // TestBuildPortCreateOptions_AllowedAddressPairs verifies that
-// buildPortCreateOptions attaches the Neutron allowed-address-pairs
-// extension when pairs are given, composing correctly with the other two
-// extensions, and attaches nothing when there are none.
+// buildPortCreateOptions sets the base ports.CreateOpts allowed-address-pairs
+// field when pairs are given, composing correctly with the other extensions,
+// and sets nothing when there are none.
 func TestBuildPortCreateOptions_AllowedAddressPairs(t *testing.T) {
 	withGroups := []string{"sg-1"}
 
@@ -694,14 +694,20 @@ func TestBuildPortCreateOptions_AllowedAddressPairs(t *testing.T) {
 			if !hasPairs {
 				t.Fatalf("expected allowed_address_pairs to be set, got none")
 			}
-			gotPairs, ok := got.([]map[string]any)
+			// ToPortCreateMap round-trips through encoding/json, so a nested slice
+			// decodes as []any with map[string]any elements, not []map[string]any.
+			gotPairs, ok := got.([]any)
 			if !ok || len(gotPairs) != len(tt.want) {
 				t.Fatalf("allowed_address_pairs = %#v, want %#v", got, tt.want)
 			}
 			for i := range tt.want {
+				gotPair, ok := gotPairs[i].(map[string]any)
+				if !ok {
+					t.Fatalf("allowed_address_pairs[%d] = %T, want map[string]any", i, gotPairs[i])
+				}
 				for k, v := range tt.want[i] {
-					if gotPairs[i][k] != v {
-						t.Fatalf("allowed_address_pairs[%d][%q] = %v, want %v", i, k, gotPairs[i][k], v)
+					if gotPair[k] != v {
+						t.Fatalf("allowed_address_pairs[%d][%q] = %v, want %v", i, k, gotPair[k], v)
 					}
 				}
 			}
