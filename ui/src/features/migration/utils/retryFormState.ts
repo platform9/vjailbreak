@@ -7,6 +7,7 @@ import type {
   SelectedMigrationOptionsType
 } from '../types'
 import { customMetadataToRecord } from './metadataUtils'
+import { findPcdClusterByName, type PcdClusterOption } from './pcdClusterLookup'
 
 const ZERO_TIME = '0001-01-01T00:00:00Z'
 export const DEFAULT_FIRSTBOOT_SCRIPT = 'echo "Add your startup script here!"'
@@ -23,7 +24,7 @@ export interface RetryFormStateInput {
   openstackRef: string
   networkMappings: Array<{ source: string; target: string }>
   storageMappings: Array<{ source: string; target: string }>
-  pcdData: Array<{ id: string; name?: string }>
+  pcdData: PcdClusterOption[]
 }
 
 export interface RetryFormState {
@@ -49,7 +50,9 @@ export function buildRetryFormState({
 }: RetryFormStateInput): RetryFormState {
   const strategy = plan.spec?.migrationStrategy
   const advanced = plan.spec?.advancedOptions
-  const pcd = pcdData.find((p) => p.name === template.spec?.targetPCDClusterName)
+  // Scope the lookup to the credential this migration targeted — another tenant may expose
+  // a cluster with the same name.
+  const pcd = findPcdClusterByName(pcdData, template.spec?.targetPCDClusterName, openstackRef)
 
   const cutoverOption = strategy?.adminInitiatedCutOver
     ? CUTOVER_TYPES.ADMIN_INITIATED
