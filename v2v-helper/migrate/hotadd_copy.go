@@ -721,8 +721,11 @@ func (migobj *Migrate) HotAddCopyDisksCold(ctx context.Context, vminfo vm.VMInfo
 			}
 			t.NBDPid = pid
 
-			migobj.logMessage(fmt.Sprintf("%s nbd://%s:%d → %s (disk %d/%d)",
-				constants.EventMessageHotAddCopying, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
+			// The reason before the comma must stay stable per disk index (no ephemeral
+			// port/dest baked in) so a retried migration updates this disk's DataCopy
+			// condition in place instead of appending a duplicate every attempt.
+			migobj.logMessage(fmt.Sprintf("%s %d, nbd://%s:%d → %s (disk %d/%d)",
+				constants.EventMessageHotAddCopying, idx+1, migobj.ProxyVMIP, t.NBDPort, t.DestDevice, idx+1, len(transfers)))
 			if err := migobj.runNBDCopy(ctx, migobj.ProxyVMIP, t.NBDPort, t.DestDevice); err != nil {
 				errCh <- errors.Wrapf(err, "disk %d: nbdcopy failed", idx+1)
 				return
