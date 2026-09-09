@@ -24,6 +24,7 @@ export interface RetryFormStateInput {
   openstackRef: string
   networkMappings: Array<{ source: string; target: string }>
   storageMappings: Array<{ source: string; target: string }>
+  arrayCredsMappings: Array<{ source: string; target: string }>
   pcdData: PcdClusterOption[]
 }
 
@@ -46,6 +47,7 @@ export function buildRetryFormState({
   openstackRef,
   networkMappings,
   storageMappings,
+  arrayCredsMappings,
   pcdData
 }: RetryFormStateInput): RetryFormState {
   const strategy = plan.spec?.migrationStrategy
@@ -73,6 +75,9 @@ export function buildRetryFormState({
     vms: [vmData],
     networkMappings,
     storageMappings,
+    // Restored so a StorageAcceleratedCopy retry does not open with an empty datastore ->
+    // ArrayCreds mapping, which the form rejects as incomplete.
+    arrayCredsMappings,
     storageCopyMethod: (template.spec?.storageCopyMethod ||
       'normal') as FormValues['storageCopyMethod'],
     ...(template.spec?.proxyVMRef?.name && { proxyVMRef: template.spec.proxyVMRef.name }),
@@ -256,5 +261,45 @@ export function buildRetryPlanSpec({
       acknowledgeNetworkConflictRisk: Boolean(params.acknowledgeNetworkConflictRisk),
       imageProfiles: params.imageProfiles?.length ? params.imageProfiles : null
     }
+  }
+}
+
+export interface RetryTemplateSpecInput {
+  originalTemplateSpec: MigrationTemplate['spec'] | undefined
+  params: Partial<FormValues>
+  selectedPcdClusterName: string
+  newNetworkMappingName?: string
+  newStorageMappingName?: string
+  newArrayCredsMappingName?: string
+}
+
+// Builds the MigrationTemplate spec for the replacement template created by edit-and-retry.
+// Immutable source/destination fields are inherited from the original; everything the retry
+// form can edit is overridden. Pure.
+export function buildRetryTemplateSpec({
+  originalTemplateSpec,
+  params,
+  selectedPcdClusterName,
+  newNetworkMappingName,
+  newStorageMappingName,
+  newArrayCredsMappingName
+}: RetryTemplateSpecInput) {
+  const inherited = originalTemplateSpec || ({} as NonNullable<MigrationTemplate['spec']>)
+  const isHotAdd = params.storageCopyMethod === 'HotAdd'
+
+  return {
+    ...inherited,
+    ...(newNetworkMappingName !== undefined && { networkMapping: newNetworkMappingName }),
+    ...(newStorageMappingName !== undefined && { storageMapping: newStorageMappingName }),
+    ...(newArrayCredsMappingName !== undefined && {
+      arrayCredsMapping: newArrayCredsMappingName
+    }),
+    storageCopyMethod: params.storageCopyMethod || 'normal',
+    useGPUFlavor: params.useGPU || false,
+    targetPCDClusterName: selectedPcdClusterName || inherited.targetPCDClusterName || '',
+    // A ProxyVM belongs only to a HotAdd template. The spread above inherits the original's
+    // ref, so switching away from HotAdd on retry has to drop it explicitly — undefined is
+    // omitted by JSON serialisation, leaving the field unset on the new template.
+    proxyVMRef: isHotAdd && params.proxyVMRef ? { name: params.proxyVMRef } : undefined
   }
 }

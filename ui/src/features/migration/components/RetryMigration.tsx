@@ -10,7 +10,7 @@ import {
 } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { FieldLabel } from 'src/components/design-system/ui'
-import { findPcdClusterByName } from '../utils/pcdClusterLookup'
+import { findPcdClusterByName, pcdClustersForCredential } from '../utils/pcdClusterLookup'
 import '@cds/core/icon/register.js'
 import { ClarityIcons, clusterIcon, searchIcon } from '@cds/core/icon'
 
@@ -63,16 +63,24 @@ export function RetrySourceDestinationSummary({
     findPcdClusterByName(pcdClusters, selectedPcdClusterId, openstackCredName)?.id ||
     selectedPcdClusterId
 
+  // Retry inherits the original template's destination.openstackRef, and the network,
+  // storage, flavor and security-group choices are all resolved against that credential —
+  // so offering another credential's clusters offers something retry cannot honour.
+  const selectablePcdClusters = React.useMemo(
+    () => pcdClustersForCredential(pcdClusters, openstackCredName, resolvedClusterId),
+    [pcdClusters, openstackCredName, resolvedClusterId]
+  )
+
   const filteredPcdClusters = React.useMemo(() => {
-    if (!pcdSearchTerm) return pcdClusters
+    if (!pcdSearchTerm) return selectablePcdClusters
     const term = pcdSearchTerm.toLowerCase().trim()
-    return pcdClusters.filter(
+    return selectablePcdClusters.filter(
       (c) =>
         (c.name || '').toLowerCase().includes(term) ||
         (c.openstackCredName || '').toLowerCase().includes(term) ||
         (c.tenantName || '').toLowerCase().includes(term)
     )
-  }, [pcdClusters, pcdSearchTerm])
+  }, [selectablePcdClusters, pcdSearchTerm])
 
   const clusterDropdown = (
     <FormControl fullWidth size="small" disabled={disabled}>

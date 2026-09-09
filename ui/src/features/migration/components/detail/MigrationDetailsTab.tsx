@@ -35,6 +35,7 @@ import {
 import { FieldLabel, KeyValueGrid, SurfaceCard } from 'src/components'
 import { formatDateTime, formatDiskSize } from 'src/utils'
 import { normalizeVmDisks, resolveFlavorDisplay } from '../../utils/migrationDetailFields'
+import { buildDestinationTenantResolver } from '../../utils/pcdClusterLookup'
 import { Migration } from '../../api/migrations'
 import MigrationTagsMetadataCard from './MigrationTagsMetadataCard'
 
@@ -295,64 +296,21 @@ export default function MigrationDetailsTab({ migration }: MigrationDetailsTabPr
   const sourceCluster = rawSourceCluster && rawSourceCluster !== esxiHost ? rawSourceCluster : 'No cluster'
   const destinationCluster = (templateSpec?.targetPCDClusterName as string) || 'N/A'
 
-  const openstackCredNameToProjectName = useMemo(() => {
-    const entries = (data?.openstackCredsList || [])
-      .map((c) => {
-        const name = String(c?.metadata?.name || '').trim()
-        const project = String((c?.spec as any)?.projectName || '').trim()
-        return name && project ? ([name, project] as const) : null
-      })
-      .filter(Boolean) as Array<readonly [string, string]>
-    return new Map(entries)
-  }, [data?.openstackCredsList])
-
-  const destinationClusterToOpenstackCredName = useMemo(() => {
-    const entries = (data?.pcdClusters || [])
-      .map((c) => {
-        const clusterName = String((c as any)?.spec?.clusterName || '').trim()
-        const openstackCredName = String(
-          (c as any)?.metadata?.labels?.['vjailbreak.k8s.pf9.io/openstackcreds'] || ''
-        ).trim()
-        return clusterName && openstackCredName ? ([clusterName, openstackCredName] as const) : null
-      })
-      .filter(Boolean) as Array<readonly [string, string]>
-    return new Map(entries)
-  }, [data?.pcdClusters])
-
-  const destinationClusterToProjectNameFromHostConfig = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const cred of data?.openstackCredsList || []) {
-      const projectName = String((cred?.spec as any)?.projectName || '').trim()
-      if (!projectName) continue
-      const hostConfigs = ((cred?.spec as any)?.pcdHostConfig as any[]) || []
-      for (const cfg of hostConfigs) {
-        const clusterName = String((cfg as any)?.clusterName || '').trim()
-        if (clusterName && !map.has(clusterName)) map.set(clusterName, projectName)
-      }
-    }
-    return map
-  }, [data?.openstackCredsList])
+  // Shared with the migrations table (useMigrationPlanDestinationsQuery) so both surfaces
+  // apply the same precedence: the template's destination.openstackRef identifies the
+  // tenant exactly, cluster-name lookups are only fallbacks.
+  const resolveTenant = useMemo(
+    () => buildDestinationTenantResolver(data?.openstackCredsList, data?.pcdClusters),
+    [data?.openstackCredsList, data?.pcdClusters]
+  )
 
   const destinationTenant = useMemo(() => {
-    const direct = ((data?.openstackCreds?.spec as any)?.projectName as string) || ''
+    // The detail query fetches this migration's credential by name, so when it carries a
+    // projectName it is the most direct answer available.
+    const direct = (data?.openstackCreds?.spec as { projectName?: string } | undefined)?.projectName
     if (direct) return direct
-    const clusterName = String(destinationCluster || '').trim()
-    if (!clusterName || clusterName === 'N/A') return 'N/A'
-    const mappedCredName = destinationClusterToOpenstackCredName.get(clusterName)
-    if (mappedCredName) {
-      const mappedProjectName = openstackCredNameToProjectName.get(mappedCredName)
-      if (mappedProjectName) return mappedProjectName
-    }
-    const fromHostConfig = destinationClusterToProjectNameFromHostConfig.get(clusterName)
-    if (fromHostConfig) return fromHostConfig
-    return 'N/A'
-  }, [
-    data?.openstackCreds,
-    destinationCluster,
-    destinationClusterToOpenstackCredName,
-    openstackCredNameToProjectName,
-    destinationClusterToProjectNameFromHostConfig,
-  ])
+    return resolveTenant(data?.openstackCredsRef || undefined, destinationCluster)
+  }, [data?.openstackCreds, data?.openstackCredsRef, destinationCluster, resolveTenant])
 
   const rawNetworkMappings = useMemo(
     () => normalizeMappingRows(((data?.networkMapping?.spec as any)?.networks as any[]) || []),

@@ -6,6 +6,8 @@ import { createNetworkMappingJson } from 'src/api/network-mapping/helpers'
 import { postNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { createStorageMappingJson } from 'src/api/storage-mappings/helpers'
 import { postStorageMapping } from 'src/api/storage-mappings/storageMappings'
+import { createArrayCredsMappingJson } from 'src/api/arraycreds-mapping/helpers'
+import { postArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { patchVMwareMachine } from 'src/api/vmware-machines/vmwareMachines'
 import {
   deleteMigrationPlan,
@@ -21,22 +23,45 @@ import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-
 import { MIGRATIONS_QUERY_KEY } from 'src/hooks/api/useMigrationsQuery'
 import type { RetryMigrationConfig } from '../context/MigrationFormContext'
 import type { FormValues, SelectedMigrationOptionsType } from '../types'
-import { buildRetryPlanSpec } from '../utils/retryFormState'
+import { buildRetryPlanSpec, buildRetryTemplateSpec } from '../utils/retryFormState'
 
-async function pollUntilGone(
+const httpStatus = (err: unknown): number | undefined =>
+  (err as { response?: { status?: number } })?.response?.status
+
+// Waits for a resource to actually disappear.
+//
+// Only a 404 counts as gone: a 5xx or a network blip used to be swallowed and read as a
+// successful delete. And a timeout used to return silently, so edit-and-retry would create
+// the replacement plan while the failed Migration was still present — leaving the VM in two
+// plans, with the old v2v-helper potentially still running against it. Both now surface as
+// an error the drawer shows instead of proceeding.
+export async function pollUntilGone(
   fetcher: () => Promise<unknown>,
-  pollIntervalMs = 500,
-  timeoutMs = 30000
+  {
+    pollIntervalMs = 500,
+    timeoutMs = 30000,
+    resourceLabel = 'Resource'
+  }: { pollIntervalMs?: number; timeoutMs?: number; resourceLabel?: string } = {}
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs
+  let lastError: unknown
+
   while (Date.now() < deadline) {
     try {
       await fetcher()
-      await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs))
-    } catch {
-      return
+    } catch (err) {
+      if (httpStatus(err) === 404) return
+      lastError = err
     }
+    await new Promise<void>((resolve) => setTimeout(resolve, pollIntervalMs))
   }
+
+  const suffix =
+    lastError instanceof Error ? ` Last error while checking: ${lastError.message}` : ''
+  throw new Error(
+    `${resourceLabel} was still present after ${Math.round(timeoutMs / 1000)}s, ` +
+      `so the retry was stopped before creating replacement resources.${suffix}`
+  )
 }
 
 
@@ -128,10 +153,11 @@ export function useRetrySubmit({
     //    new resources. When isLastVMInPlan the plan deletion above triggers GC cascade,
     //    so the Migration may already be gone by the time we reach this step — treat 404 as success.
     await deleteMigration(retryConfig.migrationName, namespace).catch((err: unknown) => {
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (status !== 404) throw err
+      if (httpStatus(err) !== 404) throw err
     })
-    await pollUntilGone(() => getMigration(retryConfig.migrationName, namespace))
+    await pollUntilGone(() => getMigration(retryConfig.migrationName, namespace), {
+      resourceLabel: `Migration "${retryConfig.migrationName}"`
+    })
 
     // 3. Create new NetworkMapping.
     let newNetworkMappingName: string | undefined
@@ -153,20 +179,28 @@ export function useRetrySubmit({
       newStorageMappingName = created.metadata.name
     }
 
+    // Create new ArrayCredsMapping for StorageAcceleratedCopy. Without this the
+    // retried template keeps pointing at the original mapping, so edits made in the
+    // retry form are silently discarded.
+    let newArrayCredsMappingName: string | undefined
+    if (params.storageCopyMethod === 'StorageAcceleratedCopy' && params.arrayCredsMappings?.length) {
+      const created = await postArrayCredsMapping(
+        createArrayCredsMappingJson({ mappings: params.arrayCredsMappings }),
+        namespace
+      )
+      newArrayCredsMappingName = created.metadata.name
+    }
+
     // 5. POST new MigrationTemplate: inherit immutable source/destination fields from
     //    the original, override everything the user may have edited.
-    const originalTemplateSpec = retryTemplate.spec || {}
-    const newTemplateSpec = {
-      ...originalTemplateSpec,
-      ...(newNetworkMappingName !== undefined && { networkMapping: newNetworkMappingName }),
-      ...(newStorageMappingName !== undefined && { storageMapping: newStorageMappingName }),
-      storageCopyMethod: params.storageCopyMethod || 'normal',
-      useGPUFlavor: params.useGPU || false,
-      targetPCDClusterName: selectedPcdClusterName || originalTemplateSpec.targetPCDClusterName || '',
-      ...(params.storageCopyMethod === 'HotAdd' && params.proxyVMRef
-        ? { proxyVMRef: { name: params.proxyVMRef } }
-        : {})
-    }
+    const newTemplateSpec = buildRetryTemplateSpec({
+      originalTemplateSpec: retryTemplate.spec,
+      params,
+      selectedPcdClusterName,
+      newNetworkMappingName,
+      newStorageMappingName,
+      newArrayCredsMappingName
+    })
     const newTemplate = await postMigrationTemplate(
       {
         apiVersion: 'vjailbreak.k8s.pf9.io/v1alpha1',

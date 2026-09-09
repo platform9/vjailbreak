@@ -8,6 +8,7 @@ import { getMigrationTemplate } from 'src/features/migration/api/migration-templ
 import { MigrationTemplate, VmData } from 'src/features/migration/api/migration-templates/model'
 import { getNetworkMapping } from 'src/api/network-mapping/networkMappings'
 import { getStorageMapping } from 'src/api/storage-mappings/storageMappings'
+import { getArrayCredsMapping } from 'src/api/arraycreds-mapping/arrayCredsMapping'
 import { getVmwareCredentials } from 'src/api/vmware-creds/vmwareCreds'
 import { getOpenstackCredentials } from 'src/api/openstack-creds/openstackCreds'
 import { getVMwareMachine, mapToVmData } from 'src/api/vmware-machines/vmwareMachines'
@@ -31,6 +32,7 @@ interface RetryResources {
   openstackRef: string
   networkMappings: Array<{ source: string; target: string }>
   storageMappings: Array<{ source: string; target: string }>
+  arrayCredsMappings: Array<{ source: string; target: string }>
 }
 
 export interface RetryPrefillState {
@@ -128,7 +130,9 @@ export function useRetryPrefill({
       }
 
       // Fetch mappings in parallel — missing mappings are not blocking.
-      const [networkMappings, storageMappings] = await Promise.all([
+      // ArrayCredsMapping is only set for StorageAcceleratedCopy, but it must be restored
+      // or the retry form fails validation with an empty datastore -> ArrayCreds mapping.
+      const [networkMappings, storageMappings, arrayCredsMappings] = await Promise.all([
         template.spec?.networkMapping
           ? getNetworkMapping(template.spec.networkMapping, namespace!)
               .then((nm) => nm?.spec?.networks ?? [])
@@ -137,6 +141,11 @@ export function useRetryPrefill({
         template.spec?.storageMapping
           ? getStorageMapping(template.spec.storageMapping, namespace!)
               .then((sm) => sm?.spec?.storages ?? [])
+              .catch(() => [])
+          : Promise.resolve([]),
+        template.spec?.arrayCredsMapping
+          ? getArrayCredsMapping(template.spec.arrayCredsMapping, namespace!)
+              .then((am) => am?.spec?.mappings ?? [])
               .catch(() => [])
           : Promise.resolve([])
       ])
@@ -184,7 +193,8 @@ export function useRetryPrefill({
         vmwareRef: vmwareRef || '',
         openstackRef: openstackRef || '',
         networkMappings,
-        storageMappings
+        storageMappings,
+        arrayCredsMappings
       }
     }
   })
@@ -203,7 +213,8 @@ export function useRetryPrefill({
       vmwareRef,
       openstackRef,
       networkMappings,
-      storageMappings
+      storageMappings,
+      arrayCredsMappings
     } = query.data
     setMigrationTemplate(template)
 
@@ -217,6 +228,7 @@ export function useRetryPrefill({
       openstackRef,
       networkMappings,
       storageMappings,
+      arrayCredsMappings,
       pcdData
     })
 
