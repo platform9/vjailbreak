@@ -1,5 +1,7 @@
 ---
 name: vjb-debug
+version: 1.0.1
+last-updated: 2026-09-08
 description: |
   vJailbreak (VJB) VMware-to-PCD VM migration debugging. Use for: migration stuck or failed in
   any phase (discovery, mapping, validate, data copy, convert, cutover, post-migration), missing

@@ -181,7 +181,7 @@ kubectl -n migration-system logs <migration-name>-v2v-helper        # V2V helper
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at specs/2180-v2v-restructure/plan.md
+at specs/2303-debug-skill-hub/plan.md
 <!-- SPECKIT END -->
 
 ## graphify

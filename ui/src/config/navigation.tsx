@@ -6,6 +6,7 @@ import MonitoringIcon from '@mui/icons-material/Insights'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Storage } from '@mui/icons-material'
 import VpnKeyIcon from '@mui/icons-material/VpnKey'
+import SmartToyIcon from '@mui/icons-material/SmartToy'
 
 export const navigationItems: NavigationItem[] = [
   {
@@ -103,6 +104,12 @@ export const navigationItems: NavigationItem[] = [
     icon: <DescriptionIcon />,
     external: true,
     externalUrl: 'https://platform9.github.io/vjailbreak/introduction/getting_started/'
+  },
+  {
+    id: 'debug-with-ai',
+    label: 'Debug with AI',
+    path: '/help/debug-ai',
+    icon: <SmartToyIcon />
   }
 ]
 
