@@ -37,7 +37,6 @@ import (
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/object"
 	"github.com/vmware/govmomi/property"
-	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/view"
 	"github.com/vmware/govmomi/vim25"
@@ -422,7 +421,7 @@ func ValidateAndGetProviderClient(ctx context.Context, k3sclient client.Client,
 	return providerClient, nil
 }
 
-var vmwareClientMap *sync.Map
+var vmwareClients = vmwarecommon.NewClientCache()
 
 // ValidateVMwareCreds validates the VMware credentials
 func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds *vjailbreakv1alpha1.VMwareCreds) (*vim25.Client, error) {
@@ -449,23 +448,13 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		Reauth:   true,
 	}
 	mapKey := string(vmwcreds.UID)
-	// Initialize map if needed
-	if vmwareClientMap == nil {
-		vmwareClientMap = &sync.Map{}
-	}
-	// Check cache for existing authenticated client
-	if val, ok := vmwareClientMap.Load(mapKey); ok {
-		cachedClient, valid := val.(*vim25.Client)
-		if valid && cachedClient != nil && cachedClient.Client != nil {
-			sessMgr := session.NewManager(cachedClient)
-			userSession, err := sessMgr.UserSession(ctx)
-			if err == nil && userSession != nil {
-				// Cached client is still valid, return it
-				return cachedClient, nil
-			}
-			// Cached client is no longer valid, remove it
-			vmwareClientMap.Delete(mapKey)
-		}
+	fingerprint := vmwarecommon.CredentialFingerprint(host, username, password, disableSSLVerification, datacenter)
+	// Check cache for an existing client authenticated with these exact
+	// credentials. A changed password (or host/username/insecure/datacenter)
+	// changes the fingerprint, so a rotated password always forces a fresh
+	// login instead of reusing a session that predates the change.
+	if cachedClient, ok := vmwareClients.Get(ctx, mapKey, fingerprint); ok {
+		return cachedClient, nil
 	}
 	settings, err := k8sutils.GetVjailbreakSettings(ctx, k3sclient)
 	if err != nil {
@@ -509,7 +498,7 @@ func ValidateVMwareCreds(ctx context.Context, k3sclient client.Client, vmwcreds 
 		}
 	}
 	// All validations passed - cache the fully validated client
-	vmwareClientMap.Store(mapKey, c)
+	vmwareClients.Store(ctx, mapKey, fingerprint, c)
 	return c, nil
 }
 
@@ -2131,11 +2120,8 @@ func LogoutVMwareClient(ctx context.Context, k3sclient client.Client, vmwcreds *
 // CleanupCachedVMwareClient removes the cached VMware client for the given credentials. It's a best effort approach to avoid stale clients.
 func CleanupCachedVMwareClient(ctx context.Context, vmwcreds *vjailbreakv1alpha1.VMwareCreds) {
 	ctxlog := log.FromContext(ctx)
-	mapKey := string(vmwcreds.UID)
-	if vmwareClientMap != nil {
-		vmwareClientMap.Delete(mapKey)
-		ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
-	}
+	vmwareClients.Delete(ctx, string(vmwcreds.UID))
+	ctxlog.Info("Removed VMware client from cache", "uid", string(vmwcreds.UID))
 }
 
 // GetBackendPools discovers and returns storage backend pools from OpenStack Cinder

@@ -7,6 +7,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	netutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	vmwarecommon "github.com/platform9/vjailbreak/pkg/common/vmware"
+	"github.com/vmware/govmomi/vim25"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -247,5 +249,63 @@ func TestShouldSkipVMwareMachineReconciliation_WhenMigrationExistsWithAnnotation
 	}
 	if !skip {
 		t.Fatalf("expected skip=true for VM with spaces in name via annotation path, got false (reason=%q)", reason)
+	}
+}
+
+func TestCleanupCachedVMwareClient_NoEntry_NoPanic(t *testing.T) {
+	ctx := context.Background()
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vmware-cleanup-noop",
+			Namespace: constants.NamespaceMigrationSystem,
+			UID:       k8stypes.UID("uid-cleanup-noop"),
+		},
+	}
+
+	// Must be a safe no-op when nothing was ever cached for this UID.
+	CleanupCachedVMwareClient(ctx, vmwcreds)
+}
+
+func TestCleanupCachedVMwareClient_EvictsCachedEntry(t *testing.T) {
+	ctx := context.Background()
+	vmwcreds := &vjailbreakv1alpha1.VMwareCreds{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "vmware-cleanup",
+			Namespace: constants.NamespaceMigrationSystem,
+			UID:       k8stypes.UID("uid-cleanup-test"),
+		},
+	}
+	uid := string(vmwcreds.UID)
+	vmwareClients.Store(ctx, uid, "fp-1", &vim25.Client{})
+
+	CleanupCachedVMwareClient(ctx, vmwcreds)
+
+	if _, ok := vmwareClients.Get(ctx, uid, "fp-1"); ok {
+		t.Fatal("expected CleanupCachedVMwareClient to evict the cached entry for this UID")
+	}
+}
+
+// TestValidateVMwareCreds_CacheMissesOnPasswordChange is a regression test for
+// the bug where revalidating VMwareCreds after a password change still
+// reported success: the cache was keyed only by the CR's (immutable) UID, so
+// a still-alive cached vCenter session masked the fact that the new password
+// was never actually checked. The cache key must change whenever the
+// credentials do, so a rotated password always forces a fresh login instead
+// of reusing a session authenticated with the old password.
+func TestValidateVMwareCreds_CacheMissesOnPasswordChange(t *testing.T) {
+	ctx := context.Background()
+	uid := "uid-password-rotation-test"
+	oldFingerprint := vmwarecommon.CredentialFingerprint("host", "user", "old-password", false, "dc1")
+	newFingerprint := vmwarecommon.CredentialFingerprint("host", "user", "new-password", false, "dc1")
+
+	if oldFingerprint == newFingerprint {
+		t.Fatal("expected fingerprint to change when the password changes")
+	}
+
+	vmwareClients.Store(ctx, uid, oldFingerprint, &vim25.Client{})
+
+	if _, ok := vmwareClients.Get(ctx, uid, newFingerprint); ok {
+		t.Fatal("expected cache miss when the fingerprint no longer matches (password changed) - " +
+			"a hit here would reproduce the revalidate-succeeds-after-password-change bug")
 	}
 }

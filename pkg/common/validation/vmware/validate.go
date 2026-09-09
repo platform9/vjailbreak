@@ -15,8 +15,8 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
+	vmwarecommon "github.com/platform9/vjailbreak/pkg/common/vmware"
 	"github.com/vmware/govmomi/find"
-	"github.com/vmware/govmomi/session"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +34,7 @@ const (
 	retryLimitKey            = "VCENTER_LOGIN_RETRY_LIMIT"
 )
 
-var vmwareClientMap *sync.Map
+var vmwareClients = vmwarecommon.NewClientCache()
 
 // ValidationResult holds the outcome of credential validation
 type ValidationResult struct {
@@ -110,31 +110,18 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	}
 
 	mapKey := string(vmwcreds.UID)
+	fingerprint := vmwarecommon.CredentialFingerprint(host, username, password, disableSSLVerification, datacenter)
 	var c *vim25.Client
 
-	// Initialize map if needed
-	if vmwareClientMap == nil {
-		vmwareClientMap = &sync.Map{}
-	}
-
-	// Check cache for existing authenticated client
-	if val, ok := vmwareClientMap.Load(mapKey); ok {
-		cachedClient, valid := val.(*vim25.Client)
-		if valid && cachedClient != nil && cachedClient.Client != nil {
-			c = cachedClient
-			sessMgr := session.NewManager(c)
-			userSession, err := sessMgr.UserSession(ctx)
-			if err == nil && userSession != nil {
-				// Cached client is still valid
-				return ValidationResult{
-					Valid:   true,
-					Message: "Successfully authenticated to VMware",
-					Error:   nil,
-				}
-			}
-			// Cached client is no longer valid, remove it
-			vmwareClientMap.Delete(mapKey)
-			// Will create fresh client in the retry loop
+	// Check cache for an existing client authenticated with these exact
+	// credentials. A changed password (or host/username/insecure/datacenter)
+	// changes the fingerprint, so it can never produce a false "still valid"
+	// hit off a stale session.
+	if _, ok := vmwareClients.Get(ctx, mapKey, fingerprint); ok {
+		return ValidationResult{
+			Valid:   true,
+			Message: "Successfully authenticated to VMware",
+			Error:   nil,
 		}
 	}
 
@@ -193,7 +180,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	}
 
 	// All validations passed - cache the fully validated client
-	vmwareClientMap.Store(mapKey, c)
+	vmwareClients.Store(ctx, mapKey, fingerprint, c)
 
 	return ValidationResult{
 		Valid:   true,
