@@ -294,6 +294,11 @@ export function buildRetryTemplateSpec({
     ...(newArrayCredsMappingName !== undefined && {
       arrayCredsMapping: newArrayCredsMappingName
     }),
+    // Retry can now retarget another PCD credential, so the destination follows the form
+    // rather than the failed template. Falls back to the inherited ref when unchanged.
+    ...(params.openstackCreds?.existingCredName
+      ? { destination: { openstackRef: params.openstackCreds.existingCredName } }
+      : {}),
     storageCopyMethod: params.storageCopyMethod || 'normal',
     useGPUFlavor: params.useGPU || false,
     targetPCDClusterName: selectedPcdClusterName || inherited.targetPCDClusterName || '',
@@ -301,5 +306,50 @@ export function buildRetryTemplateSpec({
     // ref, so switching away from HotAdd on retry has to drop it explicitly — undefined is
     // omitted by JSON serialisation, leaving the field unset on the new template.
     proxyVMRef: isHotAdd && params.proxyVMRef ? { name: params.proxyVMRef } : undefined
+  }
+}
+
+export interface RetargetUpdate {
+  params: Partial<FormValues>
+  credentialChanged: boolean
+}
+
+/**
+ * Params patch for choosing a different target cluster on the retry form.
+ *
+ * A different cluster always invalidates the network and storage mappings: the target
+ * networks and volume types are per-credential, and even within one credential the cluster
+ * is an availability zone the mapped resources may not reach.
+ *
+ * When the cluster belongs to a *different* credential the blast radius is wider — security
+ * groups and server groups come from that credential too, and the caller must additionally
+ * clear the flavor, whose id only exists in the original project's Nova. `credentialChanged`
+ * signals that.
+ *
+ * Left alone deliberately: arrayCredsMappings (datastore -> storage-array creds, source
+ * side) and everything under vmwareCreds — the VM being retried does not move.
+ */
+export function buildRetargetUpdate(
+  cluster: PcdClusterOption | undefined,
+  clusterId: string,
+  currentOpenstackCredName: string | undefined
+): RetargetUpdate {
+  const nextCred = cluster?.openstackCredName
+  const credentialChanged = Boolean(nextCred) && nextCred !== currentOpenstackCredName
+
+  return {
+    credentialChanged,
+    params: {
+      pcdCluster: clusterId,
+      networkMappings: [],
+      storageMappings: [],
+      ...(credentialChanged
+        ? {
+            openstackCreds: { existingCredName: nextCred } as FormValues['openstackCreds'],
+            securityGroups: [],
+            serverGroup: ''
+          }
+        : {})
+    }
   }
 }

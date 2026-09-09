@@ -40,6 +40,7 @@ import { useNetworkIPsMap } from '../hooks/useNetworkIPsMap'
 import { useNetworkSubnetCompatibility } from '../hooks/useNetworkSubnetCompatibility'
 import { hasAnySubnetMismatch, hasAnyPreserveIpDisabled } from '../utils/subnetMismatch'
 import { findPcdClusterByName } from '../utils/pcdClusterLookup'
+import { buildRetargetUpdate } from '../utils/retryFormState'
 import { useFormSync } from '../hooks/useFormSync'
 import { useCredentialFetching } from '../hooks/useCredentialFetching'
 import { useMigrationFormSubmit } from '../hooks/useMigrationFormSubmit'
@@ -362,11 +363,32 @@ export default function MigrationFormDrawer({
 
   // When target cluster changes in retry mode, reset network/storage mappings because
   // the previously mapped networks/volume-types may not exist on the new cluster.
+  // A retarget wipes the mappings, flavor and security groups, so the retried plan is only
+  // submittable once they are chosen again for the new credential — and only if that
+  // credential itself validates. Same-credential retries keep exactly the previous gate, so
+  // nothing that could be retried before becomes blocked.
+  const retargetedToAnotherCredential = Boolean(
+    retryTemplate?.spec?.destination?.openstackRef &&
+      params.openstackCreds?.existingCredName &&
+      params.openstackCreds.existingCredName !== retryTemplate.spec.destination.openstackRef
+  )
+
+  // Retry may retarget another PCD credential, so a cluster change can cascade further than
+  // the mappings: see buildRetargetUpdate.
   const handleRetryClusterChange = useCallback(
     (newClusterId: string) => {
-      updateParams({ pcdCluster: newClusterId, networkMappings: [], storageMappings: [] })
+      const cluster = pcdData.find((p) => p.id === newClusterId)
+      const { params: retargetParams, credentialChanged } = buildRetargetUpdate(
+        cluster,
+        newClusterId,
+        params.openstackCreds?.existingCredName
+      )
+      updateParams(retargetParams)
+      // A flavor id only exists in the original project's Nova. Clearing it re-gates the
+      // Retry button until a flavor from the new credential is chosen.
+      if (credentialChanged) setSelectedFlavorId('')
     },
-    [updateParams]
+    [pcdData, params.openstackCreds, updateParams]
   )
 
   // Query RDM disks
@@ -481,6 +503,13 @@ export default function MigrationFormDrawer({
     reportError
   })
 
+  const retryDisabled =
+    Boolean(blockingError) ||
+    prefillLoading ||
+    retrySubmitting ||
+    (retargetedToAnotherCredential && disableSubmit)
+
+
   // In retry mode the template belongs to the live MigrationPlan — the standard close
   // handler would delete it. Cancelling a retry must not modify anything.
   const handleDrawerClose = isRetryMode ? onClose : () => handleClose()
@@ -578,7 +607,7 @@ export default function MigrationFormDrawer({
               <ActionButton
                 tone="primary"
                 onClick={handleEditAndRetry}
-                disabled={Boolean(blockingError) || prefillLoading || retrySubmitting}
+                disabled={retryDisabled}
                 loading={retrySubmitting}
                 data-testid="migration-form-retry"
               >
@@ -651,7 +680,7 @@ export default function MigrationFormDrawer({
             open,
             onClose: handleDrawerClose,
             isSubmitDisabled: isRetryMode
-              ? Boolean(blockingError) || prefillLoading || retrySubmitting
+              ? retryDisabled
               : isTemplateMode
                 ? !canSaveAsTemplate
                 : disableSubmit || submitting
@@ -738,6 +767,7 @@ export default function MigrationFormDrawer({
                       vmwareCredName={params.vmwareCreds?.existingCredName}
                       sourceCluster={sourceCluster}
                       openstackCredName={params.openstackCreds?.existingCredName}
+                      originalOpenstackCredName={retryTemplate?.spec?.destination?.openstackRef}
                       pcdClusters={pcdData}
                       selectedPcdClusterId={params.pcdCluster || ''}
                       onPcdClusterChange={handleRetryClusterChange}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildRetargetUpdate,
   buildRetryFormState,
   buildRetryPlanSpec,
   buildRetryTemplateSpec
@@ -520,5 +521,85 @@ describe('buildRetryPlanSpec — parity with the create path', () => {
         retrySpec.advancedOptions as Record<string, unknown>
       )
     ).toEqual([])
+  })
+})
+
+// ─── Retargeting the retry to another cluster / credential ────────────────────
+
+describe('buildRetargetUpdate', () => {
+  const sameCred = { id: 'id-a2', name: 'cluster-2', openstackCredName: 'creds-a' }
+  const otherCred = { id: 'id-b1', name: 'cluster-1', openstackCredName: 'creds-b' }
+
+  it('resets the mappings for any cluster change within the same credential', () => {
+    const { params, credentialChanged } = buildRetargetUpdate(sameCred, 'id-a2', 'creds-a')
+
+    expect(credentialChanged).toBe(false)
+    expect(params.pcdCluster).toBe('id-a2')
+    expect(params.networkMappings).toEqual([])
+    expect(params.storageMappings).toEqual([])
+    // Same credential: security groups and the flavor remain valid.
+    expect(params).not.toHaveProperty('securityGroups')
+    expect(params).not.toHaveProperty('openstackCreds')
+  })
+
+  it('switches the credential and widens the reset when the cluster belongs elsewhere', () => {
+    const { params, credentialChanged } = buildRetargetUpdate(otherCred, 'id-b1', 'creds-a')
+
+    expect(credentialChanged).toBe(true)
+    expect(params.openstackCreds).toEqual({ existingCredName: 'creds-b' })
+    expect(params.securityGroups).toEqual([])
+    expect(params.serverGroup).toBe('')
+    expect(params.networkMappings).toEqual([])
+    expect(params.storageMappings).toEqual([])
+  })
+
+  it('leaves source-side array creds mappings alone', () => {
+    // Datastore -> storage-array credentials are a VMware-side concern and survive a
+    // destination retarget.
+    const { params } = buildRetargetUpdate(otherCred, 'id-b1', 'creds-a')
+    expect(params).not.toHaveProperty('arrayCredsMappings')
+    expect(params).not.toHaveProperty('vmwareCreds')
+  })
+
+  it('does not claim a credential change when the cluster is not yet resolved', () => {
+    // pcdData still loading: the raw name is kept and nothing else is disturbed.
+    const { params, credentialChanged } = buildRetargetUpdate(undefined, 'cluster-1', 'creds-a')
+    expect(credentialChanged).toBe(false)
+    expect(params.pcdCluster).toBe('cluster-1')
+    expect(params).not.toHaveProperty('openstackCreds')
+  })
+
+  it('does not claim a change for a cluster with no owning credential', () => {
+    const unlabelled = { id: 'id-x', name: 'legacy' }
+    expect(buildRetargetUpdate(unlabelled, 'id-x', 'creds-a').credentialChanged).toBe(false)
+  })
+})
+
+describe('buildRetryTemplateSpec — destination credential', () => {
+  const ORIGINAL_DEST = {
+    source: { vmwareRef: 'vmware-1', datacenter: 'dc-1' },
+    destination: { openstackRef: 'creds-a' },
+    targetPCDClusterName: 'cluster-1'
+  } as unknown as MigrationTemplate['spec']
+
+  it('writes the credential the form is now targeting', () => {
+    const spec = buildRetryTemplateSpec({
+      originalTemplateSpec: ORIGINAL_DEST,
+      params: { openstackCreds: { existingCredName: 'creds-b' } } as Partial<FormValues>,
+      selectedPcdClusterName: 'cluster-1'
+    })
+
+    expect(spec.destination).toEqual({ openstackRef: 'creds-b' })
+    // The source side never moves — the VM being retried is fixed.
+    expect(spec.source).toEqual({ vmwareRef: 'vmware-1', datacenter: 'dc-1' })
+  })
+
+  it('inherits the original credential when the form has not set one', () => {
+    const spec = buildRetryTemplateSpec({
+      originalTemplateSpec: ORIGINAL_DEST,
+      params: {},
+      selectedPcdClusterName: 'cluster-1'
+    })
+    expect(spec.destination).toEqual({ openstackRef: 'creds-a' })
   })
 })

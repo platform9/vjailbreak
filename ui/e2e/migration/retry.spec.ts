@@ -31,6 +31,7 @@ import {
   MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES,
   MOCK_PCD_CLUSTER_1,
   MOCK_PCD_CLUSTER_SAME_NAME_OTHER_TENANT,
+  MOCK_OPENSTACK_CRED_2_OTHER_TENANT,
   MOCK_RETRY_MIGRATION_NAME,
   MOCK_RETRY_MIGRATION_NAME_2,
   MOCK_RETRY_PLAN_NAME,
@@ -1054,16 +1055,97 @@ test.describe("RET-010 — target cluster resolves within the migration's creden
 
   // Retry inherits destination.openstackRef, so a cluster from another
   // credential cannot be honoured and must not be offered.
-  test("target cluster dropdown offers only the migration's credential", async ({ page }) => {
+  test('target cluster dropdown offers every credential, with the original selected', async ({
+    page,
+  }) => {
     await openRetryDrawer(page)
     await expect(page.getByTestId('retry-target-cluster-select')).toBeVisible()
 
     // The testid sits on the Select's hidden input; the combobox is the clickable surface.
     await page.getByTestId('retry-source-destination-summary').getByRole('combobox').click()
-    const options = page.getByRole('option')
 
-    await expect(options.filter({ hasText: 'Credential: pcd-cred-1' })).toHaveCount(1)
-    await expect(options.filter({ hasText: 'pcd-cred-2' })).toHaveCount(0)
-    await expect(options.filter({ hasText: 'tenant-beta' })).toHaveCount(0)
+    // One row per cluster, each labelled with its credential and tenant — the same
+    // rendering the New Migration form uses.
+    await expect(page.getByRole('option').filter({ hasText: 'pcd-cluster-1' })).toHaveCount(2)
+    await expect(page.getByRole('option').filter({ hasText: 'Credential: pcd-cred-1' })).toHaveCount(1)
+    await expect(page.getByRole('option').filter({ hasText: 'Credential: pcd-cred-2' })).toHaveCount(1)
+
+    // Auto-selection still resolves to the migration's own tenant.
+    await expect(page.getByTestId('retry-source-destination-summary')).toContainText(
+      'Tenant: tenant-alpha',
+    )
+    await expect(page.getByTestId('retry-retarget-warning')).not.toBeVisible()
+  })
+})
+
+// ─── RET-011: retargeting the retry to another credential / tenant ────────────
+
+test.describe('RET-011 — retry can retarget another PCD credential', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockRetryPrefillRoutes(page)
+    await mockRoute(page, API.openstackCreds, 'GET', MOCK_OPENSTACK_CREDS_LIST_TWO_TENANTS)
+    await mockRoute(page, API.pcdClusters, 'GET', MOCK_PCD_CLUSTERS_LIST_DUPLICATE_NAMES)
+    await mockRoute(page, API.openstackCredByName('pcd-cred-2'), 'GET', MOCK_OPENSTACK_CRED_2_OTHER_TENANT)
+  })
+
+  // Picks the same-named cluster that belongs to the *other* credential.
+  const retargetToOtherTenant = async (page: Page): Promise<void> => {
+    await openRetryDrawer(page)
+    await page.getByTestId('retry-source-destination-summary').getByRole('combobox').click()
+    await page
+      .getByRole('option')
+      .filter({ hasText: 'Credential: pcd-cred-2' })
+      .first()
+      .click()
+  }
+
+  test('switching credential updates the destination and warns what was reset', async ({
+    page,
+  }) => {
+    await retargetToOtherTenant(page)
+
+    await expect(page.getByTestId('retry-destination-credential')).toHaveText('pcd-cred-2')
+    await expect(page.getByTestId('retry-retarget-warning')).toBeVisible()
+    await expect(page.getByTestId('retry-retarget-warning')).toContainText('tenant-beta')
+  })
+
+  test('retargeting re-gates Retry until the new tenant is mapped', async ({ page }) => {
+    await openRetryDrawer(page)
+    await expect(page.getByTestId('migration-form-retry')).toBeEnabled({ timeout: 10_000 })
+
+    await page.getByTestId('retry-source-destination-summary').getByRole('combobox').click()
+    await page.getByRole('option').filter({ hasText: 'Credential: pcd-cred-2' }).first().click()
+
+    // Mappings, flavor and security groups were reset for the new credential, so the plan
+    // is incomplete and must not be submittable.
+    await expect(page.getByTestId('migration-form-retry')).toBeDisabled()
+  })
+
+  test('an unvalidated target credential keeps Retry disabled', async ({ page }) => {
+    await page.unroute(API.openstackCredByName('pcd-cred-2'))
+    await mockRoute(page, API.openstackCredByName('pcd-cred-2'), 'GET', {
+      ...MOCK_OPENSTACK_CRED_2_OTHER_TENANT,
+      status: {
+        ...MOCK_OPENSTACK_CRED_2_OTHER_TENANT.status,
+        openstackValidationStatus: 'Failed',
+      },
+    })
+
+    await retargetToOtherTenant(page)
+    await expect(page.getByTestId('migration-form-retry')).toBeDisabled()
+  })
+
+  test('never patches the failed migration\'s own template', async ({ page }) => {
+    // The drawer holds the failed plan's template object; retargeting must not mutate a
+    // resource that still belongs to the old plan.
+    const writes: string[] = []
+    await page.route(`**${API.migrationTemplateByName(MOCK_RETRY_TEMPLATE_NAME).replace('**', '')}`, (route) => {
+      const method = route.request().method()
+      if (method !== 'GET') writes.push(method)
+      return route.fallback()
+    })
+
+    await retargetToOtherTenant(page)
+    expect(writes).toEqual([])
   })
 })
