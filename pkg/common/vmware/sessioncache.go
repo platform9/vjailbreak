@@ -2,6 +2,8 @@ package vmware
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"sync"
@@ -10,22 +12,34 @@ import (
 	"github.com/vmware/govmomi/vim25"
 )
 
-// CredentialFingerprint returns a stable hash of the connection-relevant
+var fingerprintKey = mustRandomKey()
+
+func mustRandomKey() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic("vmware: failed to generate credential fingerprint key: " + err.Error())
+	}
+	return key
+}
+
+// CredentialFingerprint returns a stable, keyed hash of the connection-relevant
 // vCenter credential fields. It is used as part of a cache key so that any
 // change to host, username, password, SSL verification, or datacenter is
 // guaranteed to produce a cache miss rather than silently reusing a client
-// authenticated with stale credentials.
+// authenticated with stale credentials. The fingerprint is process-local
+// only: it is never compared across restarts, so a random per-process HMAC
+// key is used instead of a fixed one.
 func CredentialFingerprint(host, username, password string, insecure bool, datacenter string) string {
-	h := sha256.New()
+	mac := hmac.New(sha256.New, fingerprintKey)
 	insecureByte := byte(0)
 	if insecure {
 		insecureByte = 1
 	}
 	for _, field := range []string{host, username, password, string(insecureByte), datacenter} {
-		h.Write([]byte(field))
-		h.Write([]byte{0})
+		mac.Write([]byte(field))
+		mac.Write([]byte{0})
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 type cachedEntry struct {
