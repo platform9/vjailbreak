@@ -23,10 +23,15 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
+	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -199,6 +204,105 @@ func TestIsMigrationAppEvent(t *testing.T) {
 			event := corev1.Event{Reason: tt.reason}
 			if got := isMigrationAppEvent(event); got != tt.want {
 				t.Errorf("isMigrationAppEvent(reason=%q) = %v, want %v", tt.reason, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestMarkMigrationSuccessful_VMwareMachineNotFound is the regression test:
+//
+//	if the VMwareCreds backing this migration was deleted mid-flight,
+//
+// its VMwareMachine CRs are deleted too (see VMwareCredsReconciler.reconcileDelete),
+// so this Get legitimately 404s after the migration has already completed
+// successfully. That must not block the Phase=Succeeded transition.
+func TestMarkMigrationSuccessful_VMwareMachineNotFound(t *testing.T) {
+	const ns = "migration-system"
+	const vmName = "test-vm"
+	const credsName = "test-vmware-creds"
+
+	newScheme := func() *runtime.Scheme {
+		s := runtime.NewScheme()
+		if err := vjailbreakv1alpha1.AddToScheme(s); err != nil {
+			t.Fatalf("AddToScheme() error = %v", err)
+		}
+		return s
+	}
+
+	template := &vjailbreakv1alpha1.MigrationTemplate{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "test-template"},
+		Spec: vjailbreakv1alpha1.MigrationTemplateSpec{
+			Source: vjailbreakv1alpha1.MigrationTemplateSource{VMwareRef: credsName},
+		},
+	}
+	plan := &vjailbreakv1alpha1.MigrationPlan{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "test-plan"},
+	}
+	plan.Spec.MigrationTemplate = template.Name
+	migration := &vjailbreakv1alpha1.Migration{
+		ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: "test-migration"},
+		Spec: vjailbreakv1alpha1.MigrationSpec{
+			VMName:        vmName,
+			MigrationPlan: plan.Name,
+		},
+	}
+
+	vmwMachineName, err := commonutils.GetK8sCompatibleVMWareObjectName(vmName, credsName)
+	if err != nil {
+		t.Fatalf("GetK8sCompatibleVMWareObjectName() error = %v", err)
+	}
+
+	tests := []struct {
+		name             string
+		vmwareMachine    *vjailbreakv1alpha1.VMwareMachine
+		wantErr          bool
+		wantMachineFound bool
+	}{
+		{
+			name: "VMwareMachine present gets marked migrated",
+			vmwareMachine: &vjailbreakv1alpha1.VMwareMachine{
+				ObjectMeta: metav1.ObjectMeta{Namespace: ns, Name: vmwMachineName},
+			},
+			wantErr:          false,
+			wantMachineFound: true,
+		},
+		{
+			name:          "VMwareMachine deleted mid-migration does not block success",
+			vmwareMachine: nil,
+			wantErr:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			objs := []client.Object{template, plan, migration.DeepCopy()}
+			if tt.vmwareMachine != nil {
+				objs = append(objs, tt.vmwareMachine)
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(newScheme()).
+				WithObjects(objs...).
+				WithStatusSubresource(&vjailbreakv1alpha1.VMwareMachine{}).
+				Build()
+
+			r := &MigrationReconciler{Client: fakeClient}
+			migrationScope := &scope.MigrationScope{Client: fakeClient, Migration: migration.DeepCopy()}
+
+			if err := r.markMigrationSuccessful(context.Background(), migrationScope); (err != nil) != tt.wantErr {
+				t.Fatalf("markMigrationSuccessful() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if migrationScope.Migration.Status.Phase != vjailbreakv1alpha1.VMMigrationPhaseSucceeded {
+				t.Errorf("Migration.Status.Phase = %q, want %q", migrationScope.Migration.Status.Phase, vjailbreakv1alpha1.VMMigrationPhaseSucceeded)
+			}
+
+			if tt.wantMachineFound {
+				got := &vjailbreakv1alpha1.VMwareMachine{}
+				if err := fakeClient.Get(context.Background(), types.NamespacedName{Namespace: ns, Name: vmwMachineName}, got); err != nil {
+					t.Fatalf("Get(VMwareMachine) error = %v", err)
+				}
+				if !got.Status.Migrated {
+					t.Errorf("VMwareMachine.Status.Migrated = false, want true")
+				}
 			}
 		})
 	}

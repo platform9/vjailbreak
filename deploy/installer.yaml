@@ -5529,6 +5529,27 @@ webhooks:
     resources:
     - openstackcreds
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-vmwarecreds
+  failurePolicy: Fail
+  name: vvmwarecreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - vmwarecreds
+  sideEffects: None
 
 ---
 apiVersion: apps/v1

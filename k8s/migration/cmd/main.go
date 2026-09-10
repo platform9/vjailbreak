@@ -170,6 +170,10 @@ func main() {
 			setupLog.Error(err, "unable to create webhook", "webhook", "OpenstackCreds")
 			os.Exit(1)
 		}
+		if err = (&vjailbreakv1alpha1.VMwareCreds{}).SetupWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "VMwareCreds")
+			os.Exit(1)
+		}
 	}
 	// +kubebuilder:scaffold:builder
 

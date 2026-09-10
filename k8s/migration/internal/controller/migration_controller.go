@@ -559,6 +559,13 @@ func (r *MigrationReconciler) markMigrationSuccessful(ctx context.Context, scope
 
 	vmwvm := &vjailbreakv1alpha1.VMwareMachine{}
 	if err := r.Get(ctx, types.NamespacedName{Name: name, Namespace: scope.Migration.Namespace}, vmwvm); err != nil {
+		if apierrors.IsNotFound(err) {
+			// The VMwareMachine can be gone by the time the migration succeeds
+			// (e.g. its VMwareCreds was deleted mid-migration). The migration
+			// itself already completed, so there is nothing left to flip and
+			// this must not block the Phase=Succeeded transition below.
+			return nil
+		}
 		return errors.Wrap(err, "failed to get vmware machine")
 	}
 

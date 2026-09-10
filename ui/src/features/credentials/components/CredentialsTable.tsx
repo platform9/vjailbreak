@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip, Alert } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip, Alert, Snackbar } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -310,7 +310,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([])
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteErrorToast, setDeleteErrorToast] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [agentNodeInfo, setAgentNodeInfo] = useState<Pick<
     OpenstackCredsDeletableResponse,
@@ -551,7 +551,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const handleDeleteClose = () => {
     setDeleteDialogOpen(false)
     setSelectedForDeletion([])
-    setDeleteError(null)
     setAgentNodeInfo(null)
   }
 
@@ -600,7 +599,13 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
     } catch (error) {
       console.error('Error deleting credentials:', error)
 
-      const errorMessage = error instanceof Error ? error.message : String(error)
+      // Backend validation errors (e.g. the VMwareCreds deletion webhook
+      // rejecting an in-progress migration) put the real reason in the
+      // response body; error.message is just Axios's generic status text.
+      const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message
+      const errorMessage =
+        apiMessage || (error instanceof Error ? error.message : String(error))
       const vmwareCreds = selectedForDeletion.filter((cred) => cred.type === 'VMware')
       const openstackCreds = selectedForDeletion.filter((cred) => cred.type === 'OpenStack')
 
@@ -631,19 +636,11 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           action: 'delete-credentials'
         }
       })
-      setDeleteError(error instanceof Error ? error.message : 'Unknown error occurred')
+      setDeleteErrorToast(errorMessage)
     } finally {
       setDeleting(false)
     }
   }
-
-  const getCustomErrorMessage = useCallback((error: Error | string) => {
-    const baseMessage = 'Failed to delete credentials'
-    if (error instanceof Error) {
-      return `${baseMessage}: ${error.message}`
-    }
-    return `${baseMessage}: ${error}`
-  }, [])
 
   const tableColumns = getColumns(
     handleDeleteCredential,
@@ -749,10 +746,17 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         actionColor="error"
         actionVariant="outlined"
         onConfirm={handleConfirmDelete}
-        customErrorMessage={getCustomErrorMessage}
-        errorMessage={deleteError}
-        onErrorChange={setDeleteError}
       />
+
+      <Snackbar
+        open={!!deleteErrorToast}
+        autoHideDuration={6000}
+        onClose={() => setDeleteErrorToast(null)}
+      >
+        <Alert onClose={() => setDeleteErrorToast(null)} severity="error">
+          {deleteErrorToast}
+        </Alert>
+      </Snackbar>
 
       {vmwareCredDrawerOpen && (
         <VMwareCredentialsDrawer
