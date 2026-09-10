@@ -37,40 +37,6 @@ export function findPcdClusterByName<T extends PcdClusterOption>(
   return pcdData.find((cluster) => cluster.name === clusterName)
 }
 
-/**
- * Narrow the offered clusters to the ones the migration's credential actually owns.
- *
- * Retry rebuilds the MigrationTemplate but inherits `destination.openstackRef`, and the
- * network/storage mappings, flavor and security groups are all resolved against that
- * credential — so a cluster from another credential cannot be honoured even though the
- * dropdown happily lists it.
- *
- * The currently selected cluster is always kept so the control never renders blank — a
- * migration whose PCDCluster is missing the `vjailbreak.k8s.pf9.io/openstackcreds` label
- * still shows what it is set to. Only when the credential is unknown, or nothing at all
- * can be offered for it, does the full list come back; offering every credential again
- * whenever one has no labelled cluster would reopen the cross-credential pick this exists
- * to prevent (and with it a flavor from the original credential left on the retried plan).
- */
-export function pcdClustersForCredential<T extends PcdClusterOption>(
-  pcdData: T[],
-  openstackCredName: string | undefined,
-  selectedClusterId?: string
-): T[] {
-  if (!openstackCredName) return pcdData
-
-  const scoped = pcdData.filter((cluster) => cluster.openstackCredName === openstackCredName)
-  const selected = pcdData.find((cluster) => cluster.id === selectedClusterId)
-
-  if (scoped.length === 0) return selected ? [selected] : pcdData
-
-  if (selected && !scoped.includes(selected)) {
-    return pcdData.filter((cluster) => scoped.includes(cluster) || cluster === selected)
-  }
-
-  return scoped
-}
-
 // ─── Destination tenant ───────────────────────────────────────────────────────
 
 const OPENSTACKCREDS_LABEL = 'vjailbreak.k8s.pf9.io/openstackcreds'

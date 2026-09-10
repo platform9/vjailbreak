@@ -1,6 +1,8 @@
 import React from 'react'
 import {
+  Alert,
   Box,
+  Chip,
   FormControl,
   InputAdornment,
   MenuItem,
@@ -10,7 +12,7 @@ import {
 } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { FieldLabel } from 'src/components/design-system/ui'
-import { findPcdClusterByName, pcdClustersForCredential } from '../utils/pcdClusterLookup'
+import { findPcdClusterByName } from '../utils/pcdClusterLookup'
 import '@cds/core/icon/register.js'
 import { ClarityIcons, clusterIcon, searchIcon } from '@cds/core/icon'
 
@@ -34,19 +36,22 @@ interface RetrySourceDestinationSummaryProps {
   vmwareCredName?: string
   sourceCluster?: string
   openstackCredName?: string
+  originalOpenstackCredName?: string
   pcdClusters: PcdClusterItem[]
   selectedPcdClusterId: string
   onPcdClusterChange: (id: string) => void
   disabled?: boolean
 }
 
-// Read-only source environment + editable target cluster for retry mode.
-// Credentials and source cluster are locked; only target cluster can change
-// (which cascades a mapping reset in the parent form).
+// Read-only source environment + editable target cluster for retry mode. The source side
+// is locked (the VM being retried does not move), but the target cluster may belong to any
+// PCD credential — picking one from another credential retargets the migration and cascades
+// a reset of mappings, flavor and security groups in the parent form.
 export function RetrySourceDestinationSummary({
   vmwareCredName,
   sourceCluster,
   openstackCredName,
+  originalOpenstackCredName,
   pcdClusters,
   selectedPcdClusterId,
   onPcdClusterChange,
@@ -63,24 +68,23 @@ export function RetrySourceDestinationSummary({
     findPcdClusterByName(pcdClusters, selectedPcdClusterId, openstackCredName)?.id ||
     selectedPcdClusterId
 
-  // Retry inherits the original template's destination.openstackRef, and the network,
-  // storage, flavor and security-group choices are all resolved against that credential —
-  // so offering another credential's clusters offers something retry cannot honour.
-  const selectablePcdClusters = React.useMemo(
-    () => pcdClustersForCredential(pcdClusters, openstackCredName, resolvedClusterId),
-    [pcdClusters, openstackCredName, resolvedClusterId]
+  const selectedCluster = pcdClusters.find((c) => c.id === resolvedClusterId)
+  // Which credential the retry will actually target: whatever owns the selected cluster.
+  const effectiveCredName = selectedCluster?.openstackCredName || openstackCredName
+  const credentialChanged = Boolean(
+    originalOpenstackCredName && effectiveCredName && effectiveCredName !== originalOpenstackCredName
   )
 
   const filteredPcdClusters = React.useMemo(() => {
-    if (!pcdSearchTerm) return selectablePcdClusters
+    if (!pcdSearchTerm) return pcdClusters
     const term = pcdSearchTerm.toLowerCase().trim()
-    return selectablePcdClusters.filter(
+    return pcdClusters.filter(
       (c) =>
         (c.name || '').toLowerCase().includes(term) ||
         (c.openstackCredName || '').toLowerCase().includes(term) ||
         (c.tenantName || '').toLowerCase().includes(term)
     )
-  }, [selectablePcdClusters, pcdSearchTerm])
+  }, [pcdClusters, pcdSearchTerm])
 
   const clusterDropdown = (
     <FormControl fullWidth size="small" disabled={disabled}>
@@ -198,7 +202,20 @@ export function RetrySourceDestinationSummary({
         </Box>
         <Box sx={CELL}>
           <FieldLabel label="Destination credential" />
-          <Typography variant="body2">{openstackCredName || '—'}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="body2" data-testid="retry-destination-credential">
+              {effectiveCredName || '—'}
+            </Typography>
+            {credentialChanged && (
+              <Chip
+                size="small"
+                color="warning"
+                variant="outlined"
+                label="changed"
+                sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }}
+              />
+            )}
+          </Box>
         </Box>
       </Box>
 
@@ -214,8 +231,19 @@ export function RetrySourceDestinationSummary({
         </Box>
       </Box>
 
+      {credentialChanged && (
+        <Alert severity="warning" data-testid="retry-retarget-warning" sx={{ mt: 0.5 }}>
+          Target cluster belongs to a different credential ({effectiveCredName}
+          {selectedCluster?.tenantName ? ` / ${selectedCluster.tenantName}` : ''}). Network,
+          storage, flavor and security-group selections have been reset and must be chosen
+          again for this tenant.
+        </Alert>
+      )}
+
       <Typography variant="caption" color="text.secondary">
-        Credentials and source cluster are locked while retrying a migration. Changing the target cluster will reset network and storage mappings.
+        The source credential, source cluster and VM are locked while retrying a migration.
+        Changing the target cluster resets network and storage mappings; choosing a cluster
+        from another credential also resets the flavor and security groups.
       </Typography>
     </Box>
   )

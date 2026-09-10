@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import {
-  buildDestinationTenantResolver,
-  findPcdClusterByName,
-  pcdClustersForCredential
-} from './pcdClusterLookup'
+import { buildDestinationTenantResolver, findPcdClusterByName } from './pcdClusterLookup'
 import { useApplyTemplatePrefill } from '../hooks/useApplyTemplatePrefill'
 import type { SavedTemplate } from '../api/migration-blueprints/types'
 import type { SourceDataItem } from '../hooks/useClusterData'
@@ -109,46 +105,6 @@ describe('useApplyTemplatePrefill — target PCD cluster', () => {
   it('falls back to the raw cluster name when pcdData has not loaded yet', () => {
     // The hook's second effect swaps in the real id once pcdData arrives.
     expect(applyTemplate(makeTemplate(), []).pcdCluster).toBe('shared-cluster')
-  })
-})
-
-// ─── The dropdown must only offer what retry can honour ────────────
-
-describe('pcdClustersForCredential', () => {
-  it("offers only the credential's own clusters", () => {
-    expect(pcdClustersForCredential(PCD_DATA, 'creds-b').map((c) => c.id)).toEqual([
-      'id-tenant-b',
-      'id-unique'
-    ])
-  })
-
-  it('offers everything when the credential is unknown', () => {
-    expect(pcdClustersForCredential(PCD_DATA, undefined)).toHaveLength(3)
-  })
-
-  it('offers only the current selection when the credential owns no labelled cluster', () => {
-    // Keeps the control populated without reopening a cross-credential pick.
-    expect(
-      pcdClustersForCredential(PCD_DATA, 'creds-with-none', 'id-tenant-a').map((c) => c.id)
-    ).toEqual(['id-tenant-a'])
-  })
-
-  it('offers everything only when nothing at all can be offered for the credential', () => {
-    // No scoped clusters and no current selection: a full list beats an empty dropdown.
-    expect(pcdClustersForCredential(PCD_DATA, 'creds-with-none')).toHaveLength(3)
-  })
-
-  it("keeps the current selection even when it belongs to another credential", () => {
-    // Otherwise MUI renders the Select blank for a migration whose cluster predates the
-    // openstackcreds label.
-    const offered = pcdClustersForCredential(PCD_DATA, 'creds-b', 'id-tenant-a').map((c) => c.id)
-    expect(offered).toContain('id-tenant-a')
-    expect(offered).toContain('id-tenant-b')
-  })
-
-  it('does not duplicate the selection when it already belongs to the credential', () => {
-    const offered = pcdClustersForCredential(PCD_DATA, 'creds-b', 'id-tenant-b')
-    expect(offered.filter((c) => c.id === 'id-tenant-b')).toHaveLength(1)
   })
 })
 
