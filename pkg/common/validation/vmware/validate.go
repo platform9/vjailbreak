@@ -15,7 +15,6 @@ import (
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/scope"
 	"github.com/platform9/vjailbreak/k8s/migration/pkg/utils"
 	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
-	vmwarecommon "github.com/platform9/vjailbreak/pkg/common/vmware"
 	"github.com/vmware/govmomi/find"
 	"github.com/vmware/govmomi/session/cache"
 	"github.com/vmware/govmomi/vim25"
@@ -33,8 +32,6 @@ const (
 	vjailbreakSettingsName   = "vjailbreak-settings"
 	retryLimitKey            = "VCENTER_LOGIN_RETRY_LIMIT"
 )
-
-var vmwareClients = vmwarecommon.NewClientCache()
 
 // ValidationResult holds the outcome of credential validation
 type ValidationResult struct {
@@ -109,21 +106,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 		Reauth:   true,
 	}
 
-	mapKey := string(vmwcreds.UID)
-	fingerprint := vmwarecommon.CredentialFingerprint(host, username, password, disableSSLVerification, datacenter)
 	var c *vim25.Client
-
-	// Check cache for an existing client authenticated with these exact
-	// credentials. A changed password (or host/username/insecure/datacenter)
-	// changes the fingerprint, so it can never produce a false "still valid"
-	// hit off a stale session.
-	if _, ok := vmwareClients.Get(ctx, mapKey, fingerprint); ok {
-		return ValidationResult{
-			Valid:   true,
-			Message: "Successfully authenticated to VMware",
-			Error:   nil,
-		}
-	}
 
 	// Exponential retry logic with retry limit from ConfigMap or passed parameter
 	var lastErr error
@@ -178,9 +161,6 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 			}
 		}
 	}
-
-	// All validations passed - cache the fully validated client
-	vmwareClients.Store(ctx, mapKey, fingerprint, c)
 
 	return ValidationResult{
 		Valid:   true,
