@@ -105,6 +105,7 @@ const DEFAULTS: SettingsForm = {
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: 10,
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: 15,
   VCENTER_LOGIN_RETRY_LIMIT: 5,
+  LOG_RETENTION_HOURS: 24,
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 60,
   VALIDATE_RDM_OWNER_VMS: true,
@@ -141,7 +142,8 @@ const TAB_FIELD_KEYS: Record<TabKey, Array<keyof SettingsForm>> = {
     'VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS',
     'VOLUME_AVAILABLE_WAIT_RETRY_LIMIT',
     'VCENTER_LOGIN_RETRY_LIMIT',
-    'VCENTER_SCAN_CONCURRENCY_LIMIT'
+    'VCENTER_SCAN_CONCURRENCY_LIMIT',
+    'LOG_RETENTION_HOURS'
   ],
   network: [
     'PROXY_ENABLED',
@@ -277,6 +279,7 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   VCENTER_LOGIN_RETRY_LIMIT:
     'Number of login retries before the workflow surfaces an authentication error.',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 'Maximum number of vCenter VMs to scan concurrently.',
+  LOG_RETENTION_HOURS: 'Number of hours to keep migration logs before sync-daemon cleans them up. Minimum 1 hour.',
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES:
     'Time before failed PCD credentials are re-queued for another attempt.',
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 'Time before VMware credential rotations are retried.',
@@ -555,6 +558,11 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     const httpTimeout = state.HTTP_TIMEOUT_SECONDS
     if (!Number.isFinite(httpTimeout) || !Number.isInteger(httpTimeout) || httpTimeout < 1) {
       e.HTTP_TIMEOUT_SECONDS = 'Enter an integer >= 1.'
+    }
+
+    const logRetentionHours = state.LOG_RETENTION_HOURS
+    if (!Number.isFinite(logRetentionHours) || !Number.isInteger(logRetentionHours) || logRetentionHours < 1) {
+      e.LOG_RETENTION_HOURS = 'Enter a whole number of hours, minimum 1.'
     }
 
     const bools: Array<keyof SettingsForm> = [
@@ -1861,6 +1869,11 @@ export default function GlobalSettingsPage() {
                     name: 'VCENTER_SCAN_CONCURRENCY_LIMIT',
                     label: 'vCenter Concurrency Limit',
                     tooltip: FIELD_TOOLTIPS.VCENTER_SCAN_CONCURRENCY_LIMIT
+                  },
+                  {
+                    name: 'LOG_RETENTION_HOURS',
+                    label: 'Log Retention (hours)',
+                    tooltip: FIELD_TOOLTIPS.LOG_RETENTION_HOURS
                   }
                 ] as const
               ).map((item) => (

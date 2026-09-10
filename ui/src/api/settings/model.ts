@@ -12,6 +12,7 @@ export interface VjailbreakSettings {
     NTP_SERVERS?: string
     PROXY?: string
     POPULATE_VMWARE_MACHINE_FLAVORS: string
+    LOG_RETENTION_HOURS: number
     VCENTER_LOGIN_RETRY_LIMIT: number
     VCENTER_SCAN_CONCURRENCY_LIMIT: number
     VM_ACTIVE_WAIT_INTERVAL_SECONDS: number
