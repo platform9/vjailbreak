@@ -6,12 +6,14 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"strconv"
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/networks"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
 	"github.com/pkg/errors"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/virtv2v"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
@@ -58,6 +60,7 @@ func (migobj *Migrate) ReservePortsForVM(ctx context.Context, vminfo *vm.VMInfo)
 
 // reuseExistingPorts handles the pre-created-ports flow: migobj.Networkports
 // holds one OpenStack port ID per NIC, created outside this migration.
+// NICOverride.AllowedAddressPairs is not reconciled here in v1 - a pre-created port's own config is trusted as-is.
 func (migobj *Migrate) reuseExistingPorts(ctx context.Context) ([]string, []string, []string, error) {
 	if len(migobj.Networkports) != len(migobj.Networknames) {
 		return nil, nil, nil, errors.Errorf("number of network ports does not match number of network names")
@@ -113,13 +116,22 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 			return nil, nil, nil, err
 		}
 
+		// L2 networks have no Neutron-managed subnets or port security, so ignore all IP and VIP details here entirely.
+		allowedAddressPairs := override.allowedAddressPairs
+		if isSimpleNetwork {
+			allowedAddressPairs = nil
+		} else if err := validateAllowedAddressPairSecurityGroup(idx, allowedAddressPairs, securityGroupIDs); err != nil {
+			return nil, nil, nil, err
+		}
+
 		mac := vminfo.Mac[idx]
 		detectedIPs := logAndCollectDetectedIPs(vminfo, mac)
 		loggedIPs := applyPreserveIPOverride(vminfo, idx, mac, override, detectedIPs, migobj.FallbackToDHCP)
 		mac = applyPreserveMACOverride(vminfo, idx, mac, override.preserveMAC)
+		excludeAllowedAddressPairIPs(vminfo, mac, allowedAddressPairs)
 		utils.PrintLog(fmt.Sprintf("Using IPs for MAC %s: %v", vminfo.Mac[idx], loggedIPs))
 
-		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs, subnetPortIndex)
+		port, err := migobj.createPort(ctx, network, mac, vminfo, securityGroupIDs, subnetPortIndex, allowedAddressPairs)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -139,8 +151,8 @@ func (migobj *Migrate) createPortsForNetworks(ctx context.Context, vminfo *vm.VM
 // (possibly overridden) MAC, using vminfo.IPperMac to determine fixed IPs.
 // subnetPortIndex must be the same map across every NIC of this VM (see
 // createPortsForNetworks) so NICs sharing a subnet get distinct port names.
-func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string, subnetPortIndex map[string]int) (*ports.Port, error) {
-	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP, subnetPortIndex)
+func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network, mac string, vminfo *vm.VMInfo, securityGroupIDs []string, subnetPortIndex map[string]int, allowedAddressPairs []openstack.AllowedAddressPair) (*ports.Port, error) {
+	port, err := migobj.Openstackclients.ValidateAndCreatePort(ctx, network, mac, vminfo.IPperMac, vminfo.Name, securityGroupIDs, migobj.FallbackToDHCP, vminfo.GatewayIP, subnetPortIndex, allowedAddressPairs)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create port group")
 	}
@@ -148,16 +160,17 @@ func (migobj *Migrate) createPort(ctx context.Context, network *networks.Network
 	for _, fixedIP := range port.FixedIPs {
 		addressesOfPort = append(addressesOfPort, fixedIP.IPAddress)
 	}
-	utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s and Security Groups:%v\n", port.MACAddress, addressesOfPort, securityGroupIDs))
+	utils.PrintLog(fmt.Sprintf("Port created successfully: MAC:%s IP:%s AllowedAddressPairs:%v and Security Groups:%v\n", port.MACAddress, addressesOfPort, allowedAddressPairs, securityGroupIDs))
 	return port, nil
 }
 
 // nicOverride is the resolved per-NIC configuration for preserveIP/preserveMAC
 // and any user-assigned replacement IP, defaulting to "preserve everything".
 type nicOverride struct {
-	preserveIP     bool
-	preserveMAC    bool
-	userAssignedIP []string
+	preserveIP          bool
+	preserveMAC         bool
+	userAssignedIP      []string
+	allowedAddressPairs []openstack.AllowedAddressPair
 }
 
 // resolveNICOverride resolves the NICOverride (if any) for interface idx
@@ -182,13 +195,60 @@ func resolveNICOverride(overrides []NICOverride, idx int) (nicOverride, error) {
 				}
 			}
 		}
+		for _, pair := range override.AllowedAddressPairs {
+			result.allowedAddressPairs = append(result.allowedAddressPairs, openstack.AllowedAddressPair{IP: pair.IP, MAC: pair.MAC})
+		}
 		break
 	}
 
 	if len(result.userAssignedIP) > 1 {
 		return nicOverride{}, errors.Errorf("multiple user assigned IPs not supported for an interface")
 	}
+	if err := validateAllowedAddressPairs(result.allowedAddressPairs); err != nil {
+		return nicOverride{}, err
+	}
 	return result, nil
+}
+
+// validateAllowedAddressPairs rejects malformed IPs and duplicate entries in a NIC's allowed-address-pairs.
+func validateAllowedAddressPairs(pairs []openstack.AllowedAddressPair) error {
+	seen := make(map[string]bool, len(pairs))
+	for _, pair := range pairs {
+		if net.ParseIP(pair.IP) == nil {
+			return errors.Errorf("invalid allowed-address-pair IP %q", pair.IP)
+		}
+		if seen[pair.IP] {
+			return errors.Errorf("duplicate allowed-address-pair IP %q for the same interface", pair.IP)
+		}
+		seen[pair.IP] = true
+	}
+	return nil
+}
+
+// validateAllowedAddressPairSecurityGroup rejects a NIC's allowed-address-pairs when no security group is resolved, since Neutron requires port security to stay enabled for them.
+func validateAllowedAddressPairSecurityGroup(interfaceIndex int, pairs []openstack.AllowedAddressPair, securityGroupIDs []string) error {
+	if len(pairs) == 0 || len(securityGroupIDs) > 0 {
+		return nil
+	}
+	return errors.Errorf("interface %d has allowed address pairs but no security groups are selected for this migration", interfaceIndex)
+}
+
+// excludeAllowedAddressPairIPs removes each allowed-address-pair IP from vminfo.IPperMac[mac] so it is never also sent as a fixed IP.
+func excludeAllowedAddressPairIPs(vminfo *vm.VMInfo, mac string, pairs []openstack.AllowedAddressPair) {
+	if len(pairs) == 0 {
+		return
+	}
+	excluded := make(map[string]bool, len(pairs))
+	for _, pair := range pairs {
+		excluded[pair.IP] = true
+	}
+	filtered := make([]vm.IpEntry, 0, len(vminfo.IPperMac[mac]))
+	for _, entry := range vminfo.IPperMac[mac] {
+		if !excluded[entry.IP] {
+			filtered = append(filtered, entry)
+		}
+	}
+	vminfo.IPperMac[mac] = filtered
 }
 
 // logAndCollectDetectedIPs logs and returns the IPs VMware Tools reported for

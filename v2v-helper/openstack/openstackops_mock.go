@@ -467,18 +467,18 @@ func (mr *MockOpenstackOperationsMockRecorder) SetVolumeUEFI(ctx, volume interfa
 }
 
 // ValidateAndCreatePort mocks base method.
-func (m *MockOpenstackOperations) ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string, subnetPortIndex map[string]int) (*ports.Port, error) {
+func (m *MockOpenstackOperations) ValidateAndCreatePort(ctx context.Context, networkid *networks.Network, mac string, ipPerMac map[string][]vm.IpEntry, vmname string, securityGroups []string, fallbackToDHCP bool, gatewayIP map[string]string, subnetPortIndex map[string]int, allowedAddressPairs []AllowedAddressPair) (*ports.Port, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateAndCreatePort", ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex)
+	ret := m.ctrl.Call(m, "ValidateAndCreatePort", ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex, allowedAddressPairs)
 	ret0, _ := ret[0].(*ports.Port)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ValidateAndCreatePort indicates an expected call of ValidateAndCreatePort.
-func (mr *MockOpenstackOperationsMockRecorder) ValidateAndCreatePort(ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex interface{}) *gomock.Call {
+func (mr *MockOpenstackOperationsMockRecorder) ValidateAndCreatePort(ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex, allowedAddressPairs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndCreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).ValidateAndCreatePort), ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateAndCreatePort", reflect.TypeOf((*MockOpenstackOperations)(nil).ValidateAndCreatePort), ctx, networkid, mac, ipPerMac, vmname, securityGroups, fallbackToDHCP, gatewayIP, subnetPortIndex, allowedAddressPairs)
 }
 
 // WaitForVolume mocks base method.

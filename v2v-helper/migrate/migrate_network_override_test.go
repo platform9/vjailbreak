@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
+	"github.com/platform9/vjailbreak/v2v-helper/openstack"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 )
 
@@ -254,5 +255,130 @@ func TestSyncIPperMacFromPort(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestResolveNICOverride_AllowedAddressPairs covers parsing and validating
+// NICOverride.AllowedAddressPairs: a valid pair (with and without a MAC), an
+// invalid IP, a duplicate IP, and an override for a different interface index
+// (must be ignored).
+func TestResolveNICOverride_AllowedAddressPairs(t *testing.T) {
+	tests := []struct {
+		name      string
+		overrides []NICOverride
+		idx       int
+		want      []openstack.AllowedAddressPair
+		wantErr   bool
+	}{
+		{
+			name: "single valid pair, no MAC",
+			overrides: []NICOverride{
+				{InterfaceIndex: 0, AllowedAddressPairs: []AddressPairs{{IP: "10.0.0.58"}}},
+			},
+			idx:  0,
+			want: []openstack.AllowedAddressPair{{IP: "10.0.0.58"}},
+		},
+		{
+			name: "pair with an explicit MAC",
+			overrides: []NICOverride{
+				{InterfaceIndex: 0, AllowedAddressPairs: []AddressPairs{{IP: "10.0.0.58", MAC: "00:00:5e:00:01:01"}}},
+			},
+			idx:  0,
+			want: []openstack.AllowedAddressPair{{IP: "10.0.0.58", MAC: "00:00:5e:00:01:01"}},
+		},
+		{
+			name: "override for a different interface is ignored",
+			overrides: []NICOverride{
+				{InterfaceIndex: 1, AllowedAddressPairs: []AddressPairs{{IP: "10.0.0.58"}}},
+			},
+			idx:  0,
+			want: nil,
+		},
+		{
+			name: "invalid IP is rejected",
+			overrides: []NICOverride{
+				{InterfaceIndex: 0, AllowedAddressPairs: []AddressPairs{{IP: "not-an-ip"}}},
+			},
+			idx:     0,
+			wantErr: true,
+		},
+		{
+			name: "duplicate IP is rejected",
+			overrides: []NICOverride{
+				{InterfaceIndex: 0, AllowedAddressPairs: []AddressPairs{{IP: "10.0.0.58"}, {IP: "10.0.0.58"}}},
+			},
+			idx:     0,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveNICOverride(tt.overrides, tt.idx)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected an error, got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(got.allowedAddressPairs, tt.want) {
+				t.Fatalf("allowedAddressPairs = %#v, want %#v", got.allowedAddressPairs, tt.want)
+			}
+		})
+	}
+}
+
+// TestExcludeAllowedAddressPairIPs asserts that an allowed-address-pair IP is
+// removed from vminfo.IPperMac[mac] (so it is never also sent as a fixed IP),
+// while an unrelated IP on the same NIC is left in place.
+func TestExcludeAllowedAddressPairIPs(t *testing.T) {
+	const mac = "aa:bb:cc:dd:ee:ff"
+	vminfo := &vm.VMInfo{
+		IPperMac: map[string][]vm.IpEntry{
+			mac: {{IP: "10.102.164.57"}, {IP: "10.102.164.58"}},
+		},
+	}
+
+	excludeAllowedAddressPairIPs(vminfo, mac, []openstack.AllowedAddressPair{{IP: "10.102.164.58"}})
+
+	want := []vm.IpEntry{{IP: "10.102.164.57"}}
+	if !reflect.DeepEqual(vminfo.IPperMac[mac], want) {
+		t.Fatalf("IPperMac[mac] = %#v, want %#v", vminfo.IPperMac[mac], want)
+	}
+}
+
+// TestExcludeAllowedAddressPairIPs_NoPairs asserts that IPperMac is left
+// untouched (not even reallocated) when there are no allowed-address-pairs.
+func TestExcludeAllowedAddressPairIPs_NoPairs(t *testing.T) {
+	const mac = "aa:bb:cc:dd:ee:ff"
+	original := []vm.IpEntry{{IP: "10.102.164.57"}}
+	vminfo := &vm.VMInfo{IPperMac: map[string][]vm.IpEntry{mac: original}}
+
+	excludeAllowedAddressPairIPs(vminfo, mac, nil)
+
+	if !reflect.DeepEqual(vminfo.IPperMac[mac], original) {
+		t.Fatalf("IPperMac[mac] = %#v, want unchanged %#v", vminfo.IPperMac[mac], original)
+	}
+}
+
+// TestValidateAllowedAddressPairSecurityGroup asserts that a NIC's allowed-
+// address-pairs are rejected when no security group is resolved for the
+// migration (Neutron requires port security to stay enabled for them), but
+// allowed otherwise. Callers are expected to skip this check entirely for a
+// NIC on an L2 network (see createPortsForNetworks).
+func TestValidateAllowedAddressPairSecurityGroup(t *testing.T) {
+	pairs := []openstack.AllowedAddressPair{{IP: "10.0.0.58"}}
+
+	if err := validateAllowedAddressPairSecurityGroup(0, pairs, []string{"sg-1"}); err != nil {
+		t.Fatalf("expected no error with a security group present, got: %v", err)
+	}
+	if err := validateAllowedAddressPairSecurityGroup(0, nil, nil); err != nil {
+		t.Fatalf("expected no error with no pairs at all, got: %v", err)
+	}
+	if err := validateAllowedAddressPairSecurityGroup(0, pairs, nil); err == nil {
+		t.Fatalf("expected an error: allowed-address-pairs with no security groups")
 	}
 }
