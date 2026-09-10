@@ -1,5 +1,5 @@
 import { GridColDef, GridRowSelectionModel } from '@mui/x-data-grid'
-import { Button, Box, IconButton, Tooltip, Chip, Alert } from '@mui/material'
+import { Button, Box, IconButton, Tooltip, Chip, Alert, Snackbar } from '@mui/material'
 import { keyframes } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -310,7 +310,7 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedForDeletion, setSelectedForDeletion] = useState<CredentialItem[]>([])
-  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [deleteErrorToast, setDeleteErrorToast] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [agentNodeInfo, setAgentNodeInfo] = useState<Pick<
     OpenstackCredsDeletableResponse,
@@ -551,7 +551,6 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
   const handleDeleteClose = () => {
     setDeleteDialogOpen(false)
     setSelectedForDeletion([])
-    setDeleteError(null)
     setAgentNodeInfo(null)
   }
 
@@ -637,28 +636,11 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
           action: 'delete-credentials'
         }
       })
-      // Rethrow so ConfirmationDialog's onConfirm() rejects: it must not call
-      // onClose() on failure, since onClose() also wipes deleteError back to
-      // null, which would close the dialog and erase the error in the same
-      // tick — silently discarding it before the user ever sees it.
-      throw error
+      setDeleteErrorToast(errorMessage)
     } finally {
       setDeleting(false)
     }
   }
-
-  const getCustomErrorMessage = useCallback((error: Error | string) => {
-    const baseMessage = 'Failed to delete credentials'
-    const apiMessage = (error as { response?: { data?: { message?: string } } })?.response?.data
-      ?.message
-    if (apiMessage) {
-      return `${baseMessage}: ${apiMessage}`
-    }
-    if (error instanceof Error) {
-      return `${baseMessage}: ${error.message}`
-    }
-    return `${baseMessage}: ${error}`
-  }, [])
 
   const tableColumns = getColumns(
     handleDeleteCredential,
@@ -764,10 +746,17 @@ export default function CredentialsTable({ credentialType }: CredentialsTablePro
         actionColor="error"
         actionVariant="outlined"
         onConfirm={handleConfirmDelete}
-        customErrorMessage={getCustomErrorMessage}
-        errorMessage={deleteError}
-        onErrorChange={setDeleteError}
       />
+
+      <Snackbar
+        open={!!deleteErrorToast}
+        autoHideDuration={6000}
+        onClose={() => setDeleteErrorToast(null)}
+      >
+        <Alert onClose={() => setDeleteErrorToast(null)} severity="error">
+          {deleteErrorToast}
+        </Alert>
+      </Snackbar>
 
       {vmwareCredDrawerOpen && (
         <VMwareCredentialsDrawer

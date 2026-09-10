@@ -1,6 +1,6 @@
 import { test, expect, Page, Route } from '@playwright/test'
 
-import { mockRoute, mockRouteError, API } from '../migration/helpers/migration.helpers'
+import { mockRoute, mockRouteError, expectToast, API } from '../migration/helpers/migration.helpers'
 import { MOCK_VMWARE_CRED_1, MOCK_VMWARE_CREDS_LIST } from '../migration/helpers/migration.fixtures'
 
 // Adding a VMware credential is a two-write flow: the password goes into a Secret, the
@@ -130,11 +130,13 @@ test.describe('CRED-001 — add VMware credentials', () => {
 
 test.describe('CRED-002 — delete VMware credentials blocked mid-migration', () => {
   // Deleting VMwareCreds while a Migration sourced from it is still in progress
-  // is rejected by a validating webhook: without it, the
-  // in-flight migration's VMwareMachine CRs would be deleted out from under
-  // it and it would get stuck at "ConvertingDisk" forever. The webhook's
-  // denial reason must reach the user, not a generic HTTP-status message.
-  test('surfaces the webhook denial reason instead of a generic HTTP error', async ({ page }) => {
+  // is rejected by a validating webhook: without it, the in-flight migration's
+  // VMwareMachine CRs would be deleted out from under it and it would get
+  // stuck at "ConvertingDisk" forever. The dialog closes either way (success
+  // or failure — it never dead-ends on a Delete button that can only fail
+  // again), and the webhook's actual reason surfaces in a toast, not the
+  // dialog itself and not a generic HTTP-status message.
+  test('closes the dialog and toasts the webhook denial reason', async ({ page }) => {
     const credName = MOCK_VMWARE_CRED_1.metadata.name
     const denialMessage = `cannot delete VMwareCreds "${credName}": migration "mig-a" is still in progress (phase ConvertingDisk)`
 
@@ -149,13 +151,8 @@ test.describe('CRED-002 — delete VMware credentials blocked mid-migration', ()
     await expect(dialog).toBeVisible()
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
 
-    // The dialog must stay open and show the webhook's actual reason — not
-    // close silently (the pre-existing bug: onConfirm() never rethrew, so
-    // ConfirmationDialog always called onClose(), which also wiped the error)
-    // and not fall back to Axios's generic "Request failed with status code
-    // 403" (error.message instead of error.response.data.message).
-    await expect(dialog).toBeVisible()
-    await expect(page.getByText(denialMessage)).toBeVisible()
+    await expect(dialog).not.toBeVisible()
+    await expectToast(page, denialMessage)
     await expect(page.getByText(/request failed with status code/i)).not.toBeVisible()
   })
 })
