@@ -8,6 +8,8 @@ export const AMPLITUDE_EVENTS = {
   MIGRATION_SUCCEEDED: 'Migration Succeeded', // For successful completions
   MIGRATION_DELETED: 'Migration Deleted',
   MIGRATION_DELETE_FAILED: 'Migration Delete Failed',
+  CUTOVER_TRIGGERED: 'Cutover Triggered',
+  CUTOVER_TRIGGER_FAILED: 'Cutover Trigger Failed',
 
   // Agents
   AGENTS_SCALE_UP: 'Agents Scale Up',
