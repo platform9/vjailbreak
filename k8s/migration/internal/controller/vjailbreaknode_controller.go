@@ -113,13 +113,13 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		if err != nil {
 			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to update master node image id")
 		}
-		log.Info("Updated master node image and flavor", "name", vjNode.Name)
+		log.Info("Updated master node image and flavor", "name", vjNode.Status.OpenstackName)
 		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	// Skip reconciliation if node is in error state - wait for manual intervention or deletion
 	if vjNode.Status.Phase == constants.VjailbreakNodePhaseError {
-		log.Info("Node is in error state, skipping reconciliation. Delete the node to clean up.", "name", vjNode.Name)
+		log.Info("Node is in error state, skipping reconciliation. Delete the node to clean up.", "name", vjNode.Status.OpenstackName)
 		return ctrl.Result{RequeueAfter: 5 * time.Minute}, nil
 	}
 
@@ -128,11 +128,11 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 		log.Error(repErr, "Failed to handle reprovision annotation")
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, repErr
 	} else if reprovisioned {
-		log.Info("Reprovision triggered, requeueing to create new VM", "name", vjNode.Name)
+		log.Info("Reprovision triggered, requeueing to create new VM", "name", vjNode.Status.OpenstackName)
 		return ctrl.Result{Requeue: true}, nil
 	}
 
-	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
+	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Status.OpenstackName, r.Client, vjNode)
 	if err != nil {
 		log.Error(err, "Failed to get OpenStack VM by name, setting node to error state")
 		vjNode.Status.Phase = constants.VjailbreakNodePhaseError
@@ -225,7 +225,7 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	}
 
 	// Try to get the VM UUID - use stored UUID if lookup fails
-	uuid, err := utils.GetOpenstackVMByName(ctx, scope.VjailbreakNode.Name, r.Client, scope.VjailbreakNode)
+	uuid, err := utils.GetOpenstackVMByName(ctx, scope.VjailbreakNode.Status.OpenstackName, r.Client, scope.VjailbreakNode)
 	if err != nil {
 		log.Info("Failed to lookup VM by name, using stored UUID if available", "error", err)
 		uuid = scope.VjailbreakNode.Status.OpenstackUUID
@@ -245,22 +245,22 @@ func (r *VjailbreakNodeReconciler) reconcileDelete(ctx context.Context,
 	}
 
 	// Try to delete the Kubernetes node
-	if scope.VjailbreakNode.Name != "" {
-		err = utils.DeleteNodeByName(ctx, r.Client, scope.VjailbreakNode.Name)
+	if scope.VjailbreakNode.Status.OpenstackName != "" {
+		err = utils.DeleteNodeByName(ctx, r.Client, scope.VjailbreakNode.Status.OpenstackName)
 		if err != nil && !apierrors.IsNotFound(err) {
-			log.Error(err, "Failed to delete Kubernetes node, continuing with finalizer removal", "nodeName", scope.VjailbreakNode.Name)
+			log.Error(err, "Failed to delete Kubernetes node, continuing with finalizer removal", "nodeName", scope.VjailbreakNode.Status.OpenstackName)
 			// Don't return error - allow finalizer removal even if K8s node deletion fails
 		} else if err == nil {
-			log.Info("Successfully deleted Kubernetes node", "nodeName", scope.VjailbreakNode.Name)
+			log.Info("Successfully deleted Kubernetes node", "nodeName", scope.VjailbreakNode.Status.OpenstackName)
 		}
 	} else {
-		log.Info("VjailbreakNode name is empty, skipping Kubernetes node deletion")
+		log.Info("VjailbreakNode OpenstackName is empty, skipping Kubernetes node deletion")
 	}
 
 	// Always remove finalizer to allow the resource to be deleted
 	// This ensures nodes in error states can be cleaned up
 	controllerutil.RemoveFinalizer(scope.VjailbreakNode, constants.VjailbreakNodeFinalizer)
-	log.Info("Finalizer removed, VjailbreakNode will be deleted", "name", scope.VjailbreakNode.Name)
+	log.Info("Finalizer removed, VjailbreakNode will be deleted", "name", scope.VjailbreakNode.Status.OpenstackName)
 	return ctrl.Result{}, nil
 }
 
@@ -307,7 +307,7 @@ func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
 	uuid := vjNode.Status.OpenstackUUID
 	if uuid == "" {
 		var lookupErr error
-		uuid, lookupErr = utils.GetOpenstackVMByName(ctx, vjNode.Name, r.Client, vjNode)
+		uuid, lookupErr = utils.GetOpenstackVMByName(ctx, vjNode.Status.OpenstackName, r.Client, vjNode)
 		if lookupErr != nil {
 			log.Error(lookupErr, "reprovision: failed to look up VM by name, continuing without VM deletion")
 		}
@@ -323,9 +323,9 @@ func (r *VjailbreakNodeReconciler) reconcileReprovision(ctx context.Context,
 	}
 
 	// Remove the Kubernetes node entry so k3s re-joins cleanly
-	if vjNode.Name != "" {
-		if delErr := utils.DeleteNodeByName(ctx, r.Client, vjNode.Name); delErr != nil && !apierrors.IsNotFound(delErr) {
-			log.Error(delErr, "reprovision: failed to delete K8s node, continuing", "nodeName", vjNode.Name)
+	if vjNode.Status.OpenstackName != "" {
+		if delErr := utils.DeleteNodeByName(ctx, r.Client, vjNode.Status.OpenstackName); delErr != nil && !apierrors.IsNotFound(delErr) {
+			log.Error(delErr, "reprovision: failed to delete K8s node, continuing", "nodeName", vjNode.Status.OpenstackName)
 		}
 	}
 
@@ -353,7 +353,7 @@ func (r *VjailbreakNodeReconciler) updateActiveMigrations(ctx context.Context,
 	vjNode := scope.VjailbreakNode
 
 	// Get active migrations happening on the node
-	activeMigrations, err := utils.GetActiveMigrations(ctx, vjNode.Name, r.Client)
+	activeMigrations, err := utils.GetActiveMigrations(ctx, vjNode.Status.OpenstackName, r.Client)
 	if err != nil {
 		return ctrl.Result{}, errors.Wrap(err, "failed to get active migrations")
 	}
