@@ -8,6 +8,7 @@ export const AMPLITUDE_EVENTS = {
   MIGRATION_SUCCEEDED: 'Migration Succeeded', // For successful completions
   MIGRATION_DELETED: 'Migration Deleted',
   MIGRATION_DELETE_FAILED: 'Migration Delete Failed',
+  // Cutover Events
   CUTOVER_TRIGGERED: 'Cutover Triggered',
   CUTOVER_TRIGGER_FAILED: 'Cutover Trigger Failed',
 
@@ -54,7 +55,7 @@ export const AMPLITUDE_EVENTS = {
   // AI Analysis Events
   AI_ANALYSIS_TRIGGERED: 'AI Analysis Triggered',
   AI_ANALYSIS_FEEDBACK: 'AI Analysis Feedback',
-  AI_GITHUB_ISSUE_OPENED: 'AI GitHub Issue Opened',
+  AI_GITHUB_ISSUE_OPENED: 'AI GitHub Issue Opened'
 } as const
 
 export type AmplitudeEventName = (typeof AMPLITUDE_EVENTS)[keyof typeof AMPLITUDE_EVENTS] | string
