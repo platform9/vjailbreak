@@ -382,11 +382,18 @@ export function useVmsSelectionState(props: VmsSelectionStepProps) {
           allIPs = existingVm.ipAddress ?? allIPs
         }
 
-        let preferredNetworkInterfaces = vm.networkInterfaces
-        if (existingVm && existingVm.networkInterfaces && existingVm.networkInterfaces.length > 0) {
-          preferredNetworkInterfaces = existingVm.networkInterfaces
+        // Base is the freshly fetched NIC list (source of truth for IP presence, e.g. after
+        // revalidate). Only override per-NIC ipAddress where the user made a custom
+        // assignment (preserveIp[i] === false) — never blanket-keep the stale existing list,
+        // or newly-discovered IPs after a revalidate would never surface.
+        let preferredNetworkInterfaces = normalizeNetworkInterfaces(vm.networkInterfaces)
+        if (existingVm?.networkInterfaces?.length) {
+          preferredNetworkInterfaces = mergeNicIpOverrides(
+            preferredNetworkInterfaces ?? [],
+            normalizeNetworkInterfaces(existingVm.networkInterfaces) ?? [],
+            existingVm.preserveIp ?? {},
+          )
         }
-        preferredNetworkInterfaces = normalizeNetworkInterfaces(preferredNetworkInterfaces)
 
         return {
           ...vm,
