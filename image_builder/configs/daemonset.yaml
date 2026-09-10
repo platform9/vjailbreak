@@ -72,7 +72,7 @@ spec:
                 if command -v curl >/dev/null 2>&1; then
                   raw=$(curl -s --cacert "$ca_file" -H "Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
                 elif command -v wget >/dev/null 2>&1; then
-                  raw=$(wget -qO- --ca-certificate="$ca_file" --header="Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
+                  raw=$(wget -qO- --no-check-certificate --header="Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
                 else
                   echo "[retention] neither curl nor wget found in this image, using default 24h" >&2
                   echo 24
