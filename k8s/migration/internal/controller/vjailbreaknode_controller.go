@@ -22,6 +22,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -130,6 +131,27 @@ func (r *VjailbreakNodeReconciler) reconcileNormal(ctx context.Context,
 	} else if reprovisioned {
 		log.Info("Reprovision triggered, requeueing to create new VM", "name", vjNode.Status.OpenstackName)
 		return ctrl.Result{Requeue: true}, nil
+	}
+
+	// Compute and persist the agent's OpenStack instance name before the VM
+	// lookup.  Status.OpenstackName is empty on the very first reconcile and
+	// after a reprovision; leaving it empty causes GetOpenstackVMByName to send
+	// an empty Name filter to Nova, which returns ALL servers - the first UUID
+	// is then treated as "VM exists" and creation is skipped entirely.
+	if vjNode.Status.OpenstackName == "" {
+		masterVjNode := &vjailbreakv1alpha1.VjailbreakNode{}
+		if err := r.Get(ctx, types.NamespacedName{
+			Namespace: constants.NamespaceMigrationSystem,
+			Name:      constants.VjailbreakMasterNodeName,
+		}, masterVjNode); err != nil {
+			log.Error(err, "Failed to get master node for agent name computation")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to get master node for agent name computation")
+		}
+		vjNode.Status.OpenstackName = utils.ComputeAgentInstanceName(masterVjNode.Status.OpenstackName, vjNode.Name)
+		if err := r.Status().Update(ctx, vjNode); err != nil {
+			log.Error(err, "Failed to persist agent OpenstackName")
+			return ctrl.Result{RequeueAfter: 30 * time.Second}, errors.Wrap(err, "failed to persist agent openstack name")
+		}
 	}
 
 	uuid, err := utils.GetOpenstackVMByName(ctx, vjNode.Status.OpenstackName, r.Client, vjNode)

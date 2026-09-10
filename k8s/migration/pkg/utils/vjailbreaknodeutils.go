@@ -353,11 +353,9 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		rootDisk.VolumeType = volumeType
 	}
 
-	// Derive the OpenStack instance name from the master's OpenstackName so the
-	// agent VM is identifiable as belonging to its primary vjailbreak VM. Must
-	// happen before port creation below, since the port name is derived from it.
-	instanceName := ComputeAgentInstanceName(masterVjNode.Status.OpenstackName, vjNode.Name)
-	vjNode.Status.OpenstackName = instanceName
+	// Status.OpenstackName is computed and persisted by reconcileNormal before
+	// this function is called. Use it directly so port/server names stay consistent.
+	instanceName := vjNode.Status.OpenstackName
 
 	// Handle L2-only networks by creating ports first
 	// For L2 networks, FixedIP will be set to "L2_NETWORK" marker
@@ -999,6 +997,9 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 
 // GetOpenstackVMByName retrieves an OpenStack VM's UUID by its name
 func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (string, error) {
+	if name == "" {
+		return "", nil
+	}
 	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
