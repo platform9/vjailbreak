@@ -74,6 +74,14 @@ generate-manifests: setup-hooks vjail-controller ui
 build-vpwned: setup-hooks
 	make -C pkg/vpwned docker-build
 
+.PHONY: vassessment
+vassessment: setup-hooks
+	make -C vassessment build
+
+.PHONY: test-vassessment
+test-vassessment: setup-hooks
+	make -C vassessment test
+
 .PHONY: vjailbreak-ai
 vjailbreak-ai: setup-hooks
 	docker build --platform linux/amd64 -t $(AI_IMG) vjailbreak-ai/
