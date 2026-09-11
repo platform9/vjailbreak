@@ -376,6 +376,12 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, "deploy/08vjailbreak-ai-deployment.yaml"); err != nil {
 		return fmt.Errorf("failed to apply AI deployment: %w", err)
 	}
+
+	e.updateProgress("Applying sync-daemon manifest from GitHub", StatusDeploying, "")
+	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, "image_builder/configs/daemonset.yaml"); err != nil {
+		log.Printf("Warning: Failed to apply sync-daemon manifest: %v", err)
+	}
+
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
@@ -864,6 +870,12 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, previousVersion, "deploy/08vjailbreak-ai-deployment.yaml"); err != nil {
 		log.Printf("Warning: Failed to restore AI deployment: %v", err)
 	}
+
+	e.updateProgress("Restoring sync-daemon manifest from GitHub", StatusRollingBack, "")
+	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, previousVersion, "image_builder/configs/daemonset.yaml"); err != nil {
+		log.Printf("Warning: Failed to restore sync-daemon manifest: %v", err)
+	}
+
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
