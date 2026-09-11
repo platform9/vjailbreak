@@ -13,6 +13,8 @@ import {
 } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import { triggerAdminCutover } from '../../api/migrations'
+import { useAmplitude } from 'src/hooks/useAmplitude'
+import { AMPLITUDE_EVENTS } from 'src/types/amplitude'
 
 interface TriggerAdminCutoverButtonProps {
   migrationName: string
@@ -30,6 +32,7 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const { track } = useAmplitude({ component: 'TriggerAdminCutoverButton' })
 
   const handleTriggerCutover = async () => {
     setError(null)
@@ -39,14 +42,26 @@ export const TriggerAdminCutoverButton: React.FC<TriggerAdminCutoverButtonProps>
       const result = await triggerAdminCutover(namespace || 'migration-system', migrationName)
 
       if (result.success) {
+        track(AMPLITUDE_EVENTS.CUTOVER_TRIGGERED, { migrationName, namespace })
         setOpen(false)
         onSuccess?.()
       } else {
-        setError(result.message || 'Failed to trigger cutover')
-        onError?.(result.message || 'Failed to trigger cutover')
+        const errorMessage = result.message || 'Failed to trigger cutover'
+        track(AMPLITUDE_EVENTS.CUTOVER_TRIGGER_FAILED, {
+          migrationName,
+          namespace,
+          errorMessage
+        })
+        setError(errorMessage)
+        onError?.(errorMessage)
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred'
+      track(AMPLITUDE_EVENTS.CUTOVER_TRIGGER_FAILED, {
+        migrationName,
+        namespace,
+        errorMessage
+      })
       setError(errorMessage)
       onError?.(errorMessage)
     } finally {
