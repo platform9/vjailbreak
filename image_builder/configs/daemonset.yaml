@@ -67,7 +67,7 @@ spec:
               fetch_retention_hours() {
                 local token_file=/var/run/secrets/kubernetes.io/serviceaccount/token
                 local ca_file=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-                local url=https://kubernetes.default.svc/api/v1/namespaces/migration-system/configmaps/vjailbreak-settings
+                local url="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/api/v1/namespaces/migration-system/configmaps/vjailbreak-settings"
                 local raw
                 if command -v curl >/dev/null 2>&1; then
                   raw=$(curl -s --cacert "$ca_file" -H "Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
@@ -94,9 +94,9 @@ spec:
                   return
                 fi
 
-                if [ "$hours" -lt 1 ]; then
-                  echo "[retention] LOG_RETENTION_HOURS=$hours is below the 1h minimum, clamping to 1h" >&2
-                  echo 1
+                if [ "$hours" -lt 24 ]; then
+                  echo "[retention] LOG_RETENTION_HOURS=$hours is below the 24h minimum, clamping to 24h" >&2
+                  echo 24
                   return
                 fi
 

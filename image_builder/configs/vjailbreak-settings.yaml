@@ -18,7 +18,7 @@ data:
   VCENTER_LOGIN_RETRY_LIMIT: "5" # number of retries for vcenter login
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for openstack creds
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60" # number of minutes to requeue after for vmware creds
-  LOG_RETENTION_HOURS: "24" # hours to keep migration logs before sync-daemon cleans them up (minimum allowed: 1)
+  LOG_RETENTION_HOURS: "24" # hours to keep migration logs before sync-daemon cleans them up (minimum allowed: 24)
   VALIDATE_RDM_OWNER_VMS: "true" # validate RDM owner VMs before migration
   DEPLOYMENT_NAME: vJailbreak
   TIMEZONE: ""

@@ -279,7 +279,7 @@ const FIELD_TOOLTIPS: Record<keyof SettingsForm, string> = {
   VCENTER_LOGIN_RETRY_LIMIT:
     'Number of login retries before the workflow surfaces an authentication error.',
   VCENTER_SCAN_CONCURRENCY_LIMIT: 'Maximum number of vCenter VMs to scan concurrently.',
-  LOG_RETENTION_HOURS: 'Number of hours to keep migration logs before sync-daemon cleans them up. Minimum 1 hour.',
+  LOG_RETENTION_HOURS: 'Number of hours to keep migration logs before sync-daemon cleans them up. Minimum 24 hours.',
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES:
     'Time before failed PCD credentials are re-queued for another attempt.',
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: 'Time before VMware credential rotations are retried.',
@@ -561,8 +561,8 @@ const useGlobalSettingsController = (): UseGlobalSettingsControllerReturn => {
     }
 
     const logRetentionHours = state.LOG_RETENTION_HOURS
-    if (!Number.isFinite(logRetentionHours) || !Number.isInteger(logRetentionHours) || logRetentionHours < 1) {
-      e.LOG_RETENTION_HOURS = 'Enter a whole number of hours, minimum 1.'
+    if (!Number.isFinite(logRetentionHours) || !Number.isInteger(logRetentionHours) || logRetentionHours < 24) {
+      e.LOG_RETENTION_HOURS = 'Enter a whole number of hours, minimum 24.'
     }
 
     const bools: Array<keyof SettingsForm> = [
