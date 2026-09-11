@@ -88,6 +88,17 @@ status:
 		return reply(http.StatusOK, "data:\n  version: ${TAG}\n")
 	case strings.HasSuffix(r.URL.Path, "image_builder/configs/vjailbreak-settings.yaml"):
 		return reply(http.StatusOK, "data:\n  VERSION: ${TAG}\n")
+	case strings.HasSuffix(r.URL.Path, "image_builder/configs/daemonset.yaml"):
+		return reply(http.StatusOK, `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sync-daemon
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: sync-daemon
+`)
 	}
 
 	for _, cfg := range DeploymentConfigs {
@@ -875,6 +886,9 @@ func TestRunDeploymentPhase(t *testing.T) {
 				t.Errorf("%s was never applied; %s would keep running the old image", path, cfg.Name)
 			}
 		}
+		if !router.fetched("image_builder/configs/daemonset.yaml") {
+			t.Error("sync-daemon manifest was never applied; upgraded appliances would keep the old sync-daemon")
+		}
 		if e.progress.Status != StatusCompleted {
 			t.Errorf("status = %q, want %q", e.progress.Status, StatusCompleted)
 		}
@@ -927,6 +941,19 @@ func TestRunDeploymentPhase(t *testing.T) {
 		}
 	})
 
+	t.Run("a missing sync-daemon manifest logs a warning but does not fail the phase", func(t *testing.T) {
+		serveGitHub(t, "image_builder/configs/daemonset.yaml")
+
+		e := &UpgradeExecutor{
+			timing:     fastTiming(),
+			kubeClient: newSettlingClient(t, settledDeployments()...),
+			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
+		}
+
+		if err := e.runDeploymentPhase(context.Background(), "v0.4.9", "backup-1"); err != nil {
+			t.Fatalf("runDeploymentPhase() error = %v, want nil (sync-daemon is best-effort)", err)
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -1171,8 +1198,23 @@ func TestExecuteRollbackManifestDriven(t *testing.T) {
 	if !router.fetched("deploy/00crds.yaml") {
 		t.Error("CRDs were not restored to the previous version")
 	}
+	if !router.fetched("image_builder/configs/daemonset.yaml") {
+		t.Error("sync-daemon manifest was not restored during rollback")
+	}
 	if e.progress.Status != StatusRolledBack {
 		t.Errorf("status = %q, want %q", e.progress.Status, StatusRolledBack)
+	}
+}
+
+// sync-daemon is best-effort during rollback too: a missing manifest must not abort it.
+func TestExecuteRollbackToleratesMissingSyncDaemonManifest(t *testing.T) {
+	t.Setenv("JOB_UID", "")
+	serveGitHub(t, "image_builder/configs/daemonset.yaml")
+
+	e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newSettlingClient(t, settledDeployments()...)}
+
+	if err := e.ExecuteRollback(context.Background(), "v0.4.8", "v0.4.9", ""); err != nil {
+		t.Fatalf("ExecuteRollback() error = %v, want nil (sync-daemon is best-effort)", err)
 	}
 }
 
