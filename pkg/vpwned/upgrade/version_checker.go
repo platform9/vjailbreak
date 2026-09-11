@@ -193,6 +193,9 @@ func CheckImagesExist(ctx context.Context, tag string) (bool, error) {
 		"quay.io/platform9/vjailbreak-controller:" + tag,
 		"quay.io/platform9/vjailbreak-vpwned:" + tag,
 		"quay.io/platform9/vjailbreak-ai:" + tag,
+		// sync-daemon pins a fixed base-image tag rather than the release tag, but it
+		// still has to be pullable before the upgrade job applies its manifest.
+		"quay.io/platform9/vjailbreak:alpine",
 	}
 
 	for _, imageName := range images {

@@ -609,6 +609,19 @@ func deployment(name string, replicas, ready, statusReplicas int32) *appsv1.Depl
 	}
 }
 
+// daemonSet builds a sync-daemon fixture in kube-system, the same shape
+// waitForDaemonSetReady checks: desired vs. ready vs. updated scheduled pods.
+func daemonSet(name string, desired, ready, updated int32) *appsv1.DaemonSet {
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "kube-system"},
+		Status: appsv1.DaemonSetStatus{
+			DesiredNumberScheduled: desired,
+			NumberReady:            ready,
+			UpdatedNumberScheduled: updated,
+		},
+	}
+}
+
 func backupConfigMap(name, backupID, resource string, age time.Duration) *corev1.ConfigMap {
 	labels := map[string]string{"vjailbreak-backup": "true"}
 	if backupID != "" {
@@ -906,6 +919,7 @@ func TestBackupResourcesWithID(t *testing.T) {
 		deployment("migration-controller-manager", 1, 1, 1),
 		deployment("migration-vpwned-sdk", 1, 1, 1),
 		deployment("vjailbreak-ui", 1, 1, 1),
+		daemonSet("sync-daemon", 1, 1, 1),
 	)
 
 	if err := BackupResourcesWithID(context.Background(), kubeClient, &rest.Config{}, "20260811T000000Z"); err != nil {
@@ -933,6 +947,7 @@ func TestBackupResourcesWithID(t *testing.T) {
 		"backup-deploy-migration-controller-manager",
 		"backup-deploy-migration-vpwned-sdk",
 		"backup-deploy-vjailbreak-ui",
+		"backup-daemonset-sync-daemon",
 	} {
 		if !got[want] {
 			t.Errorf("missing backup ConfigMap %q; got %v", want, got)
@@ -1957,6 +1972,63 @@ func TestRestoreResourcesRestoresEveryDeployment(t *testing.T) {
 		}
 		if dep.Spec.Replicas == nil || *dep.Spec.Replicas != 2 {
 			t.Errorf("%s replicas = %v, want the 2 recorded in its snapshot", cfg.Name, dep.Spec.Replicas)
+		}
+	}
+}
+
+func daemonSetSnapshot(name string) string {
+	return fmt.Sprintf(`apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: %s
+  namespace: kube-system
+`, name)
+}
+
+// Same guarantee as TestBackupResourcesWithIDBacksUpEveryDeployment, for the DaemonSet
+// list instead of the Deployment one.
+func TestBackupResourcesWithIDBacksUpEveryDaemonSet(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DaemonSetConfigs {
+		objs = append(objs, daemonSet(cfg.Name, 1, 1, 1))
+	}
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := BackupResourcesWithID(context.Background(), kubeClient, &rest.Config{}, "id-1"); err != nil {
+		t.Fatalf("BackupResourcesWithID() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		cm := &corev1.ConfigMap{}
+		key := client.ObjectKey{Name: "backup-daemonset-" + cfg.Name, Namespace: Namespace}
+		if err := kubeClient.Get(context.Background(), key, cm); err != nil {
+			t.Errorf("no backup for %s: %v — rollback would have nothing to restore", cfg.Name, err)
+			continue
+		}
+		if cm.Data["resource"] == "" {
+			t.Errorf("backup for %s holds no serialized resource", cfg.Name)
+		}
+	}
+}
+
+func TestRestoreResourcesRestoresEveryDaemonSet(t *testing.T) {
+	var objs []client.Object
+	for _, cfg := range DaemonSetConfigs {
+		objs = append(objs, backupConfigMap("backup-daemonset-"+cfg.Name, "id-1",
+			daemonSetSnapshot(cfg.Name), 0))
+	}
+
+	kubeClient := newFakeClient(t, objs...)
+
+	if err := RestoreResources(context.Background(), kubeClient, "id-1"); err != nil {
+		t.Fatalf("RestoreResources() error = %v, want nil", err)
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		ds := &appsv1.DaemonSet{}
+		key := client.ObjectKey{Name: cfg.Name, Namespace: "kube-system"}
+		if err := kubeClient.Get(context.Background(), key, ds); err != nil {
+			t.Errorf("%s was not restored: %v", cfg.Name, err)
 		}
 	}
 }

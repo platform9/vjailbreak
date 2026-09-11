@@ -252,6 +252,28 @@ func BackupResourcesWithID(ctx context.Context, kubeClient client.Client, restCo
 			log.Printf("Warning: Deployment %s not found for backup: %v", depName, err)
 		}
 	}
+
+	vjailbreakDaemonSets := []struct{ Name, Namespace string }{
+		{Name: "sync-daemon", Namespace: "kube-system"},
+	}
+	for _, ds := range vjailbreakDaemonSets {
+		daemonSet := &appsv1.DaemonSet{}
+		if err := kubeClient.Get(ctx, client.ObjectKey{Name: ds.Name, Namespace: ds.Namespace}, daemonSet); err == nil {
+			var buffer strings.Builder
+			daemonSet.GetObjectKind().SetGroupVersionKind(appsv1.SchemeGroupVersion.WithKind("DaemonSet"))
+			if err := s.Encode(daemonSet, &buffer); err == nil {
+				backupCM := &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: "backup-daemonset-" + ds.Name, Namespace: Namespace, Labels: backupLabel},
+				}
+				_, _ = controllerutil.CreateOrUpdate(ctx, kubeClient, backupCM, func() error {
+					backupCM.Data = map[string]string{"resource": buffer.String()}
+					return nil
+				})
+			}
+		} else {
+			log.Printf("Warning: DaemonSet %s not found for backup: %v", ds.Name, err)
+		}
+	}
 	log.Println("Backup completed.")
 	return nil
 }
@@ -275,6 +297,7 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 	crdBackups := map[string]corev1.ConfigMap{}
 	cmBackups := map[string]corev1.ConfigMap{}
 	deployBackups := map[string]corev1.ConfigMap{}
+	daemonSetBackups := map[string]corev1.ConfigMap{}
 	otherBackups := []corev1.ConfigMap{}
 
 	for _, cm := range backupCMList.Items {
@@ -285,6 +308,8 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 			cmBackups[cm.Name] = cm
 		case strings.HasPrefix(cm.Name, "backup-deploy-"):
 			deployBackups[cm.Name] = cm
+		case strings.HasPrefix(cm.Name, "backup-daemonset-"):
+			daemonSetBackups[cm.Name] = cm
 		default:
 			otherBackups = append(otherBackups, cm)
 		}
@@ -431,6 +456,18 @@ func RestoreResources(ctx context.Context, kubeClient client.Client, backupID st
 		}
 	} else {
 		log.Printf("No AI backup found for %s", aiName)
+	}
+
+	for _, cm := range daemonSetBackups {
+		yamlData, ok := cm.Data["resource"]
+		if !ok {
+			continue
+		}
+		if err := applyRestoredObject(ctx, kubeClient, []byte(yamlData)); err != nil {
+			log.Printf("Failed to restore DaemonSet from backup %s: %v", cm.Name, err)
+		} else {
+			log.Printf("Restored DaemonSet from backup %s", cm.Name)
+		}
 	}
 
 	for _, cm := range otherBackups {

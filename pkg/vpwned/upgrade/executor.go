@@ -66,6 +66,21 @@ var DeploymentConfigs = []DeploymentConfig{
 	},
 }
 
+// DaemonSetConfig mirrors DeploymentConfig for a workload that rolls out as a DaemonSet
+// instead of a Deployment (so it has no ContainerName/ImagePrefix to track per version),
+// while still getting the same post-upgrade readiness and stability checks.
+type DaemonSetConfig struct {
+	Namespace string
+	Name      string
+}
+
+var DaemonSetConfigs = []DaemonSetConfig{
+	{
+		Namespace: "kube-system",
+		Name:      "sync-daemon",
+	},
+}
+
 // upgradeTiming is how long the flow waits on Kubernetes, and how often it re-checks.
 type upgradeTiming struct {
 	deploymentWait time.Duration
@@ -376,12 +391,13 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, "deploy/08vjailbreak-ai-deployment.yaml"); err != nil {
 		return fmt.Errorf("failed to apply AI deployment: %w", err)
 	}
+	e.incrementCompletedSteps()
+	e.saveProgress(ctx)
 
 	e.updateProgress("Applying sync-daemon manifest from GitHub", StatusDeploying, "")
 	if err := ApplyManifestFromGitHub(ctx, e.kubeClient, targetVersion, "image_builder/configs/daemonset.yaml"); err != nil {
-		log.Printf("Warning: Failed to apply sync-daemon manifest: %v", err)
+		return fmt.Errorf("failed to apply sync-daemon manifest: %w", err)
 	}
-
 	e.incrementCompletedSteps()
 	e.saveProgress(ctx)
 
@@ -396,6 +412,11 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 			return fmt.Errorf("deployment %s not ready: %w", cfg.Name, err)
 		}
 	}
+	for _, cfg := range DaemonSetConfigs {
+		if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+			return fmt.Errorf("daemonset %s not ready: %w", cfg.Name, err)
+		}
+	}
 
 	e.updateProgress("Verifying upgrade stability", StatusVerifyingStability, "")
 
@@ -405,6 +426,15 @@ func (e *UpgradeExecutor) runDeploymentPhase(ctx context.Context, targetVersion,
 			log.Printf("Stability check failed for deployment %s: %v", cfg.Name, err)
 			ok = false
 			break
+		}
+	}
+	if ok {
+		for _, cfg := range DaemonSetConfigs {
+			if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+				log.Printf("Stability check failed for daemonset %s: %v", cfg.Name, err)
+				ok = false
+				break
+			}
 		}
 	}
 
@@ -549,6 +579,48 @@ func (e *UpgradeExecutor) waitForDeploymentReady(ctx context.Context, cfg Deploy
 				}
 			}
 		}
+	}
+}
+
+// waitForDaemonSetReady mirrors waitForDeploymentReady for a DaemonSet: no replica
+// count to compare against, just every scheduled pod updated and ready.
+func (e *UpgradeExecutor) waitForDaemonSetReady(ctx context.Context, cfg DaemonSetConfig) error {
+	timeout := e.timing.deploymentWait
+	interval := e.timing.deploymentPoll
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	deadline := time.Now().Add(timeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("daemonset %s not ready within timeout", cfg.Name)
+			}
+		}
+
+		ds := &appsv1.DaemonSet{}
+		if err := e.kubeClient.Get(ctx, client.ObjectKey{Name: cfg.Name, Namespace: cfg.Namespace}, ds); err != nil {
+			if kerrors.IsNotFound(err) {
+				return fmt.Errorf("daemonset %s not found", cfg.Name)
+			}
+			return fmt.Errorf("failed to get daemonset %s: %w", cfg.Name, err)
+		}
+
+		ready := ds.Status.DesiredNumberScheduled == ds.Status.NumberReady &&
+			ds.Status.DesiredNumberScheduled == ds.Status.UpdatedNumberScheduled
+		generationMatches := ds.Status.ObservedGeneration >= ds.Generation
+
+		if ready && generationMatches {
+			return nil
+		}
+
+		log.Printf("Waiting for daemonset %s: ready=%d/%d updated=%d generation=%d/%d",
+			cfg.Name, ds.Status.NumberReady, ds.Status.DesiredNumberScheduled, ds.Status.UpdatedNumberScheduled,
+			ds.Status.ObservedGeneration, ds.Generation)
 	}
 }
 
@@ -896,6 +968,11 @@ func (e *UpgradeExecutor) ExecuteRollback(ctx context.Context, previousVersion, 
 	} {
 		if err := e.waitForDeploymentReady(ctx, cfg); err != nil {
 			log.Printf("Warning: Deployment %s not ready: %v", cfg.Name, err)
+		}
+	}
+	for _, cfg := range DaemonSetConfigs {
+		if err := e.waitForDaemonSetReady(ctx, cfg); err != nil {
+			log.Printf("Warning: DaemonSet %s not ready: %v", cfg.Name, err)
 		}
 	}
 	e.incrementCompletedSteps()

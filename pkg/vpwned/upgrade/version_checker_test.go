@@ -357,6 +357,24 @@ func TestCheckImagesExist(t *testing.T) {
 	}
 }
 
+// sync-daemon pins a fixed base-image tag rather than the release tag, but it must
+// still be verified pullable before the upgrade job starts (Constitution Principle X).
+func TestCheckImagesExistIncludesSyncDaemonImage(t *testing.T) {
+	argsFile := fakeSkopeo(t, 0)
+
+	if _, err := CheckImagesExist(context.Background(), "v0.4.9"); err != nil {
+		t.Fatalf("CheckImagesExist() error = %v, want nil", err)
+	}
+
+	recorded, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatalf("failed to read recorded skopeo args: %v", err)
+	}
+	if !strings.Contains(string(recorded), "docker://quay.io/platform9/vjailbreak:alpine") {
+		t.Errorf("skopeo was not asked about the sync-daemon image; got:\n%s", recorded)
+	}
+}
+
 func TestCheckImagesExistMissingImage(t *testing.T) {
 	fakeSkopeo(t, 1)
 

@@ -210,29 +210,49 @@ func newSettlingClient(t *testing.T, objs ...client.Object) client.WithWatch {
 	// Manifests are applied as unstructured objects, so the written object is re-read as a
 	// typed Deployment rather than type-asserted.
 	settle := func(ctx context.Context, c client.WithWatch, obj client.Object) error {
-		_, typed := obj.(*appsv1.Deployment)
-		if !typed && obj.GetObjectKind().GroupVersionKind().Kind != "Deployment" {
+		kind := obj.GetObjectKind().GroupVersionKind().Kind
+		if _, typed := obj.(*appsv1.Deployment); typed {
+			kind = "Deployment"
+		} else if _, typed := obj.(*appsv1.DaemonSet); typed {
+			kind = "DaemonSet"
+		}
+
+		switch kind {
+		case "Deployment":
+			dep := &appsv1.Deployment{}
+			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), dep); err != nil {
+				return err
+			}
+
+			replicas := int32(1)
+			if dep.Spec.Replicas != nil {
+				replicas = *dep.Spec.Replicas
+			}
+			dep.Status.Replicas = replicas
+			dep.Status.ReadyReplicas = replicas
+			dep.Status.UpdatedReplicas = replicas
+			dep.Status.AvailableReplicas = replicas
+			dep.Status.ObservedGeneration = dep.Generation
+			dep.Status.Conditions = []appsv1.DeploymentCondition{
+				{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
+			}
+			return c.Status().Update(ctx, dep)
+		case "DaemonSet":
+			ds := &appsv1.DaemonSet{}
+			if err := c.Get(ctx, client.ObjectKeyFromObject(obj), ds); err != nil {
+				return err
+			}
+
+			// A real DaemonSet controller schedules one pod per matching node; the fake
+			// client has no nodes, so stand in with a single scheduled/ready replica.
+			ds.Status.DesiredNumberScheduled = 1
+			ds.Status.NumberReady = 1
+			ds.Status.UpdatedNumberScheduled = 1
+			ds.Status.ObservedGeneration = ds.Generation
+			return c.Status().Update(ctx, ds)
+		default:
 			return nil
 		}
-
-		dep := &appsv1.Deployment{}
-		if err := c.Get(ctx, client.ObjectKeyFromObject(obj), dep); err != nil {
-			return err
-		}
-
-		replicas := int32(1)
-		if dep.Spec.Replicas != nil {
-			replicas = *dep.Spec.Replicas
-		}
-		dep.Status.Replicas = replicas
-		dep.Status.ReadyReplicas = replicas
-		dep.Status.UpdatedReplicas = replicas
-		dep.Status.AvailableReplicas = replicas
-		dep.Status.ObservedGeneration = dep.Generation
-		dep.Status.Conditions = []appsv1.DeploymentCondition{
-			{Type: appsv1.DeploymentAvailable, Status: corev1.ConditionTrue},
-		}
-		return c.Status().Update(ctx, dep)
 	}
 
 	// The applied object is the full intent, so create it or replace it wholesale. The
@@ -317,14 +337,37 @@ func TestDeploymentConfigsCoversEveryWorkload(t *testing.T) {
 	}
 }
 
-// The deployment phase reports one completed step per manifest it applies, so the
-// declared total must move when a deployment is added.
+// Every workload rolled out as a DaemonSet must be listed here, same as
+// DeploymentConfigs for Deployments: it drives the post-upgrade stability check.
+func TestDaemonSetConfigsCoversEveryWorkload(t *testing.T) {
+	want := map[string]string{
+		"sync-daemon": "kube-system",
+	}
+
+	if len(DaemonSetConfigs) != len(want) {
+		t.Fatalf("DaemonSetConfigs has %d entries, want %d", len(DaemonSetConfigs), len(want))
+	}
+
+	for _, cfg := range DaemonSetConfigs {
+		wantNamespace, ok := want[cfg.Name]
+		if !ok {
+			t.Errorf("unexpected daemonset %q in DaemonSetConfigs", cfg.Name)
+			continue
+		}
+		if cfg.Namespace != wantNamespace {
+			t.Errorf("%s namespace = %q, want %q", cfg.Name, cfg.Namespace, wantNamespace)
+		}
+	}
+}
+
+// The deployment phase reports one completed step per manifest it applies (Deployments
+// and DaemonSets alike), so the declared total must move when a workload is added.
 func TestTotalUpgradeStepsMatchesDeploymentCount(t *testing.T) {
 	const stepsBesidesDeploymentApplies = 8
 
-	want := stepsBesidesDeploymentApplies + len(DeploymentConfigs)
+	want := stepsBesidesDeploymentApplies + len(DeploymentConfigs) + len(DaemonSetConfigs)
 	if TotalUpgradeSteps != want {
-		t.Errorf("TotalUpgradeSteps = %d, want %d (%d other steps + one apply per deployment)",
+		t.Errorf("TotalUpgradeSteps = %d, want %d (%d other steps + one apply per Deployment/DaemonSet)",
 			TotalUpgradeSteps, want, stepsBesidesDeploymentApplies)
 	}
 }
@@ -941,7 +984,7 @@ func TestRunDeploymentPhase(t *testing.T) {
 		}
 	})
 
-	t.Run("a missing sync-daemon manifest logs a warning but does not fail the phase", func(t *testing.T) {
+	t.Run("a missing sync-daemon manifest fails the phase", func(t *testing.T) {
 		serveGitHub(t, "image_builder/configs/daemonset.yaml")
 
 		e := &UpgradeExecutor{
@@ -950,10 +993,72 @@ func TestRunDeploymentPhase(t *testing.T) {
 			progress:   &UpgradeProgress{TotalSteps: TotalUpgradeSteps},
 		}
 
-		if err := e.runDeploymentPhase(context.Background(), "v0.4.9", "backup-1"); err != nil {
-			t.Fatalf("runDeploymentPhase() error = %v, want nil (sync-daemon is best-effort)", err)
+		err := e.runDeploymentPhase(context.Background(), "v0.4.9", "backup-1")
+		if err == nil {
+			t.Fatal("runDeploymentPhase() error = nil, want the missing sync-daemon manifest to fail")
+		}
+		if !strings.Contains(err.Error(), "sync-daemon") {
+			t.Errorf("error = %q, want it to name sync-daemon", err)
 		}
 	})
+
+}
+
+// waitForDaemonSetReady is exercised directly (rather than through runDeploymentPhase)
+// for the same reason TestWaitForDeploymentReady is: it isolates the readiness check
+// from the apply/settle machinery those phase-level tests rely on.
+func TestWaitForDaemonSetReady(t *testing.T) {
+	tests := []struct {
+		name    string
+		objects []client.Object
+		cancel  bool
+		wantErr string
+	}{
+		{
+			name:    "ready daemonset returns",
+			objects: []client.Object{daemonSet("sync-daemon", 1, 1, 1)},
+		},
+		{
+			name:    "missing daemonset is reported",
+			wantErr: "not found",
+		},
+		{
+			name:    "not enough ready pods times out",
+			objects: []client.Object{daemonSet("sync-daemon", 2, 1, 2)},
+			wantErr: "not ready within timeout",
+		},
+		{
+			name:    "cancelled context aborts the wait",
+			objects: []client.Object{daemonSet("sync-daemon", 2, 0, 2)},
+			cancel:  true,
+			wantErr: "context canceled",
+		},
+	}
+
+	cfg := DaemonSetConfig{Name: "sync-daemon", Namespace: "kube-system"}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tt.cancel {
+				cancel()
+			}
+
+			e := &UpgradeExecutor{timing: fastTiming(), kubeClient: newFakeClient(t, tt.objects...)}
+			err := e.waitForDaemonSetReady(ctx, cfg)
+
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("waitForDaemonSetReady() error = %v, want nil", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("waitForDaemonSetReady() error = %v, want it to contain %q", err, tt.wantErr)
+			}
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,6 +1137,7 @@ func TestExecuteRunsEveryPhase(t *testing.T) {
 		"deploy/00crds.yaml",
 		"image_builder/configs/version-config.yaml",
 		"image_builder/configs/vjailbreak-settings.yaml",
+		"image_builder/configs/daemonset.yaml",
 	} {
 		if !router.fetched(path) {
 			t.Errorf("%s was never fetched", path)
