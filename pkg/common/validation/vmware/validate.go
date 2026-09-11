@@ -34,13 +34,30 @@ const (
 	retryLimitKey            = "VCENTER_LOGIN_RETRY_LIMIT"
 )
 
-var vmwareClientMap *sync.Map
-
 // ValidationResult holds the outcome of credential validation
 type ValidationResult struct {
 	Valid   bool
 	Message string
 	Error   error
+}
+
+// loginToVCenter performs the actual vCenter SOAP login. Overridable in
+// tests so Validate() can be exercised without a real vCenter.
+var loginToVCenter = func(ctx context.Context, s *cache.Session, c *vim25.Client) error {
+	return s.Login(ctx, c, nil)
+}
+
+// logoutOfVCenter best-effort logs out an established vCenter session.
+// Overridable in tests. Since Validate() no longer caches/reuses a client
+// every successful call now creates a brand new session; without this, each
+// one would sit abandoned on vCenter until its own idle timeout reaps it.
+var logoutOfVCenter = func(ctx context.Context, c *vim25.Client) {
+	if c == nil || c.Client == nil {
+		return
+	}
+	if err := session.NewManager(c).Logout(ctx); err != nil {
+		ctrllog.FromContext(ctx).Error(err, "failed to logout of vCenter session after validation")
+	}
 }
 
 // getRetryLimitFromSettings fetches VCENTER_LOGIN_RETRY_LIMIT from vjailbreak-settings
@@ -109,34 +126,7 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 		Reauth:   true,
 	}
 
-	mapKey := string(vmwcreds.UID)
 	var c *vim25.Client
-
-	// Initialize map if needed
-	if vmwareClientMap == nil {
-		vmwareClientMap = &sync.Map{}
-	}
-
-	// Check cache for existing authenticated client
-	if val, ok := vmwareClientMap.Load(mapKey); ok {
-		cachedClient, valid := val.(*vim25.Client)
-		if valid && cachedClient != nil && cachedClient.Client != nil {
-			c = cachedClient
-			sessMgr := session.NewManager(c)
-			userSession, err := sessMgr.UserSession(ctx)
-			if err == nil && userSession != nil {
-				// Cached client is still valid
-				return ValidationResult{
-					Valid:   true,
-					Message: "Successfully authenticated to VMware",
-					Error:   nil,
-				}
-			}
-			// Cached client is no longer valid, remove it
-			vmwareClientMap.Delete(mapKey)
-			// Will create fresh client in the retry loop
-		}
-	}
 
 	// Exponential retry logic with retry limit from ConfigMap or passed parameter
 	var lastErr error
@@ -146,10 +136,13 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 	for attempt := 1; attempt <= retryLimit; attempt++ {
 		// Create a new empty client struct for Login to populate
 		c = &vim25.Client{}
-		err = s.Login(ctx, c, nil)
+		err = loginToVCenter(ctx, s, c)
 		if err == nil {
-			// Login successful
+			// Login successful - clear any earlier attempt's error so a
+			// transient failure followed by a successful retry isn't
+			// reported as an overall failure below.
 			ctxlog.Info("Login successful", "attempt", attempt)
+			lastErr = nil
 			break
 		} else if strings.Contains(err.Error(), "incorrect user name or password") {
 			return ValidationResult{
@@ -179,6 +172,10 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 		}
 	}
 
+	// A session is now established - always log it out before returning
+	// rather than leaving it for vCenter's own idle timeout to reap.
+	defer logoutOfVCenter(ctx, c)
+
 	// Check if the datacenter exists (only if datacenter is provided)
 	if datacenter != "" {
 		finder := find.NewFinder(c, false)
@@ -191,9 +188,6 @@ func Validate(ctx context.Context, k8sClient client.Client, vmwcreds *vjailbreak
 			}
 		}
 	}
-
-	// All validations passed - cache the fully validated client
-	vmwareClientMap.Store(mapKey, c)
 
 	return ValidationResult{
 		Valid:   true,
