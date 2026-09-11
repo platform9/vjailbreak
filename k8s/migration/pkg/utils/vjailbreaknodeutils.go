@@ -159,6 +159,9 @@ func UpdateMasterNodeImageID(ctx context.Context, k3sclient client.Client, local
 		return errors.Wrap(err, "failed to update vjailbreak node")
 	}
 
+	// Store the master's real OpenStack server name verbatim: it's used as an
+	// exact/regex lookup key against OpenStack (GetOpenstackVMByName) and must
+	// match what actually exists in nova, not a sanitized approximation of it.
 	vjNode.Status.OpenstackName = serverName
 	err = k3sclient.Status().Update(ctx, &vjNode)
 	if err != nil {
@@ -350,6 +353,10 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		rootDisk.VolumeType = volumeType
 	}
 
+	// Status.OpenstackName is computed and persisted by reconcileNormal before
+	// this function is called. Use it directly so port/server names stay consistent.
+	instanceName := vjNode.Status.OpenstackName
+
 	// Handle L2-only networks by creating ports first
 	// For L2 networks, FixedIP will be set to "L2_NETWORK" marker
 	var createdPorts []string
@@ -359,7 +366,7 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 			// This is an L2-only network, create a port with just MAC (no IP)
 			log.Info("Detected L2-only network, creating port with MAC only", "networkID", network.UUID)
 			hasL2Network = true
-			port, err := createPortForL2Network(ctx, openstackClients, network.UUID, vjNode.Name)
+			port, err := createPortForL2Network(ctx, openstackClients, network.UUID, instanceName)
 			if err != nil {
 				// Clean up any ports we created
 				for _, portID := range createdPorts {
@@ -383,11 +390,6 @@ func CreateOpenstackVMForWorkerNode(ctx context.Context, k3sclient client.Client
 		log.Error(heErr, "Failed to get agent host entries, provisioning without custom hosts")
 		hostEntries = []commonutils.HostEntry{}
 	}
-
-	// Derive the OpenStack instance name from the master's OpenstackName so the
-	// agent VM is identifiable as belonging to its primary vjailbreak VM.
-	instanceName := ComputeAgentInstanceName(masterVjNode.Status.OpenstackName, vjNode.Name)
-	vjNode.Status.OpenstackName = instanceName
 
 	// Define server creation parameters
 	serverCreateOpts := servers.CreateOpts{
@@ -757,11 +759,22 @@ func GetServerNameFromVM(ctx context.Context, k3sclient client.Client, uuid stri
 // VM by prefixing the master's OpenStack name, so the agent is identifiable as
 // belonging to its primary vjailbreak VM (e.g. "<master-name>-vjailbreak-agent-<hash>").
 // Falls back to agentCRName alone if the master's OpenstackName isn't known yet.
+// Unlike the master's own OpenstackName (which must stay an exact copy of the
+// real nova name for lookups), this derived name becomes the agent's own VM
+// name/hostname/k8s-node-name, so the master-name component is sanitized to be
+// k8s/hostname safe here rather than at the source.
 func ComputeAgentInstanceName(masterOpenstackName, agentCRName string) string {
 	if masterOpenstackName == "" {
 		return agentCRName
 	}
-	return fmt.Sprintf("%s-%s", masterOpenstackName, agentCRName)
+	// ConvertToK8sName returns its best-effort sanitized string even when it
+	// also returns a validation error (e.g. result too short); the emptiness
+	// check below is what decides whether that best effort is usable.
+	sanitizedMasterName, err := commonutils.ConvertToK8sName(masterOpenstackName)
+	if err != nil && sanitizedMasterName == "" {
+		return agentCRName
+	}
+	return fmt.Sprintf("%s-%s", sanitizedMasterName, agentCRName)
 }
 
 // GetImageIDFromVM retrieves the image ID from a virtual machine using its UUID
@@ -984,6 +997,9 @@ func GetImageID(ctx context.Context, k3sclient client.Client) (string, error) {
 
 // GetOpenstackVMByName retrieves an OpenStack VM's UUID by its name
 func GetOpenstackVMByName(ctx context.Context, name string, k3sclient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (string, error) {
+	if name == "" {
+		return "", nil
+	}
 	creds, err := GetOpenstackCredsVjailbreakNode(ctx, k3sclient, vjNode)
 	if err != nil {
 		return "", errors.Wrap(err, "failed to get openstack creds")
@@ -1159,7 +1175,7 @@ func ReconcileVMStatusAndIP(ctx context.Context, k8sClient client.Client, vjNode
 
 // ReconcileK8sNodeStatus checks Kubernetes node status and updates VjailbreakNode phase accordingly
 func ReconcileK8sNodeStatus(ctx context.Context, k8sClient client.Client, vjNode *vjailbreakv1alpha1.VjailbreakNode) (bool, error) {
-	node, err := GetNodeByName(ctx, k8sClient, vjNode.Name)
+	node, err := GetNodeByName(ctx, k8sClient, vjNode.Status.OpenstackName)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			// Keep phase as VMCreated while waiting for K8s node

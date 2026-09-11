@@ -239,6 +239,18 @@ func TestComputeAgentInstanceName(t *testing.T) {
 			agentCRName:         "",
 			want:                "",
 		},
+		{
+			name:                "masterOpenstackName is sanitized before joining",
+			masterOpenstackName: "VJB_Master 01",
+			agentCRName:         "vjailbreak-agent-x9k2p1",
+			want:                "vjb-master-01-vjailbreak-agent-x9k2p1",
+		},
+		{
+			name:                "masterOpenstackName that sanitizes to empty falls back to agentCRName",
+			masterOpenstackName: "___",
+			agentCRName:         "vjailbreak-agent-x9k2p1",
+			want:                "vjailbreak-agent-x9k2p1",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -299,5 +311,58 @@ func TestVjailbreakNodeOpenstackNameField(t *testing.T) {
 				t.Errorf("OpenstackName = %q, want %q", got.Status.OpenstackName, tt.openstackName)
 			}
 		})
+	}
+}
+
+// TestReconcileK8sNodeStatus_UsesOpenstackNameNotCRName is a regression test
+// for issue #2343: the k8s Node backing an agent is named after its real
+// OpenStack/k8s identity (Status.OpenstackName), not the VjailbreakNode CR
+// name. ReconcileK8sNodeStatus must look the Node up by OpenstackName.
+func TestReconcileK8sNodeStatus_UsesOpenstackNameNotCRName(t *testing.T) {
+	ctx := context.Background()
+	s := testNodeScheme(t)
+
+	const crName = "vjailbreak-agent-54cf0n"
+	const realOpenstackName = "vjb-appliance-01-vjailbreak-agent-54cf0n"
+
+	vjNode := &vjailbreakv1alpha1.VjailbreakNode{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      crName,
+			Namespace: constants.NamespaceMigrationSystem,
+		},
+		Status: vjailbreakv1alpha1.VjailbreakNodeStatus{
+			OpenstackName: realOpenstackName,
+		},
+	}
+
+	// The real k8s Node is named after the OpenStack identity and is Ready.
+	// A Node named after the CR itself does not exist, so if the lookup ever
+	// used the CR name it would (wrongly) report NotFound / not-ready.
+	readyNode := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: realOpenstackName,
+		},
+		Status: corev1.NodeStatus{
+			Conditions: []corev1.NodeCondition{
+				{Type: corev1.NodeReady, Status: corev1.ConditionTrue},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(s).
+		WithObjects(vjNode, readyNode).
+		WithStatusSubresource(&vjailbreakv1alpha1.VjailbreakNode{}).
+		Build()
+
+	nodeReady, err := ReconcileK8sNodeStatus(ctx, fakeClient, vjNode)
+	if err != nil {
+		t.Fatalf("ReconcileK8sNodeStatus returned unexpected error: %v", err)
+	}
+	if !nodeReady {
+		t.Error("expected nodeReady=true when the Node named per OpenstackName is Ready")
+	}
+	if vjNode.Status.Phase != constants.VjailbreakNodePhaseNodeReady {
+		t.Errorf("Phase = %q, want %q", vjNode.Status.Phase, constants.VjailbreakNodePhaseNodeReady)
 	}
 }

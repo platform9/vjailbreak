@@ -21,8 +21,8 @@ import (
 	vjailbreakv1alpha1 "github.com/platform9/vjailbreak/k8s/migration/api/v1alpha1"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	openstackpkg "github.com/platform9/vjailbreak/pkg/common/openstack"
-	pkgutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/pkg/k8sutils"
+	pkgutils "github.com/platform9/vjailbreak/v2v-helper/pkg/utils"
 	"github.com/platform9/vjailbreak/v2v-helper/vm"
 	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
@@ -133,6 +133,13 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to get k8s client: %w", err)
 	}
 
+	return getInstanceUUIDForPod(ctx, k8sClient, podName)
+}
+
+// getInstanceUUIDForPod contains the lookup logic of getInstanceUUIDFromNode
+// with the K8s client and pod name injected, so it can be exercised with a
+// fake client in unit tests without needing an in-cluster/kubeconfig client.
+func getInstanceUUIDForPod(ctx context.Context, k8sClient client.Client, podName string) (string, error) {
 	pod := &corev1.Pod{}
 	if err := k8sClient.Get(ctx, k8stypes.NamespacedName{
 		Name:      podName,
@@ -151,27 +158,32 @@ func getInstanceUUIDFromNode(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("failed to list vjailbreak nodes: %w", err)
 	}
 
-	isAgent := strings.HasPrefix(strings.ToLower(nodeName), "vjailbreak-agent-")
-
+	// Match the VjailbreakNode whose OpenstackName equals this pod's actual k8s
+	// node name. This works uniformly for agents (their OpenstackName is
+	// self-assigned at creation time - see ComputeAgentInstanceName - so it is
+	// guaranteed to equal their own hostname/node name) without guessing from a
+	// "vjailbreak-agent-" string prefix, which breaks the moment the master's
+	// own name is non-empty: an agent's OpenstackName is then
+	// "<masterName>-vjailbreak-agent-<crName>" and never literally starts with
+	// that prefix.
+	//
+	// The master is a pre-existing, user-named VM: its OpenstackName (the raw
+	// nova server name, needed for exact-match OpenStack lookups elsewhere) may
+	// not equal its OS hostname/k8s node name if nova/cloud-init sanitized the
+	// hostname differently. If so, this returns an error and the caller
+	// (GetCurrentInstanceUUID) falls back to the OpenStack metadata service,
+	// which is always correct for the master.
 	for _, vjNode := range vjNodeList.Items {
-		if isAgent {
-			if vjNode.Name == nodeName && vjNode.Status.OpenstackUUID != "" {
-				return vjNode.Status.OpenstackUUID, nil
-			}
-			continue
-		}
-
-		if !strings.HasPrefix(strings.ToLower(vjNode.Name), "vjailbreak-agent-") &&
-			vjNode.Status.OpenstackUUID != "" {
+		if vjNode.Status.OpenstackName == nodeName && vjNode.Status.OpenstackUUID != "" {
 			return vjNode.Status.OpenstackUUID, nil
 		}
 	}
 
-	if isAgent {
+	if strings.HasPrefix(strings.ToLower(nodeName), "vjailbreak-agent-") {
 		return "", fmt.Errorf("agent VjailbreakNode %q not found or missing OpenstackUUID (pod=%s, k8s-node=%s)", nodeName, podName, nodeName)
 	}
 
-	return "", fmt.Errorf("no master VjailbreakNode with OpenstackUUID found (pod=%s, k8s-node=%s)", podName, nodeName)
+	return "", fmt.Errorf("no VjailbreakNode with OpenstackName=%q and OpenstackUUID found (pod=%s, k8s-node=%s)", nodeName, podName, nodeName)
 }
 
 // create a new volume
