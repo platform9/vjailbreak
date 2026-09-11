@@ -1713,10 +1713,15 @@ func (r *MigrationPlanReconciler) fetchVMsToValidate(
 }
 
 // candidateFlavorsForPlan returns the plan's eligible flavors, filtered to its
-// target availability zone. Called once per plan and reused across VMs.
+// target availability zone and host-aggregate bindings. Called once per plan
+// and reused across VMs.
 //
 // In PCD, a flavor's `availability_zone` extra_spec binds it to one cluster;
-// flavors without it are global.
+// flavors without it are global. Separately, Nova's AggregateInstanceExtraSpecsFilter
+// can bind a flavor to an arbitrary host-aggregate metadata key via
+// `aggregate_instance_extra_specs:<key>=<value>` — FilterFlavorsByAggregateBinding
+// excludes flavors whose binding doesn't match any aggregate sharing a host with
+// the target cluster (see issue #2010).
 func (r *MigrationPlanReconciler) candidateFlavorsForPlan(ctx context.Context,
 	migrationtemplate *vjailbreakv1alpha1.MigrationTemplate,
 	openstackcreds *vjailbreakv1alpha1.OpenstackCreds,
@@ -1728,6 +1733,12 @@ func (r *MigrationPlanReconciler) candidateFlavorsForPlan(ctx context.Context,
 
 	if utils.IsOpenstackPCD(*openstackcreds) {
 		allFlavors = openstackpkg.FilterFlavorsByAvailabilityZone(allFlavors, migrationtemplate.Spec.TargetPCDClusterName)
+
+		allAggregates, aggErr := utils.ListAllAggregates(ctx, r.Client, openstackcreds)
+		if aggErr != nil {
+			return nil, errors.Wrap(aggErr, "failed to list host aggregates")
+		}
+		allFlavors = openstackpkg.FilterFlavorsByAggregateBinding(allFlavors, migrationtemplate.Spec.TargetPCDClusterName, allAggregates)
 	}
 
 	return allFlavors, nil

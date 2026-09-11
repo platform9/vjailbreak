@@ -2,8 +2,11 @@ package utils
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/platform9/vjailbreak/pkg/common/constants"
 	corev1 "k8s.io/api/core/v1"
@@ -364,5 +367,76 @@ func TestReconcileK8sNodeStatus_UsesOpenstackNameNotCRName(t *testing.T) {
 	}
 	if vjNode.Status.Phase != constants.VjailbreakNodePhaseNodeReady {
 		t.Errorf("Phase = %q, want %q", vjNode.Status.Phase, constants.VjailbreakNodePhaseNodeReady)
+	}
+}
+
+func TestListAggregatesFromClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/os-aggregates" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		if r.Method != http.MethodGet {
+			t.Fatalf("unexpected request method %q", r.Method)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+			"aggregates": [
+				{
+					"id": 1,
+					"name": "vjb-simple-aggregate",
+					"availability_zone": "vjb-simple",
+					"hosts": ["host1"],
+					"metadata": {"cluster": "vjb-simple", "availability_zone": "vjb-simple"}
+				},
+				{
+					"id": 2,
+					"name": "vjb-test-aggregate",
+					"availability_zone": "vjb-test",
+					"hosts": [],
+					"metadata": {"cluster": "vjb-test", "availability_zone": "vjb-test"}
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	client := &gophercloud.ServiceClient{
+		ProviderClient: &gophercloud.ProviderClient{},
+		Endpoint:       server.URL + "/",
+	}
+
+	got, err := listAggregatesFromClient(context.Background(), client)
+	if err != nil {
+		t.Fatalf("listAggregatesFromClient() error = %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("got %d aggregates, want 2", len(got))
+	}
+	if got[0].Name != "vjb-simple-aggregate" || len(got[0].Hosts) != 1 || got[0].Hosts[0] != "host1" {
+		t.Errorf("unexpected first aggregate: %+v", got[0])
+	}
+	if got[1].Name != "vjb-test-aggregate" || len(got[1].Hosts) != 0 {
+		t.Errorf("unexpected second aggregate: %+v", got[1])
+	}
+	if got[0].Metadata["cluster"] != "vjb-simple" {
+		t.Errorf("expected metadata to be extracted, got %+v", got[0].Metadata)
+	}
+}
+
+func TestListAggregatesFromClient_ErrorPropagates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	client := &gophercloud.ServiceClient{
+		ProviderClient: &gophercloud.ProviderClient{},
+		Endpoint:       server.URL + "/",
+	}
+
+	_, err := listAggregatesFromClient(context.Background(), client)
+	if err == nil {
+		t.Fatal("expected error from a 500 response, got nil")
 	}
 }
