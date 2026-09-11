@@ -303,7 +303,16 @@ describe('GlobalSettingsPage - proxy authentication', () => {
 const goToIntervalsTab = async () => {
   const tab = await screen.findByTestId('global-settings-tab-retry')
   fireEvent.click(tab)
-  await screen.findByLabelText('Log Retention (hours)')
+  await screen.findByText('Log Retention (hours)')
+}
+
+// LOG_RETENTION_HOURS renders via RHFTextField with a separate FieldLabel (for the
+// tooltip icon), so its input has no real <label> association — getByLabelText can't
+// find it. Every retry-tab field has this same shape, so we go by input[name] instead,
+// same as the DEPLOYMENT_NAME lookup in save-regression.spec.ts.
+const fillLogRetentionHours = (value: string) => {
+  const field = document.querySelector('input[name="LOG_RETENTION_HOURS"]') as HTMLInputElement
+  fireEvent.change(field, { target: { value } })
 }
 
 describe('GlobalSettingsPage - log retention', () => {
@@ -315,7 +324,7 @@ describe('GlobalSettingsPage - log retention', () => {
   it('blocks save when log retention is below the 24-hour minimum', async () => {
     renderPage()
     await goToIntervalsTab()
-    fillTextField('Log Retention (hours)', '12')
+    fillLogRetentionHours('12')
 
     fireEvent.click(screen.getByTestId('global-settings-save'))
 
@@ -328,7 +337,7 @@ describe('GlobalSettingsPage - log retention', () => {
   it('allows save at the 24-hour minimum', async () => {
     renderPage()
     await goToIntervalsTab()
-    fillTextField('Log Retention (hours)', '24')
+    fillLogRetentionHours('24')
 
     fireEvent.click(screen.getByTestId('global-settings-save'))
 
@@ -338,7 +347,7 @@ describe('GlobalSettingsPage - log retention', () => {
   it('allows save above the 24-hour minimum', async () => {
     renderPage()
     await goToIntervalsTab()
-    fillTextField('Log Retention (hours)', '72')
+    fillLogRetentionHours('72')
 
     fireEvent.click(screen.getByTestId('global-settings-save'))
 

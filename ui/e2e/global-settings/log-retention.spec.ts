@@ -60,10 +60,18 @@ async function mockGlobalSettingsApis(page: Page): Promise<SettingsMockState> {
   return state
 }
 
+// LOG_RETENTION_HOURS renders via RHFTextField with a separate FieldLabel (for the
+// tooltip icon), so the input has no real <label> association — getByLabel can't find
+// it. Every retry-tab field has this same shape, so we go by input[name] instead, same
+// as the DEPLOYMENT_NAME lookup in save-regression.spec.ts.
+function logRetentionField(page: Page) {
+  return page.locator('input[name="LOG_RETENTION_HOURS"]')
+}
+
 async function goToIntervalsTab(page: Page): Promise<void> {
   await goToGlobalSettings(page)
   await page.getByTestId('global-settings-tab-retry').click()
-  await expect(page.getByLabel('Log Retention (hours)')).toBeVisible()
+  await expect(logRetentionField(page)).toBeVisible()
 }
 
 test.describe('GS-LOG-RETENTION-001 — Configurable log retention', () => {
@@ -71,7 +79,7 @@ test.describe('GS-LOG-RETENTION-001 — Configurable log retention', () => {
     const state = await mockGlobalSettingsApis(page)
     await goToIntervalsTab(page)
 
-    await page.getByLabel('Log Retention (hours)').fill('12')
+    await logRetentionField(page).fill('12')
     await page.getByTestId('global-settings-save').click()
 
     await expectToast(page, /please fix the validation errors/i)
@@ -82,7 +90,7 @@ test.describe('GS-LOG-RETENTION-001 — Configurable log retention', () => {
     const state = await mockGlobalSettingsApis(page)
     await goToIntervalsTab(page)
 
-    await page.getByLabel('Log Retention (hours)').fill('72')
+    await logRetentionField(page).fill('72')
     await page.getByTestId('global-settings-save').click()
 
     await expectToast(page, /global settings saved successfully/i)
