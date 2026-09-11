@@ -346,6 +346,10 @@ export const createArrayCredsWithSecretFlow = async (
       svm?: string
       flexVol?: string
     }
+    VANTARA_CONFIG?: {
+      poolId?: string
+      restPort?: string
+    }
   },
   namespace = VJAILBREAK_DEFAULT_NAMESPACE
 ) => {
@@ -369,6 +373,7 @@ export const createArrayCredsWithSecretFlow = async (
       credentials.VENDOR_TYPE,
       credentials.OPENSTACK_MAPPING,
       credentials.NETAPP_CONFIG,
+      credentials.VANTARA_CONFIG,
       namespace
     )
   } catch (error) {

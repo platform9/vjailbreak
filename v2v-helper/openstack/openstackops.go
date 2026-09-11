@@ -58,6 +58,13 @@ type OpenstackOperations interface {
 	// Returns a slice of structs with these fields - defined in implementation package to avoid import cycles
 	GetCinderVolumeServices(ctx context.Context) (interface{}, error)
 	GetVolume(ctx context.Context, volumeID string) (*volumes.Volume, error)
+	// InitializeVolumeConnection exposes a volume to the host described by the
+	// os-brick style connector dict via Cinder os-initialize_connection. Used
+	// by the Storage-Accelerated-Copy Cinder mapping fallback.
+	InitializeVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) (map[string]any, error)
+	// TerminateVolumeConnection removes a volume export previously created by
+	// InitializeVolumeConnection. The same connector must be supplied.
+	TerminateVolumeConnection(ctx context.Context, volumeID string, connector map[string]any) error
 	DeleteServer(ctx context.Context, serverID string) error
 	StopServer(ctx context.Context, serverID string) error
 	// DetachVolumeFromServer detaches from an arbitrary server. DetachVolumeFromVM
