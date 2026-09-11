@@ -2148,11 +2148,14 @@ func extractStoragePools(p pagination.Page) ([]storagePoolSummary, error) {
 	var s struct {
 		Pools []storagePoolSummary `json:"pools"`
 	}
-	err := p.(schedulerstats.StoragePoolPage).ExtractInto(&s)
+	page, ok := p.(schedulerstats.StoragePoolPage)
+	if !ok {
+		return nil, fmt.Errorf("unexpected pagination.Page type %T for storage pool extraction", p)
+	}
+	err := page.ExtractInto(&s)
 	return s.Pools, err
 }
 
-// GetBackendPools discovers and returns storage backend pools from OpenStack Cinder
 // resolveVolumeTypeForPool resolves the Cinder volume type name for a pool.
 //
 // backendToVolumeType is keyed by the driver-reported volume_backend_name
@@ -2185,6 +2188,9 @@ func resolveVolumeTypeForPool(backendToVolumeType map[string]string, volumeBacke
 	return "", false, key
 }
 
+// GetBackendPools discovers storage backend pools from OpenStack Cinder and
+// returns, per pool name, a map of capabilities including the resolved
+// volume type.
 func GetBackendPools(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) (map[string]map[string]string, error) {
 	ctxlog := log.FromContext(ctx)
 	ctxlog.Info("Discovering backend pools from OpenStack Cinder")

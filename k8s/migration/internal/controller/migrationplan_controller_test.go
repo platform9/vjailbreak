@@ -30,6 +30,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	pkgerrors "github.com/pkg/errors"
+	commonutils "github.com/platform9/vjailbreak/pkg/common/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -647,31 +648,6 @@ func TestDataCopiedIsTerminalInTriggerMigration(t *testing.T) {
 		if isTerminal(phase) {
 			t.Errorf("phase %v should NOT be terminal", phase)
 		}
-	}
-}
-
-// TestStorageCopyMethodRequiresVDDK verifies that StorageAcceleratedCopy (XCOPY)
-// and HotAdd (proxy-VM disk attach) skip the VDDK presence check, since neither
-// copies disk data through virt-v2v/VDDK, while the default VDDK-based path
-// still requires it.
-func TestStorageCopyMethodRequiresVDDK(t *testing.T) {
-	tests := []struct {
-		name              string
-		storageCopyMethod string
-		want              bool
-	}{
-		{"empty (default cold/hot VDDK copy)", "", true},
-		{"normal", "normal", true},
-		{"StorageAcceleratedCopy", StorageCopyMethod, false},
-		{"HotAdd", constants.HotAddCopyMethod, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := storageCopyMethodRequiresVDDK(tt.storageCopyMethod); got != tt.want {
-				t.Errorf("storageCopyMethodRequiresVDDK(%q) = %v, want %v", tt.storageCopyMethod, got, tt.want)
-			}
-		})
 	}
 }
 

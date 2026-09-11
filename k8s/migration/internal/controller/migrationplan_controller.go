@@ -2373,7 +2373,7 @@ func (r *MigrationPlanReconciler) TriggerMigration(ctx context.Context,
 		if err != nil {
 			return errors.Wrapf(err, "failed to create Firstboot ConfigMap for VM %s", vm)
 		}
-		if storageCopyMethodRequiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
+		if requiresVDDK(migrationtemplate.Spec.StorageCopyMethod) {
 			//nolint:gocritic // err is already declared above
 			if err = r.validateVDDKPresence(ctx, migrationobj, ctxlog); err != nil {
 				return err
@@ -2446,11 +2446,11 @@ func (r *MigrationPlanReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-// storageCopyMethodRequiresVDDK reports whether a migration's data copy path
+// requiresVDDK reports whether a migration's data copy path
 // goes through virt-v2v/VDDK. StorageAcceleratedCopy (XCOPY/array LUN copy)
 // and HotAdd (proxy-VM disk attach) copy disks without VDDK, so the VDDK
 // directory requirement doesn't apply to them.
-func storageCopyMethodRequiresVDDK(storageCopyMethod string) bool {
+func requiresVDDK(storageCopyMethod string) bool {
 	return storageCopyMethod != StorageCopyMethod && storageCopyMethod != constants.HotAddCopyMethod
 }
 
