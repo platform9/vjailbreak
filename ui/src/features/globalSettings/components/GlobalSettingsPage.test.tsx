@@ -299,3 +299,49 @@ describe('GlobalSettingsPage - proxy authentication', () => {
     expect(mockedHelpers.injectEnvVariables).not.toHaveBeenCalled()
   })
 })
+
+const goToIntervalsTab = async () => {
+  const tab = await screen.findByTestId('global-settings-tab-retry')
+  fireEvent.click(tab)
+  await screen.findByLabelText('Log Retention (hours)')
+}
+
+describe('GlobalSettingsPage - log retention', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    setupDefaultMocks()
+  })
+
+  it('blocks save when log retention is below the 24-hour minimum', async () => {
+    renderPage()
+    await goToIntervalsTab()
+    fillTextField('Log Retention (hours)', '12')
+
+    fireEvent.click(screen.getByTestId('global-settings-save'))
+
+    expect(
+      await screen.findByText('Enter a whole number of hours, minimum 24.')
+    ).toBeInTheDocument()
+    expect(mockedSettings.updateSettingsConfigMap).not.toHaveBeenCalled()
+  })
+
+  it('allows save at the 24-hour minimum', async () => {
+    renderPage()
+    await goToIntervalsTab()
+    fillTextField('Log Retention (hours)', '24')
+
+    fireEvent.click(screen.getByTestId('global-settings-save'))
+
+    await waitFor(() => expect(mockedSettings.updateSettingsConfigMap).toHaveBeenCalled())
+  })
+
+  it('allows save above the 24-hour minimum', async () => {
+    renderPage()
+    await goToIntervalsTab()
+    fillTextField('Log Retention (hours)', '72')
+
+    fireEvent.click(screen.getByTestId('global-settings-save'))
+
+    await waitFor(() => expect(mockedSettings.updateSettingsConfigMap).toHaveBeenCalled())
+  })
+})
