@@ -12,7 +12,9 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsecurity"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/ports"
@@ -960,6 +962,35 @@ func ListAllFlavors(ctx context.Context, k3sclient client.Client, openstackcreds
 	}
 
 	return flavorList, nil
+}
+
+// ListAllAggregates retrieves a list of all Nova host aggregates, including
+// their metadata and host membership, needed to evaluate flavors bound via
+// `aggregate_instance_extra_specs:<key>=<value>`.
+func ListAllAggregates(ctx context.Context, k3sclient client.Client, openstackcreds *vjailbreakv1alpha1.OpenstackCreds) ([]aggregates.Aggregate, error) {
+	openstackClients, err := GetOpenStackClients(ctx, k3sclient, openstackcreds)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get openstack clients")
+	}
+
+	return listAggregatesFromClient(ctx, openstackClients.ComputeClient)
+}
+
+// listAggregatesFromClient is the pure Nova-calling core of ListAllAggregates,
+// split out so it can be exercised against a test HTTP server without needing
+// a Kubernetes client or real OpenStack credentials.
+func listAggregatesFromClient(ctx context.Context, computeClient *gophercloud.ServiceClient) ([]aggregates.Aggregate, error) {
+	allPages, err := aggregates.List(computeClient).AllPages(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to list host aggregates")
+	}
+
+	aggregateList, err := aggregates.ExtractAggregates(allPages)
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregateList, nil
 }
 
 // DeleteOpenstackVM deletes an OpenStack virtual machine by its UUID
