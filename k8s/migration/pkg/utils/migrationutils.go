@@ -74,14 +74,23 @@ func CreateValidatedCondition(migration *vjailbreakv1alpha1.Migration, eventList
 	return existingConditions
 }
 
-// CreateDataCopyCondition creates a data copy condition for a migration
+// CreateDataCopyCondition creates a data copy condition for a migration. It updates
+// each disk from its own newest event rather than stopping at the single newest
+// "Copying disk" event overall, so a disk's condition does not freeze once a later
+// disk's events become newest.
 func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList *corev1.EventList) []corev1.PodCondition {
 	existingConditions := migration.Status.Conditions
+	seenDisks := map[string]bool{}
 	for i := 0; i < len(eventList.Items); i++ {
 		if eventList.Items[i].Reason != constants.MigrationReason || !strings.Contains(eventList.Items[i].Message, "Copying disk") {
 			continue
 		}
 		reason, message := SplitEventStringOnComma(eventList.Items[i].Message)
+		if seenDisks[reason] {
+			continue
+		}
+		seenDisks[reason] = true
+
 		idx := GetConditonIndex(existingConditions, constants.MigrationConditionTypeDataCopy, reason)
 		statuscondition := GeneratePodCondition(constants.MigrationConditionTypeDataCopy,
 			corev1.ConditionTrue,
@@ -94,7 +103,6 @@ func CreateDataCopyCondition(migration *vjailbreakv1alpha1.Migration, eventList 
 		} else {
 			existingConditions[idx] = *statuscondition
 		}
-		break
 	}
 	return existingConditions
 }

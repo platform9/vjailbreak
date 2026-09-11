@@ -433,6 +433,37 @@ func TestCreateDataCopyCondition(t *testing.T) {
 			t.Errorf("got %d conditions, want 0", len(got))
 		}
 	})
+
+	t.Run("each disk updates from its own newest event, none frozen (regression for #2346)", func(t *testing.T) {
+		// Caller (GetEventsSorted) always passes events newest-first. Two disks,
+		// two events each; disk 1's newest event is listed ahead of disk 0's.
+		// The old code broke after the first "Copying disk" match overall and
+		// only ever updated disk 1, leaving disk 0's condition frozen.
+		eventList := &corev1.EventList{Items: []corev1.Event{
+			makeEvent(constants.MigrationReason, "Copying disk 1, Completed: 80%"), // newest disk 1
+			makeEvent(constants.MigrationReason, "Copying disk 0, Completed: 50%"), // newest disk 0
+			makeEvent(constants.MigrationReason, "Copying disk 1, Completed: 40%"), // older disk 1
+			makeEvent(constants.MigrationReason, "Copying disk 0, Completed: 20%"), // older disk 0
+		}}
+
+		got := CreateDataCopyCondition(makeMigration(), eventList)
+
+		if len(got) != 2 {
+			t.Fatalf("got %d conditions, want one per disk (regression: old code only updated one disk)", len(got))
+		}
+
+		byReason := map[string]corev1.PodCondition{}
+		for _, c := range got {
+			byReason[c.Reason] = c
+		}
+
+		if !strings.Contains(byReason["Copying disk 0"].Message, "50%") {
+			t.Errorf("disk 0 message = %q, want newest 50%%", byReason["Copying disk 0"].Message)
+		}
+		if !strings.Contains(byReason["Copying disk 1"].Message, "80%") {
+			t.Errorf("disk 1 message = %q, want newest 80%%", byReason["Copying disk 1"].Message)
+		}
+	})
 }
 
 func TestCreatePodRunningCondition(t *testing.T) {
