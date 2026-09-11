@@ -94,6 +94,17 @@ func (v *VMwareCredsCustomValidator) ValidateDelete(ctx context.Context, obj run
 			"cannot delete VMwareCreds %q: migration %q is still in progress (phase %s)",
 			creds.Name, blocking.Name, blocking.Status.Phase)
 	}
+
+	proxyVM, err := v.findReferencingProxyVM(ctx, creds.Namespace, creds.Name)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to check for referencing proxy VMs")
+	}
+	if proxyVM != nil {
+		return nil, fmt.Errorf(
+			"cannot delete VMwareCreds %q: ProxyVM %q still references these credentials",
+			creds.Name, proxyVM.Name)
+	}
+
 	return nil, nil
 }
 
@@ -104,6 +115,21 @@ func (v *VMwareCredsCustomValidator) ValidateDelete(ctx context.Context, obj run
 // List per kind, rather than walking each Migration's chain individually,
 // so cost stays proportional to the number of templates/plans/migrations
 // rather than to Migrations x chain-depth.
+// findReferencingProxyVM returns the first ProxyVM whose VMwareCredsRef names
+// credsName, or nil if none exists.
+func (v *VMwareCredsCustomValidator) findReferencingProxyVM(ctx context.Context, namespace, credsName string) (*ProxyVM, error) {
+	var proxyVMs ProxyVMList
+	if err := v.Client.List(ctx, &proxyVMs, client.InNamespace(namespace)); err != nil {
+		return nil, errors.Wrap(err, "failed to list proxy VMs")
+	}
+	for i := range proxyVMs.Items {
+		if proxyVMs.Items[i].Spec.VMwareCredsRef.Name == credsName {
+			return &proxyVMs.Items[i], nil
+		}
+	}
+	return nil, nil
+}
+
 func (v *VMwareCredsCustomValidator) findInProgressMigration(ctx context.Context, namespace, credsName string) (*Migration, error) {
 	ns := client.InNamespace(namespace)
 

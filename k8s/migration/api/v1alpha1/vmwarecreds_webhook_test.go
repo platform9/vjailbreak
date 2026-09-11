@@ -221,3 +221,86 @@ func TestVMwareCredsCustomValidator_ValidateDelete_InProgressMigration(t *testin
 		})
 	}
 }
+
+// TestVMwareCredsCustomValidator_ValidateDelete_ReferencingProxyVM covers the
+// case where a ProxyVM still references the VMwareCreds being deleted.
+func TestVMwareCredsCustomValidator_ValidateDelete_ReferencingProxyVM(t *testing.T) {
+	const namespace = "migration-system"
+
+	newScheme := func() *runtime.Scheme {
+		scheme := runtime.NewScheme()
+		if err := AddToScheme(scheme); err != nil {
+			t.Fatalf("AddToScheme() error = %v", err)
+		}
+		return scheme
+	}
+
+	newCreds := func(name string) *VMwareCreds {
+		return &VMwareCreds{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+		}
+	}
+
+	newProxyVM := func(name, credsRef string) *ProxyVM {
+		return &ProxyVM{
+			ObjectMeta: metav1.ObjectMeta{Namespace: namespace, Name: name},
+			Spec: ProxyVMSpec{
+				VMName:         "some-vm",
+				VMwareCredsRef: corev1.LocalObjectReference{Name: credsRef},
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		objects    []runtime.Object
+		wantDenied bool
+	}{
+		{
+			name:       "no proxy VMs at all",
+			objects:    nil,
+			wantDenied: false,
+		},
+		{
+			name: "proxy VM references these creds",
+			objects: []runtime.Object{
+				newProxyVM("proxy-a", "creds-a"),
+			},
+			wantDenied: true,
+		},
+		{
+			name: "proxy VM references different creds",
+			objects: []runtime.Object{
+				newProxyVM("proxy-b", "creds-b"),
+			},
+			wantDenied: false,
+		},
+		{
+			name: "multiple proxy VMs, one matches",
+			objects: []runtime.Object{
+				newProxyVM("proxy-b", "creds-b"),
+				newProxyVM("proxy-a", "creds-a"),
+			},
+			wantDenied: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(newScheme()).
+				WithRuntimeObjects(tt.objects...).
+				Build()
+
+			v := &VMwareCredsCustomValidator{Client: fakeClient}
+			_, err := v.ValidateDelete(context.Background(), newCreds("creds-a"))
+
+			if tt.wantDenied && err == nil {
+				t.Errorf("expected deletion to be denied, got nil error")
+			}
+			if !tt.wantDenied && err != nil {
+				t.Errorf("expected deletion to be allowed, got error: %v", err)
+			}
+		})
+	}
+}
