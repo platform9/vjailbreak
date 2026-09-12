@@ -1,0 +1,105 @@
+name: Manual Docs Backfill
+
+env:
+  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Single release tag to process'
+        required: false
+      process_all_recent:
+        description: 'Process all missing releases'
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  backfill-release-notes:
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gh-pages Branch
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Install GitHub CLI and jq
+        run: sudo apt-get update && sudo apt-get install -y gh jq skopeo
+
+      - name: Process and Generate Release Notes
+        id: process_releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # This function processes a single release tag
+          process_release() {
+            local RELEASE_TAG=$1
+            if [ -f "docs/src/content/docs/release_docs/$RELEASE_TAG.md" ]; then
+              echo "Documentation for $RELEASE_TAG already exists, skipping."
+              return 0
+            fi
+
+            local QCOW_IMAGE_URI="docker://${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+            echo "--> Checking for image: $QCOW_IMAGE_URI"
+            if ! skopeo inspect "$QCOW_IMAGE_URI" &>/dev/null; then
+              echo "::warning::Image not found for tag $RELEASE_TAG. Skipping doc generation for this release."
+              return 0
+            fi
+            echo "--> Image found. Proceeding with doc generation."
+
+            echo ">>> Processing release: $RELEASE_TAG"
+            RELEASE_NOTES=$(gh release view "$RELEASE_TAG" --json body --template '{{.body}}' || echo "")
+            if [ -z "$RELEASE_NOTES" ]; then
+              echo "No release notes found for $RELEASE_TAG, skipping."; return 0
+            fi
+
+            local ALL_TAGS_SORTED=$(git tag --sort=version:refname)
+            local LAST_TAG=$(echo "$ALL_TAGS_SORTED" | grep -B 1 -x "$RELEASE_TAG" | head -n 1)
+
+            if [[ -n "$LAST_TAG" && "$LAST_TAG" != "$RELEASE_TAG" ]]; then
+              echo "Found previous version: $LAST_TAG. Updating docs..."
+              sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
+              sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
+              sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
+            fi
+
+            local FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
+            mkdir -p "$(dirname "$FILE_NAME")"
+            { echo "---"; echo "title:  $RELEASE_TAG"; echo "description: Release Notes for $RELEASE_TAG"; echo "---"; echo ""; echo "$RELEASE_NOTES"; } > "$FILE_NAME"
+            echo "Created documentation file: $FILE_NAME"
+            PROCESSED_LIST_TEMP+="$RELEASE_TAG "
+          }
+          export -f process_release
+          PROCESSED_LIST_TEMP=""
+
+          if [[ -n "${{ github.event.inputs.release_tag }}" ]]; then
+            echo "Processing single specified release..."
+            process_release "${{ github.event.inputs.release_tag }}"
+          elif [[ "${{ github.event.inputs.process_all_recent }}" == "true" ]]; then
+            echo "Processing all recent missing releases..."
+            ALL_RELEASES=$(gh release list --limit 100 --json tagName --jq '.[].tagName' | sort -V)
+            for TAG in $ALL_RELEASES; do process_release "$TAG"; done
+          fi
+          
+          echo "PROCESSED_RELEASES=${PROCESSED_LIST_TEMP}" >> $GITHUB_OUTPUT
+
+      - name: Archive and Delete Old Release Notes
+        if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
+        uses: platform9/vjailbreak/.github/actions/archive-old-release-notes@main
+
+      - name: Create PR with changes
+        if: steps.process_releases.outputs.PROCESSED_RELEASES != ''
+        uses: platform9/vjailbreak/.github/actions/create-docs-pr@main
+        with:
+          branch-prefix: backfill-docs
+          commit-message: "docs: Backfill missing release documentation for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+          pr-title: "docs: Backfill release documentation for ${{ steps.process_releases.outputs.PROCESSED_RELEASES }}"
+          pr-body: "This PR was automatically generated to backfill documentation for one or more releases."
+          retry: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

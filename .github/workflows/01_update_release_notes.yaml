@@ -1,0 +1,161 @@
+name: Update Release Notes on Release Event
+
+env:
+  QCOW2_IMG: ${{ vars.REGISTRY }}/${{ vars.REPO }}/vjailbreak
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'info'
+        type: choice
+        options:
+          - info
+          - warning
+          - debug
+      environment:
+        description: 'Environment to run in'
+        type: environment
+        required: true
+      branch:
+        description: 'Branch to use'
+        required: true
+        default: 'gh-pages'
+      release_tag:
+        description: 'Manually run for a specific release tag'
+        required: true
+        type: text
+
+jobs:
+  check-and-wait-for-artifacts:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
+    steps:
+      - name: Set Tag for Release Event
+        if: github.event_name == 'release'
+        id: set_release_tag
+        run: echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+
+      - name: Set Tag for Manual Trigger
+        if: github.event_name == 'workflow_dispatch'
+        id: set_manual_tag
+        run: echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+
+      - name: Get Tag
+        id: get_tag
+        run: echo "tag=${{ steps.set_release_tag.outputs.tag || steps.set_manual_tag.outputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Install Dependencies
+        run: |
+          curl -LO https://github.com/oras-project/oras/releases/download/v1.2.1/oras_1.2.1_linux_amd64.tar.gz
+          sudo tar -C /usr/local/bin/ -xzvf oras_1.2.1_linux_amd64.tar.gz oras
+
+      - name: Wait and check for QCOW image (Max 45 mins)
+        run: |
+          RELEASE_TAG="${{ steps.get_tag.outputs.tag }}"
+          QCOW_IMAGE_URL="${{ env.QCOW2_IMG }}:${RELEASE_TAG}"
+
+          echo "Waiting for artifact to be available at $QCOW_IMAGE_URL"
+
+          for i in $(seq 1 135); do
+            if oras manifest fetch "$QCOW_IMAGE_URL" &>/dev/null; then
+              echo ""
+              echo "Success! Artifact found."
+              exit 0
+            fi
+
+            if [[ $i -eq 135 ]]; then
+              break
+            fi
+
+            sleep 20
+          done
+
+          echo ""
+          echo "Artifact not found after 45 minutes. Failing workflow."
+          exit 1
+
+  update-release-notes:
+    needs: check-and-wait-for-artifacts
+    permissions:
+      contents: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          fetch-depth: 0
+
+      - name: Install GitHub CLI and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gh jq
+
+      - name: Set Tag from Previous Event
+        id: set_tag
+        run: echo "tag=${{ needs.check-and-wait-for-artifacts.outputs.tag }}" >> $GITHUB_OUTPUT
+
+      - name: Generate Notes for New Release
+        id: process_release
+        run: |
+          RELEASE_TAG="${{ steps.set_tag.outputs.tag }}"
+          
+          echo ">>> Processing new release: $RELEASE_TAG"
+
+          RELEASE_NOTES=$(gh release view "$RELEASE_TAG" --json body --template '{{.body}}' || echo "")
+          if [ -z "$RELEASE_NOTES" ]; then
+            echo "No release notes found for $RELEASE_TAG, skipping."
+            echo "processed_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # find the previous tag
+          ALL_TAGS_SORTED=$(git tag --sort=version:refname)
+          LAST_TAG=$(echo "$ALL_TAGS_SORTED" | grep -B 1 -x "$RELEASE_TAG" | head -n 1)
+
+          if [[ -n "$LAST_TAG" && "$LAST_TAG" != "$RELEASE_TAG" ]]; then
+            echo "Found previous version: $LAST_TAG. Updating version numbers in docs..."
+            sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/introduction/getting_started.mdx
+            sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/components/githubRelease.astro
+            sed -i "s|$LAST_TAG|$RELEASE_TAG|g" docs/src/content/docs/index.mdx
+          fi
+
+          # Create the new release note file
+          FILE_NAME="docs/src/content/docs/release_docs/$RELEASE_TAG.md"
+          mkdir -p "$(dirname "$FILE_NAME")"
+          {
+            echo "---"
+            echo "title:  $RELEASE_TAG"
+            echo "description: Release Notes for $RELEASE_TAG"
+            echo "---"
+            echo ""
+            echo "$RELEASE_NOTES"
+          } > "$FILE_NAME"
+          
+          echo "processed_release=true" >> $GITHUB_OUTPUT
+          echo "release_tag=$RELEASE_TAG" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Archive and Delete Old Release Notes
+        if: steps.process_release.outputs.processed_release == 'true'
+        uses: platform9/vjailbreak/.github/actions/archive-old-release-notes@main
+
+      - name: Create PR with changes
+        if: steps.process_release.outputs.processed_release == 'true'
+        uses: platform9/vjailbreak/.github/actions/create-docs-pr@main
+        with:
+          branch-prefix: update-release-docs
+          commit-message: "docs: Update for release ${{ steps.process_release.outputs.release_tag }}"
+          pr-title: "docs: Update for release ${{ steps.process_release.outputs.release_tag }}"
+          pr-body: "This PR was automatically generated."
+          retry: 'false'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
