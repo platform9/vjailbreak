@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ui
+  namespace: migration-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ui
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ui
+    spec:
+      serviceAccountName: migration-controller-manager
+      containers:
+        - name: vjailbreak-ui-container
+          image: platform9/vjailbreak-ui:v0.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ui-service
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ui
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vjailbreak-ui-ingress
+  namespace: migration-system
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vjailbreak-ui-service
+            port:
+              number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vjailbreak-api-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /(apis.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: kubernetes
+            port:
+              number: 443
+      - path: /(api.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: kubernetes
+            port:
+              number: 443
