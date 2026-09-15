@@ -2072,9 +2072,7 @@ spec:
     name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: |-
-          ProxyVM is the Schema for a registered Proxy VM used in Hot-Add data copy migrations.
-          The controller validates SSH connectivity and required components on the referenced VM.
+        description: ProxyVM is the Schema for the proxyvms API.
         properties:
           apiVersion:
             description: |-
@@ -2096,12 +2094,28 @@ spec:
           spec:
             description: ProxyVMSpec defines the desired state of ProxyVM
             properties:
+              sshKeyPairRef:
+                description: |-
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
+                properties:
+                  name:
+                    default: ""
+                    description: |-
+                      Name of the referent.
+                      This field is effectively required, but due to backwards compatibility is
+                      allowed to be empty. Instances of this type with an empty value here are
+                      almost certainly wrong.
+                      More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                    type: string
+                type: object
+                x-kubernetes-map-type: atomic
               vmName:
-                description: VMName is the display name of the Proxy VM in vCenter.
                 type: string
               vmwareCredsRef:
-                description: VMwareCredsRef references the VMwareCreds used to locate
-                  and connect to the Proxy VM.
+                description: |-
+                  LocalObjectReference contains enough information to let you locate the
+                  referenced object inside the same namespace.
                 properties:
                   name:
                     default: ""
@@ -2122,27 +2136,17 @@ spec:
             description: ProxyVMStatus defines the observed state of ProxyVM
             properties:
               attachedDiskCount:
-                description: |-
-                  AttachedDiskCount is the number of source-snapshot disks currently attached
-                  to this Proxy VM across all active Hot-Add migrations. Max 60.
                 type: integer
               componentsVerified:
-                description: ComponentsVerified lists each required component and
-                  whether it was found.
                 items:
                   description: ProxyVMComponentCheck records whether a required component
                     was found on the Proxy VM.
                   properties:
                     message:
-                      description: Message provides detail for missing components.
                       type: string
                     name:
-                      description: Name is the component name (e.g. "lsblk", "qemu-nbd",
-                        "sshd").
                       type: string
                     present:
-                      description: Present indicates whether the component was found
-                        in PATH.
                       type: boolean
                   required:
                   - name
@@ -2150,21 +2154,13 @@ spec:
                   type: object
                 type: array
               ipAddress:
-                description: IPAddress is the IP address discovered from vCenter guest
-                  info.
                 type: string
               lastValidationTime:
-                description: LastValidationTime records when the last verification
-                  completed.
                 format: date-time
                 type: string
               validationMessage:
-                description: ValidationMessage contains a human-readable summary of
-                  the last validation result.
                 type: string
               validationStatus:
-                description: 'ValidationStatus is one of: Pending, Verifying, Ready,
-                  VerificationFailed.'
                 type: string
             type: object
         type: object
@@ -2857,6 +2853,12 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackServerGroup:
+                description: |-
+                  OpenstackServerGroup is the ID of the OpenStack server group used for VM placement scheduling.
+                  When set, the agent VM is placed according to the server group's policy.
+                  If empty, default OpenStack scheduling applies.
+                type: string
               openstackVolumeType:
                 description: |-
                   OpenstackVolumeType is the volume type for the root disk of the VM
@@ -4738,7 +4740,8 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.6
+            optional: true
+        image: quay.io/platform9/vjailbreak-controller:v0.4.7
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4825,20 +4828,41 @@ spec:
     type: RollingUpdate
   template:
     metadata:
+      annotations:
+        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-role.kubernetes.io/control-plane
+                operator: Exists
       containers:
-      - envFrom:
+      - env:
+        - name: DBUS_SYSTEM_BUS_ADDRESS
+          value: unix:path=/run/dbus/system_bus_socket
+        envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.6
+            optional: true
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.7
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
         - containerPort: 3001
           protocol: TCP
         resources: {}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            add:
+            - DAC_OVERRIDE
+            drop:
+            - ALL
+          runAsUser: 0
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
@@ -4847,6 +4871,18 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+        - mountPath: /run/dbus/system_bus_socket
+          name: dbus-socket
+        - mountPath: /etc/systemd/timesyncd.conf.d
+          name: timesyncd-conf-dir
+        - mountPath: /usr/share/zoneinfo
+          name: host-zoneinfo
+          readOnly: true
+        - mountPath: /etc/pf9
+          name: pf9-config
+        - mountPath: /var/log/pf9
+          name: pf9-logs
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -4866,6 +4902,26 @@ spec:
           path: /home/ubuntu
           type: DirectoryOrCreate
         name: vddk-storage
+      - hostPath:
+          path: /run/dbus/system_bus_socket
+          type: Socket
+        name: dbus-socket
+      - hostPath:
+          path: /etc/systemd/timesyncd.conf.d
+          type: DirectoryOrCreate
+        name: timesyncd-conf-dir
+      - hostPath:
+          path: /usr/share/zoneinfo
+          type: Directory
+        name: host-zoneinfo
+      - hostPath:
+          path: /etc/pf9
+          type: Directory
+        name: pf9-config
+      - hostPath:
+          path: /var/log/pf9
+          type: DirectoryOrCreate
+        name: pf9-logs
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -4921,25 +4977,22 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.6
+          image: quay.io/platform9/vjailbreak-ui:v0.4.7
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
+          envFrom:
+          - configMapRef:
+              name: pf9-env
+              optional: true
           volumeMounts:
           - name: nginx-shadow-htpasswd
             mountPath: /etc/nginx/shadow
-          - name: pf9-logs
-            mountPath: /var/log/pf9
-            readOnly: true
       volumes:
       - name: nginx-shadow-htpasswd
         hostPath:
           path: /etc/htpasswd
           type: FileOrCreate
-      - name: pf9-logs
-        hostPath:
-          path: /var/log/pf9
-          type: DirectoryOrCreate
 ---
 apiVersion: v1
 kind: Service
