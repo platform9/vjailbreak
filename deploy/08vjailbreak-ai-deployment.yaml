@@ -1,4 +1,16 @@
 
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vjailbreak-ai-data
+  namespace: migration-system
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -24,7 +36,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:v0.4.8
+          image: quay.io/platform9/vjailbreak-ai:v0.4.9
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
