@@ -62,13 +62,22 @@ metadata:
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
+    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
   rules:
   - http:
       paths:
-      - path: /apis
-        pathType: Prefix
+      - path: /(apis.*)
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: kubernetes
+            port:
+              number: 443
+      - path: /(api.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: kubernetes
