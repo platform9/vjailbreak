@@ -459,6 +459,21 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
+                type: object
+              assignedIPsPerVM:
+                additionalProperties:
+                  type: string
+                description: |-
+                  AssignedIPsPerVM is a map of VM names to comma-separated assigned IPs for cold migration
+                  Format: {"vm-name": "IP1,IP2,IP3"} where each IP corresponds to a network interface by index
                 type: object
               fallbackToDHCP:
                 type: boolean
@@ -515,9 +530,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               securityGroups:
                 items:
                   type: string
@@ -547,10 +559,6 @@ spec:
                   MigrationStatus is the status of the migration using Kubernetes PodPhase states
                   (Pending, Running, Succeeded, Failed, Unknown)
                 type: string
-              retryCount:
-                description: Migration RetryCount is the number of times the migration
-                  has been retried
-                type: integer
             required:
             - migrationMessage
             - migrationStatus
@@ -617,6 +625,11 @@ spec:
           spec:
             description: Spec defines the desired state of Migration
             properties:
+              assignedIP:
+                description: |-
+                  AssignedIP is the comma-separated list of user-assigned IPs for cold migration
+                  Format: "IP1,IP2,IP3" where each IP corresponds to a network interface by index
+                type: string
               disconnectSourceNetwork:
                 description: |-
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
@@ -1548,6 +1561,14 @@ spec:
                     items:
                       type: string
                     type: array
+                  periodicSyncEnabled:
+                    description: PeriodicSyncEnabled is a boolean to enable periodic
+                      sync
+                    type: boolean
+                  periodicSyncInterval:
+                    description: PeriodicSyncInterval is the interval at which the
+                      migration plan should be synced
+                    type: string
                 type: object
               bmConfigRef:
                 description: BMConfigRef is the reference to the BMC credentials
@@ -1697,9 +1718,6 @@ spec:
                   suffix:
                     type: string
                 type: object
-              retry:
-                description: Retry the migration if it fails
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -2659,6 +2677,15 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - configmaps/status
+  - pods/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
   - events
   verbs:
   - get
@@ -2680,14 +2707,6 @@ rules:
   verbs:
   - get
   - list
-- apiGroups:
-  - ""
-  resources:
-  - pods/status
-  verbs:
-  - get
-  - patch
-  - update
 - apiGroups:
   - apiextensions.k8s.io
   resources:
