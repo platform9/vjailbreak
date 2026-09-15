@@ -103,8 +103,8 @@ spec:
                   echo "Syncing from rsync://${MASTER_IP}"
                   rsync -avz rsync://${MASTER_IP}/vmwarelib/ /home/ubuntu/vmware-vix-disklib-distrib/
 
-                  # Sync logs from worker to master (with delete flag to sync deletions too)
-                  rsync -avz --delete /var/log/pf9 rsync://${MASTER_IP}/worker-logs
+                  # Sync logs from worker to master
+                  rsync -avz  /var/log/pf9 rsync://${MASTER_IP}/worker-logs
 
                   # Sync virtio-win drivers from master to worker
                   rsync -avz rsync://${MASTER_IP}/virtio-win /home/ubuntu/virtio-win
