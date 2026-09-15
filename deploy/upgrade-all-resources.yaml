@@ -520,11 +520,6 @@ spec:
                 items:
                   type: string
                 type: array
-              useFlavorless:
-                description: |-
-                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-                  When true, TargetFlavorId for the VM should be set to a base flavor (e.g., a 0-0-x flavor).
-                type: boolean
               virtualMachines:
                 description: VirtualMachines is a list of virtual machines to be migrated
                 items:
@@ -630,11 +625,6 @@ spec:
               podRef:
                 description: PodRef is the name of the pod
                 type: string
-              useFlavorless:
-                description: |-
-                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-                  When true, TargetFlavorId in the Migrate object should be set to the base flavor.
-                type: boolean
               vmName:
                 description: VMName is the name of the VM getting migrated from VMWare
                   to Openstack
@@ -807,6 +797,10 @@ spec:
                 description: TargetPCDClusterName is the name of the PCD cluster where
                   the virtual machine will be migrated
                 type: string
+              useFlavorless:
+                description: UseFlavorless indicates if the migration should use flavorless
+                  VM creation for PCD.
+                type: boolean
               virtioWinDriver:
                 description: VirtioWinDriver is the driver to be used for the virtual
                   machine
@@ -1702,11 +1696,6 @@ spec:
               retry:
                 description: Retry the migration if it fails
                 type: boolean
-              useFlavorless:
-                description: |-
-                  UseFlavorless indicates if the migration should use flavorless VM creation for PCD.
-                  When true, TargetFlavorId for the VM should be set to a base flavor (e.g., a 0-0-x flavor).
-                type: boolean
               vmMigrationPlans:
                 description: VMMigrationPlans is the reference to the VM migration
                   plan
@@ -2387,6 +2376,8 @@ spec:
                       description: NIC represents a Virtual ethernet card in the virtual
                         machine.
                       properties:
+                        ipAddress:
+                          type: string
                         mac:
                           type: string
                         network:
