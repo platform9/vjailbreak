@@ -27,7 +27,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.2
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.3
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -42,6 +42,10 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler

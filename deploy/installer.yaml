@@ -2679,7 +2679,7 @@ spec:
                   (e.g., Provisioning, Ready, Error, Decommissioning)
                 type: string
               vmIP:
-                description: VMIP is the IP address of the VM
+                description: VMIP  is the IP address of the VM
                 type: string
             required:
             - vmIP
@@ -3126,6 +3126,8 @@ spec:
                         mac:
                           type: string
                         network:
+                          type: string
+                        networkType:
                           type: string
                         order:
                           type: integer
@@ -4446,7 +4448,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.2
+        image: quay.io/platform9/vjailbreak-controller:v0.4.3
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4480,6 +4482,10 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
@@ -4529,7 +4535,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.2
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.3
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4544,6 +4550,10 @@ spec:
           readOnly: true
         - mountPath: /home/ubuntu
           name: vddk-storage
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
@@ -4614,7 +4624,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.2
+          image: quay.io/platform9/vjailbreak-ui:v0.4.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -4741,7 +4751,11 @@ rules:
   - secrets
   verbs:
   - create
+  - delete
   - get
+  - list
+  - patch
+  - update
 - apiGroups:
   - ""
   resources:
@@ -4789,6 +4803,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds
+  - arraycredsmappings
   - bmconfigs
   - esxisshcreds
   - clustermigrations
@@ -4820,6 +4835,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/finalizers
+  - arraycredsmappings/finalizers
   - bmconfigs/finalizers
   - esxisshcreds/finalizers
   - clustermigrations/finalizers
@@ -4841,6 +4857,7 @@ rules:
   - vjailbreak.k8s.pf9.io
   resources:
   - arraycreds/status
+  - arraycredsmappings/status
   - bmconfigs/status
   - esxisshcreds/status
   - clustermigrations/status

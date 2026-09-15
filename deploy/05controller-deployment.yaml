@@ -41,7 +41,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.2
+        image: quay.io/platform9/vjailbreak-controller:v0.4.3
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -75,6 +75,10 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+      dnsConfig:
+        options:
+        - name: ndots
+          value: "1"
       dnsPolicy: ClusterFirstWithHostNet
       hostNetwork: true
       securityContext:
