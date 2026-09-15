@@ -71,6 +71,22 @@ spec:
                 description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
                   from OpenStack
                 type: boolean
+              netAppConfig:
+                description: |-
+                  NetAppConfig holds NetApp-specific configuration. Required when
+                  VendorType is "netapp" before a migration can run. May be left empty
+                  at creation time so the controller can surface available SVMs/FlexVols
+                  on status.backendTargets for interactive selection.
+                properties:
+                  flexVol:
+                    description: FlexVol is the FlexVol name (within the SVM) where
+                      LUNs will be created.
+                    type: string
+                  svm:
+                    description: SVM is the Storage Virtual Machine name that owns
+                      the target FlexVol.
+                    type: string
+                type: object
               openstackMapping:
                 description: OpenStackMapping is the openstack mapping for this array
                 properties:
@@ -159,6 +175,38 @@ spec:
                   ArrayValidationStatus is the status of the storage array validation
                   Possible values: Pending, Succeeded, Failed, AwaitingCredentials
                 type: string
+              backendTargets:
+                description: |-
+                  BackendTargets is a vendor-neutral two-level tree of selectable array
+                  targets (e.g., NetApp SVMs -> FlexVols). Populated by the controller
+                  after successful credential validation for vendors that expose a
+                  selectable target hierarchy. UIs consume this to render a picker.
+                items:
+                  description: BackendTargetGroup groups related targets (e.g., a
+                    NetApp SVM and its FlexVols).
+                  properties:
+                    children:
+                      items:
+                        description: |-
+                          BackendTarget is a single selectable target within a BackendTargetGroup
+                          (e.g., a NetApp FlexVol, a Dell pool).
+                        properties:
+                          name:
+                            type: string
+                          uuid:
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      type: array
+                    name:
+                      type: string
+                    uuid:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
               dataStore:
                 description: DataStore is the list of datastores associated with this
                   array
@@ -195,7 +243,7 @@ spec:
               phase:
                 description: |-
                   Phase indicates the current phase of the ArrayCreds
-                  Possible values: Discovered, Configured, Validated, Failed
+                  Possible values: Discovered, Configured, Validated, Failed, NeedsBackendSelection
                 type: string
             type: object
         type: object
@@ -909,6 +957,12 @@ spec:
                     items:
                       type: string
                     type: array
+                  imageProfiles:
+                    description: ImageProfiles is the ordered list of VolumeImageProfile
+                      names to apply to the migrated VM's boot volume.
+                    items:
+                      type: string
+                    type: array
                   networkPersistence:
                     description: NetworkPersistence instructs the migration helper
                       to persist the source networking configuration
@@ -985,6 +1039,8 @@ spec:
                     description: NICOverride defines per-NIC overrides for IP and
                       MAC preservation during migration
                     properties:
+                      UserAssignedIP:
+                        type: string
                       interfaceIndex:
                         description: InterfaceIndex is the zero-based index of the
                           NIC
@@ -1130,6 +1186,13 @@ spec:
                   DisconnectSourceNetwork specifies whether to disconnect the source VM's network interfaces
                   after a successful migration to prevent network conflicts. Defaults to false.
                 type: boolean
+              imageMetadata:
+                additionalProperties:
+                  type: string
+                description: |-
+                  ImageMetadata is the merged map of Cinder volume_image_metadata properties resolved
+                  from the MigrationPlan's selected VolumeImageProfiles after OS-family filtering.
+                type: object
               initiateCutover:
                 description: InitiateCutover is the flag to initiate cutover
                 type: boolean
@@ -1691,10 +1754,6 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
-              vjbinstanceid:
-                description: VJBInstanceID is the ID of current vjailbreak instance
-                  (needed if metadata service is not available)
-                type: string
             type: object
           status:
             description: OpenstackCredsStatus defines the observed state of OpenstackCreds
@@ -2190,6 +2249,12 @@ spec:
                   granularVolumeTypes:
                     description: GranularVolumeTypes is a list of volume types to
                       be migrated
+                    items:
+                      type: string
+                    type: array
+                  imageProfiles:
+                    description: ImageProfiles is the ordered list of VolumeImageProfile
+                      names to apply to the migrated VM's boot volume.
                     items:
                       type: string
                     type: array
@@ -3151,6 +3216,10 @@ spec:
                   vmState:
                     description: VMState is the state of the virtual machine
                     type: string
+                  vmid:
+                    description: VMID is the vCenter Managed Object ID (MOID) of the
+                      virtual machine
+                    type: string
                 required:
                 - name
                 type: object
@@ -3173,6 +3242,81 @@ spec:
     storage: true
     subresources:
       status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.17.1
+  name: volumeimageprofiles.vjailbreak.k8s.pf9.io
+spec:
+  group: vjailbreak.k8s.pf9.io
+  names:
+    kind: VolumeImageProfile
+    listKind: VolumeImageProfileList
+    plural: volumeimageprofiles
+    singular: volumeimageprofile
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.osFamily
+      name: OSFamily
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          VolumeImageProfile defines a reusable set of Cinder volume_image_metadata properties
+          that can be applied to VM volumes during migration.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: VolumeImageProfileSpec defines the desired state of VolumeImageProfile
+            properties:
+              description:
+                description: Description will indicate the usage context of this profile
+                type: string
+              osFamily:
+                description: OSFamily scopes this profile to a specific VMware guest
+                  family.
+                enum:
+                - windowsGuest
+                - linuxGuest
+                - any
+                type: string
+              properties:
+                additionalProperties:
+                  type: string
+                description: Properties is the map of Cinder volume image metadata
+                  key-value pairs
+                type: object
+            required:
+            - osFamily
+            - properties
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources: {}
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -4448,7 +4592,7 @@ spec:
         envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-controller:v0.4.3
+        image: quay.io/platform9/vjailbreak-controller:v0.4.4
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -4482,6 +4626,9 @@ spec:
         - mountPath: /etc/hosts
           name: hosts-file
           readOnly: true
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
+          readOnly: true
       dnsConfig:
         options:
         - name: ndots
@@ -4506,6 +4653,10 @@ spec:
           path: /etc/hosts
           type: File
         name: hosts-file
+      - hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
+        name: dmi-product-uuid
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -4535,7 +4686,7 @@ spec:
       - envFrom:
         - configMapRef:
             name: pf9-env
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.3
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.4
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -4624,7 +4775,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.3
+          image: quay.io/platform9/vjailbreak-ui:v0.4.4
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -4823,6 +4974,7 @@ rules:
   - vmwarecreds
   - vmwarehosts
   - vmwaremachines
+  - volumeimageprofiles
   verbs:
   - create
   - delete
