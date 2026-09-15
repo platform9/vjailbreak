@@ -24,3 +24,10 @@ data:
   PERIODIC_SYNC_RETRY_CAP: "3h" # max retry interval for CBT sync
   AUTO_FSTAB_UPDATE: "false" # automatically update fstab
   AUTO_PXE_BOOT_ON_CONVERSION: "false" # automatically set machine to PXE boot during cluster conversion
+  V2V_HELPER_POD_CPU_REQUEST: "1000m"
+  V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"
+  V2V_HELPER_POD_CPU_LIMIT: "2000m"
+  V2V_HELPER_POD_MEMORY_LIMIT: "5Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: "3Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: "3Gi"
+  
