@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vjailbreak-ai-context
+  namespace: migration-system
+data:
+  additional_context: |
+    ## vJailbreak Architecture
+
+    vJailbreak migrates VMware VMs to OpenStack in this sequence:
+    1. Controller creates a v2v-helper pod per migration
+    2. v2v-helper runs virt-v2v with the nbdkit+VDDK plugin to stream VMDK data
+    3. Converted disk is uploaded to OpenStack Glance as QCOW2 (or written to a Cinder volume via RAW)
+    4. Nova boots the migrated VM using the uploaded image or volume
+
+    Key components:
+    - **migration-controller-manager** — Kubernetes controller in `migration-system` namespace; reconciles Migration CRs
+    - **v2v-helper pod** — named `<migration-name>` in `migration-system`; runs virt-v2v; one pod per Migration
+    - **VDDK** — VMware Virtual Disk Development Kit at `/home/ubuntu/vmware-vix-disklib-distrib/` on the vJailbreak VM
+    - **Conversion scratch space** — `emptyDir` at `/var/tmp/v2v-conversion-disks/` inside v2v-helper pod (~2× VM disk size required)
+    - **storageCopyMethod** — `hot` (live/CBT incremental) or `cold` (offline full-copy); set in MigrationTemplate
+
+    CRD hierarchy: Migration → MigrationPlan → MigrationTemplate → NetworkMapping + StorageMapping
+
+    ---
+
+    ## Common Failure Patterns and Fixes
+
+    ### VDDK / VMware Connectivity
+    | Symptom | Likely Cause | Fix |
+    |---------|-------------|-----|
+    | `VixDiskLib_Open failed` / `Transport error` | VDDK library missing or wrong version | Verify `/home/ubuntu/vmware-vix-disklib-distrib/` exists; VDDK 7.0+ required |
+    | `Failed to connect to host <esxi-fqdn>` | ESXi hostname not resolving in pod | Add ESXi host entries to `/etc/hosts` on vJailbreak VM, then restart controller |
+    | `SSL certificate verify failed` | vCenter TLS cert untrusted | Set `InsecureSkipVerify: true` in VMwareCreds or add cert to trust store |
+    | `NoPermission` / `NotAuthenticated` | Insufficient vCenter permissions | Account needs Datastore.Browse, VirtualMachine.Provisioning.DiskRandomRead, Global.DisableMethods |
+    | `CBT not enabled` / `queryChangedDiskAreas` error | Changed Block Tracking disabled on source VM | Enable CBT in vCenter VM settings, create a snapshot, then retry |
+
+    ### virt-v2v / Conversion
+    | Symptom | Likely Cause | Fix |
+    |---------|-------------|-----|
+    | `No space left on device` | Node disk exhausted during conversion | Ensure node has ≥2× VM disk size free in `/var/tmp`; check `df -h` on vJailbreak VM |
+    | `libguestfs: error: could not create appliance` | libguestfs kernel/QEMU unavailable in pod | Check pod for missing KVM device; vJailbreak VM must have nested virt or bare-metal KVM |
+    | `Failed to locate virtio drivers` / `virtio-win` | virtio-win ISO not found | Confirm virtio-win ISO is present at the expected path in the v2v-helper image |
+    | `qemu-img: Could not open` / `corrupt` | VMDK corrupt or CBT snapshot stale | Remove stale snapshots in vCenter; try `storageCopyMethod: cold` |
+    | `virt-v2v: error: inspection of disk image failed` | Unsupported guest OS | Check virt-v2v support page; Windows requires virtio-win, Linux needs grub accessible |
+    | Conversion stuck / timeout | Very large VM or slow storage | Increase `migrationTimeout` in MigrationPlan; check network throughput between vJailbreak and ESXi |
+
+    ### OpenStack Upload / Deploy
+    | Symptom | Likely Cause | Fix |
+    |---------|-------------|-----|
+    | `No valid host found` | Flavor constraints or resource exhaustion | Verify flavor exists and Nova has capacity; check `openstack flavor list` |
+    | `Quota exceeded` | OpenStack project quota hit | Check `openstack quota show` for instances, cores, RAM, volumes, gigabytes |
+    | `Network <name> could not be found` | NetworkMapping source or target name mismatch | Verify NetworkMapping.Spec matches exact OpenStack network names |
+    | `VolumeType <name> not found` | StorageMapping mismatch | Verify StorageMapping.Spec matches exact Cinder volume type names; case-sensitive |
+    | `Provided image is too large` | Glance upload size limit | Increase `glance-api.conf image_size_cap`; or use `storageCopyMethod: raw-volume` to bypass Glance |
+    | `ImageNotFound` during Nova boot | Glance upload failed or image in error state | Check `openstack image list`; look for image in `killed` or `queued` state |
+
+    ### Kubernetes / Controller
+    | Symptom | Likely Cause | Fix |
+    |---------|-------------|-----|
+    | Pod `OOMKilled` | Insufficient memory for conversion | Large Windows VMs need 4–8 GB; increase v2v-helper memory limit in MigrationPlan |
+    | Pod stuck in `Pending` | Node selector mismatch or node resource shortage | Check `kubectl describe pod <name>` for scheduling events |
+    | `context deadline exceeded` in controller | Migration timeout too short | Increase `migrationTimeout` in MigrationPlan spec |
+    | Migration stuck in `DataCopyStart` | NBD/VDDK stream stalled | Check v2v-helper logs for `nbdkit` errors; restart migration |
+
+    ---
+
+    ## Analysis Guidelines
+
+    - **Always quote specific log lines** as evidence in `root_cause` — vague causes are not actionable
+    - **fix_steps** should be concrete shell commands or UI steps, not generic advice
+    - Check `storageCopyMethod` (`hot` vs `cold`) — hot migrations have extra pre-copy phases that can fail
+    - If `phase` is `Failed` but logs are empty, check controller logs for reconcile errors mentioning the Migration name
+    - Network and storage mapping errors almost always have the exact mismatched name in the log — quote it
+    - If confidence is `low` or `none`, list the specific information that would be needed to diagnose further

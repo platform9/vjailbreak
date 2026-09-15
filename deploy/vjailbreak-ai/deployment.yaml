@@ -1,0 +1,72 @@
+# Prerequisites:
+#   Create the API key Secret via Settings → AI in the vJailbreak UI, or manually:
+#   kubectl -n migration-system create secret generic vjailbreak-ai-secret \
+#     --from-literal=api-key=<anthropic-api-key> \
+#     --from-literal=admin-key=<admin-key>
+#   The Deployment uses optional: true so it starts without the Secret,
+#   but AI analysis calls will fail until the key is configured.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+  labels:
+    app: vjailbreak-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vjailbreak-ai
+  template:
+    metadata:
+      labels:
+        app: vjailbreak-ai
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: vjailbreak-ai
+          image: quay.io/platform9/vjailbreak-ai:main
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: api-key
+                  optional: true  # Secret must be created via Settings UI before AI analysis works
+            - name: ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vjailbreak-ai-secret
+                  key: admin-key
+                  optional: true
+          volumeMounts:
+            - name: chroma-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: vjailbreak-ai-chroma

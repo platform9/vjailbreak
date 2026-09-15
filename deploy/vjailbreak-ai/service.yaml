@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vjailbreak-ai
+  namespace: migration-system
+spec:
+  selector:
+    app: vjailbreak-ai
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
