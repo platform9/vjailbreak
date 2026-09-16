@@ -28,9 +28,6 @@ export default defineConfig({
 		  }),
 		starlight({
 			title: 'vJailbreak',
-			editLink: {
-				baseUrl: 'https://platform9.github.io/vjailbreak/',
-			},
 			social: {
 				github: 'https://github.com/platform9/vjailbreak',
 				slack: 'https://join.slack.com/t/vjailbreak/shared_invite/zt-314pppw43-F1vzd6ZaPW5PoZqF~aa8lA',
