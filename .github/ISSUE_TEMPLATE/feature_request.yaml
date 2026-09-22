@@ -1,0 +1,27 @@
+name: ✨ Feature request
+description: Suggest an idea for this project.
+labels: enhancement
+body:
+  - type: textarea
+    id: short_description
+    attributes:
+      label: Is your feature request related to a problem? Please describe?
+      description: |
+        A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+      placeholder: "As a [developer/user/operator] I would like to [high level description] for [reasons]."
+    validations:
+      required: true
+
+  - type: textarea
+    id: detailed_feature_description
+    attributes:
+      label: Detailed Description
+      placeholder: "A clear and concise description of what you want to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Anything else you would like to add?
+      placeholder: "Miscellaneous information that will help in solving the issue."
