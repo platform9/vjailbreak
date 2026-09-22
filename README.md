@@ -4,7 +4,7 @@
 
 A free tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
 
-[![Deploy Docs](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml/badge.svg)](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml)
+[![Deploy Docs](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml/badge.svg?branch=gh-pages)](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml)
 
 [![Latest Release](https://badgen.net/github/release/platform9/vjailbreak/latest)](https://github.com/platform9/vjailbreak/releases/latest)
 [![All Releases](https://badgen.net/github/releases/platform9/vjailbreak)](https://github.com/platform9/vjailbreak/releases)
