@@ -211,7 +211,6 @@ vJailbreak builds upon several open-source technologies:
 
 ## Contributing
 
-This repository holds the published deployment manifests and release notes for each
-vJailbreak release.
+This repository holds the published deployment manifests and release notes for each vJailbreak release.
 
-- **Bug reports and feature requests**: open a [GitHub issue](https://github.com/platform9/vjailbreak/issues)
+**Bug reports and feature requests**: open a [GitHub issue](https://github.com/platform9/vjailbreak/issues)
