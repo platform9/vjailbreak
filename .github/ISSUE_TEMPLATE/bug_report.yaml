@@ -1,4 +1,4 @@
-name: 🐛 Bug Report
+name: Bug Report
 description: Report a bug encountered while using vJailbreak
 body:
   - type: textarea
