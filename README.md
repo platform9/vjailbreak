@@ -4,8 +4,7 @@
 
 A free tool that simplifies the migration of virtual machines from VMware to any OpenStack-compliant cloud.
 
-[![Build Status](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml/badge.svg)](https://github.com/platform9/vjailbreak/actions/workflows/packer.yml)
-[![Go Lint](https://github.com/platform9/vjailbreak/actions/workflows/golangci-lint.yaml/badge.svg?branch=main)](https://github.com/platform9/vjailbreak/actions/workflows/golangci-lint.yaml)
+[![Deploy Docs](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml/badge.svg?branch=gh-pages)](https://github.com/platform9/vjailbreak/actions/workflows/deploy_gh_page.yaml)
 
 [![Latest Release](https://badgen.net/github/release/platform9/vjailbreak/latest)](https://github.com/platform9/vjailbreak/releases/latest)
 [![All Releases](https://badgen.net/github/releases/platform9/vjailbreak)](https://github.com/platform9/vjailbreak/releases)
@@ -212,12 +211,6 @@ vJailbreak builds upon several open-source technologies:
 
 ## Contributing
 
-Contributions to vJailbreak are welcome! Please feel free to submit issues and pull requests.
+This repository holds the published deployment manifests and release notes for each vJailbreak release.
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-Please ensure your code follows the project's coding standards and includes appropriate tests.
+**Bug reports and feature requests**: open a [GitHub issue](https://github.com/platform9/vjailbreak/issues)
