@@ -1,12 +1,12 @@
 name: 'Archive Old Release Notes'
-description: 'Archives release note docs older than the 5 most recent versions into a single archive file, deleting the originals.'
+description: 'Archives release note docs older than the 5 recent versions into a single archive file, deleting the originals.'
 runs:
   using: composite
   steps:
     - name: Archive and Delete Old Release Notes
       shell: bash
       run: |
-        echo "Archiving and cleaning old release notes..."
+        echo "Archiving and Deleting old release notes..."
         mapfile -t ALL_VERSIONS < <(find docs/src/content/docs/release_docs -name "v*.md" -printf "%f\n" | sed -e 's/^v//' -e 's/\.md$//' | sort -V)
         mapfile -t TOP_5_ARRAY < <(printf '%s\n' "${ALL_VERSIONS[@]}" | tail -n 5)
 
