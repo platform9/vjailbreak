@@ -29,7 +29,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gh jq
 
-      - name: Resolve release tag
+      - name: Resolve release tag from release event
         id: set_tag
         run: echo "tag=${{ github.event.release.tag_name || inputs.release_tag }}" >> $GITHUB_OUTPUT
 
