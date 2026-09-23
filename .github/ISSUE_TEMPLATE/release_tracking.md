@@ -1,5 +1,5 @@
 ---
-name: 🚋 Release cycle tracking
+name: Release cycle tracking
 about: " Create an issue to track tasks for a release cycle."
 title: Tasks for v<release-tag> release cycle
 labels: ''
