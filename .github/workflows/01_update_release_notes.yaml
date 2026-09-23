@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Manually run for a specific release tag'
+        description: 'Manually run for a specific release'
         required: true
         type: string
 
