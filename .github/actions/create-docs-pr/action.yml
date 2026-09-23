@@ -2,7 +2,7 @@ name: 'Create Docs PR'
 description: 'Commits staged changes under docs/ to a new branch and opens a PR against gh-pages, if there are any staged changes.'
 inputs:
   branch-prefix:
-    description: 'Prefix for the new branch name (a unix timestamp is appended)'
+    description: 'Prefix for the new branch name'
     required: true
   commit-message:
     description: 'Commit message to use'
