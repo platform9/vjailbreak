@@ -261,9 +261,9 @@ See [Proxy VM disk attach fails when several migrations start together](../../gu
 
 ### Proxy VM Must Use a PVSCSI Controller
 
-vJailbreak matches each attached snapshot disk to a block device inside the Proxy VM by disk UUID, which works only on the **VMware Paravirtual (PVSCSI)** controller. The Proxy VM's **SCSI controller 0** must be PVSCSI — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel are not supported. Migrations using any other type fail with `could not identify block device for disk <uuid>`.
+vJailbreak matches each attached snapshot disk to a block device inside the Proxy VM by disk UUID, which works only on the **VMware Paravirtual (PVSCSI)** controller — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel controllers are not supported. The Proxy VM must have (or have room for) at least one PVSCSI controller; vJailbreak automatically adds PVSCSI controllers during onboarding, best-effort, up to vSphere's 4-controller-per-VM cap, tolerating legacy controllers alongside them. Onboarding only fails when there are zero PVSCSI controllers and no free slot to add one (all 4 SCSI controllers are legacy).
 
-**Workaround**: Power off the Proxy VM and set **Edit Settings** → **SCSI controller 0** → **Change Type** → **VMware Paravirtual** before registering it in vJailbreak.
+**Workaround**: If onboarding fails for this reason, power off the Proxy VM and change a legacy SCSI controller to **VMware Paravirtual** in **Edit Settings** before retrying registration in vJailbreak.
 
 See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [could not identify block device](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-could-not-identify-block-device).
 
