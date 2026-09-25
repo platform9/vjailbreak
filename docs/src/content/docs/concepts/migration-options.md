@@ -15,6 +15,14 @@ Determines how the data copy is done
 
 * **Power off VMs, then copy** - This option powers off the VMs and then copies the data to the OpenStack/PCD volumes. There is no CBT involved in this case, it will be the faster option, but will impact the uptime of the application. Power off VMs are supported but may need user input to provide the IP address, Operating System type during migration.
 
+* **Do not turn off the source VM (mock)** - This option copies the data exactly as "Copy live VMs, then power off" does, using CBT, but never powers off the source VM. The source VM keeps running in VMware while the migrated VM is created in OpenStack/PCD, so both copies run at the same time.
+
+:::caution[Mock migrations can cause IP and MAC address conflicts]
+Because the source VM is never powered off, it keeps its IP and MAC addresses while the migrated VM
+is created with the same addresses. Running both on the same subnet can disrupt the source workload.
+You must acknowledge this risk in the migration form before starting a mock migration.
+:::
+
 ### Storage copy method
 Determines the underlying mechanism used to transfer disk data.
 
@@ -53,6 +61,12 @@ See [Storage-Accelerated Copy](../storage-accelerated-copy/) for detailed config
 
 ### Data copy start time
 As the name implies, determines when the copy operation should start, typically used to start the migration during off-peak hours.
+
+## Migration mode
+Determines whether a VM is created in OpenStack/PCD after the data copy completes. This option can be combined with any data copy method.
+
+### Data only (no VM creation)
+When enabled, vJailbreak copies and converts the disks into OpenStack/PCD volumes but does not create the destination VM. No network ports are reserved, and the cutover options below do not apply. The migration completes once the disks are copied and converted, leaving the volumes available in OpenStack/PCD to attach to a VM later. Use this option to pre-stage workloads.
 
 ## Cutover options
 There are 3 options available
