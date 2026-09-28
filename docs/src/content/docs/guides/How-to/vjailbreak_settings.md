@@ -58,6 +58,7 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
 | `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
 | `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
+| `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vjailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |
 
@@ -279,6 +280,7 @@ All other settings are read dynamically at runtime and do not require a restart:
 - `VM_ACTIVE_WAIT_RETRY_LIMIT`
 - `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS`
 - `VOLUME_AVAILABLE_WAIT_RETRY_LIMIT`
+- `LOG_RETENTION_HOURS` (read directly by the `sync-daemon` DaemonSet, not the controller, on its next 5-minute cleanup cycle)
 
 ### When Changes Take Effect
 
