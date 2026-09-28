@@ -39,12 +39,6 @@ Determines the underlying mechanism used to transfer disk data.
   - SSH access from vJailbreak to the Proxy VM
   - Supports both cold (VM powered off, snapshot disks attached to the Proxy VM) and hot (VM stays running, changed blocks streamed via CBT over the hot-add NBD path) data copy
 
-:::note[vJailbreak Accelerated Copy: hot and cold both supported]
-vJailbreak Accelerated Copy supports both **"Copy live VMs, then power off"** (hot, via CBT over
-the hot-add NBD path) and **"Power off VMs, then copy"** (cold, via snapshot disk attach) as the
-data copy method.
-:::
-
 :::tip[Running without VDDK?]
 If VMware's public VDDK download pages are unavailable, use **vJailbreak Accelerated Copy** or
 **Storage-Accelerated Copy**; neither method requires VDDK. **Normal (Standard) copy** is the

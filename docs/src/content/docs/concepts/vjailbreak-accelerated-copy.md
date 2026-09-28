@@ -35,9 +35,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 4. Exposing each disk as an NBD resource on the Proxy VM via `qemu-nbd`
 5. Running `nbdcopy` on the vJailbreak VM to pull data from the Proxy VM directly to the destination Cinder volume
 
-This describes the **cold** data copy method. With **hot** (live) migration, the source VM is left
-running: vJailbreak enables CBT on it and replicates disks the same way a normal hot migration
-does, except changed blocks are read over the hot-add NBD path via the Proxy VM instead of VDDK.
+This describes the **cold** data copy path — see the note above for how **hot** migration differs.
 
 ### Benefits
 
@@ -375,7 +373,7 @@ sequenceDiagram
 
 ## Limitations
 
-- **Cold and hot copy supported**: Cold migration powers off the source VM before disk attachment; hot migration keeps it running and replicates changed blocks via CBT over the hot-add NBD path
+- **Cold and hot copy supported** — see the note near the top of this page for how each works
 - **Same vCenter**: Proxy VM and source VM must be managed by the same vCenter instance
 - **VMware Tools required**: The Proxy VM must have VMware Tools running so vJailbreak can retrieve its guest IP
 - **PVSCSI controller required**: Disk identification only works through a **VMware Paravirtual (PVSCSI)** controller. vJailbreak auto-adds one during onboarding, best-effort, when a free controller slot exists; onboarding fails only if no PVSCSI controller is present and none can be added (all 4 SCSI controller slots are legacy). See [Configure the SCSI Controller Type](#configure-the-scsi-controller-type-on-the-proxy-vm).
