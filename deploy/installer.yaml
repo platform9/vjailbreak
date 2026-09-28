@@ -71,6 +71,19 @@ spec:
                 description: AutoDiscovered indicates if this ArrayCreds was auto-discovered
                   from OpenStack
                 type: boolean
+              mappingMode:
+                description: |-
+                  MappingMode selects how target LUNs are exposed to the ESXi host during
+                  Storage-Accelerated-Copy. "auto" (default) uses vendor-native mapping when
+                  the provider implements it, falling back to Cinder os-initialize_connection
+                  otherwise. "native" hard-requires vendor-native (validation fails for
+                  providers that don't implement it). "cinder" forces the Cinder fallback
+                  even on Pure/NetApp (useful for testing the fallback path).
+                enum:
+                - auto
+                - native
+                - cinder
+                type: string
               netAppConfig:
                 description: |-
                   NetAppConfig holds NetApp-specific configuration. Required when
@@ -156,6 +169,21 @@ spec:
                     type: string
                 type: object
                 x-kubernetes-map-type: atomic
+              vantaraConfig:
+                description: |-
+                  VantaraConfig holds Hitachi Vantara (VSP) specific configuration.
+                  Optional; used when VendorType is "vantara".
+                properties:
+                  poolId:
+                    description: |-
+                      PoolID is the decimal DP pool ID where target LDEVs are created.
+                      Optional when the array has exactly one DP pool (auto-selected).
+                    type: string
+                  restPort:
+                    description: RESTPort overrides the Configuration Manager REST
+                      API port (default 443).
+                    type: string
+                type: object
               vendorType:
                 description: VendorType is the storage array vendor type (e.g., pure,
                   ontap, hpalletra)
@@ -1400,6 +1428,31 @@ spec:
                     properties:
                       UserAssignedIP:
                         type: string
+                      addressPairs:
+                        description: AddressPairs lists all IPs for this NIC (primary
+                          and virtual/secondary); only isPrimary=false entries become
+                          Neutron allowed-address-pairs.
+                        items:
+                          description: |-
+                            AddressPairs is one IP for a NIC, tagged as primary or virtual/secondary.
+                            isPrimary is decorative (UI display only) and is never used to pick the
+                            port's actual primary IP; only entries with isPrimary=false are attached
+                            to the created port as Neutron allowed-address-pairs.
+                          properties:
+                            ip:
+                              description: IP is the IP address for this entry.
+                              type: string
+                            isPrimary:
+                              description: IsPrimary marks this entry as the NIC's
+                                primary IP rather than a virtual/secondary one.
+                              type: boolean
+                            mac:
+                              type: string
+                          required:
+                          - ip
+                          - isPrimary
+                          type: object
+                        type: array
                       interfaceIndex:
                         description: InterfaceIndex is the zero-based index of the
                           NIC
@@ -3300,6 +3353,14 @@ spec:
                 items:
                   type: string
                 type: array
+              openstackName:
+                description: |-
+                  OpenstackName is the name of the VM as it exists in OpenStack/PCD.
+                  For the master node, this is fetched from the OpenStack server object.
+                  For worker (agent) nodes, this is the name the VM was created with,
+                  derived from the master node's OpenstackName so agents are identifiable
+                  as belonging to their primary vjailbreak VM.
+                type: string
               openstackUUID:
                 description: OpenstackUUID is the UUID of the VM in OpenStack
                 type: string
@@ -5169,6 +5230,22 @@ spec:
     app: vpwned-sdk
   type: ClusterIP
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-webhook-service
+  namespace: migration-system
+spec:
+  ports:
+  - port: 443
+    protocol: TCP
+    targetPort: 9443
+  selector:
+    control-plane: controller-manager
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -5212,7 +5289,10 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.4.10
+        - secretRef:
+            name: pf9-proxy-creds
+            optional: true
+        image: quay.io/platform9/vjailbreak-controller:v0.4.10-dev-rc-build
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -5228,6 +5308,10 @@ spec:
           initialDelaySeconds: 15
           periodSeconds: 20
         name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
         readinessProbe:
           httpGet:
             path: /readyz
@@ -5239,6 +5323,9 @@ spec:
             cpu: 200m
             memory: 256Mi
         volumeMounts:
+        - mountPath: /tmp/k8s-webhook-server/serving-certs
+          name: cert
+          readOnly: true
         - mountPath: /etc/pf9/k3s
           name: master-token
         - mountPath: /home/ubuntu
@@ -5261,6 +5348,10 @@ spec:
       serviceAccountName: migration-controller-manager
       terminationGracePeriodSeconds: 30
       volumes:
+      - name: cert
+        secret:
+          defaultMode: 420
+          secretName: webhook-server-cert
       - hostPath:
           path: /var/lib/rancher/k3s/server
           type: Directory
@@ -5299,8 +5390,6 @@ spec:
     type: RollingUpdate
   template:
     metadata:
-      annotations:
-        container.apparmor.security.beta.kubernetes.io/vpwned: unconfined
       labels:
         app: vpwned-sdk
     spec:
@@ -5319,7 +5408,10 @@ spec:
         - configMapRef:
             name: pf9-env
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.4.10
+        - secretRef:
+            name: pf9-proxy-creds
+            optional: true
+        image: quay.io/platform9/vjailbreak-vpwned:v0.4.10-dev-rc-build
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -5328,6 +5420,8 @@ spec:
         resources: {}
         securityContext:
           allowPrivilegeEscalation: false
+          appArmorProfile:
+            type: Unconfined
           capabilities:
             add:
             - DAC_OVERRIDE
@@ -5394,6 +5488,38 @@ spec:
           type: DirectoryOrCreate
         name: pf9-logs
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  labels:
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: serving-cert
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: certificate
+    app.kubernetes.io/part-of: migration
+  name: migration-serving-cert
+  namespace: migration-system
+spec:
+  dnsNames:
+  - migration-webhook-service.migration-system.svc
+  - migration-webhook-service.migration-system.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: migration-selfsigned-issuer
+  secretName: webhook-server-cert
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  labels:
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: migration
+  name: migration-selfsigned-issuer
+  namespace: migration-system
+spec:
+  selfSigned: {}
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -5421,6 +5547,62 @@ spec:
               number: 80
         path: /dev-api/sdk/(.*)
         pathType: ImplementationSpecific
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  annotations:
+    cert-manager.io/inject-ca-from: migration-system/migration-serving-cert
+  labels:
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/created-by: migration
+    app.kubernetes.io/instance: validating-webhook-configuration
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/name: validatingwebhookconfiguration
+    app.kubernetes.io/part-of: migration
+  name: migration-validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-openstackcreds
+  failurePolicy: Fail
+  name: vopenstackcreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - openstackcreds
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: migration-webhook-service
+      namespace: migration-system
+      path: /validate-vjailbreak-k8s-pf9-io-v1alpha1-vmwarecreds
+  failurePolicy: Fail
+  name: vvmwarecreds.kb.io
+  rules:
+  - apiGroups:
+    - vjailbreak.k8s.pf9.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - vmwarecreds
+  sideEffects: None
 
 ---
 apiVersion: apps/v1
@@ -5448,7 +5630,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.4.10
+          image: quay.io/platform9/vjailbreak-ui:v0.4.10-dev-rc-build
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -5737,7 +5919,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:v0.4.10
+          image: quay.io/platform9/vjailbreak-ai:v0.4.10-dev-rc-build
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

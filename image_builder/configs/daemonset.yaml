@@ -14,6 +14,7 @@ spec:
       labels:
         app: sync-daemon
     spec:
+      serviceAccountName: sync-daemon
       hostNetwork: true
       initContainers:
         - name: fix-perms
@@ -62,12 +63,51 @@ spec:
 
               # Migration considered idle if quiet for this long; only then is it eligible for cleanup.
               ACTIVITY_WINDOW_MIN=60
-              # Delete threshold: older than 24h.
-              RETENTION_MTIME=+1
+              # Reads LOG_RETENTION_HOURS from the vjailbreak-settings ConfigMap; falls back to 24 and logs why on any failure.
+              fetch_retention_hours() {
+                local token_file=/var/run/secrets/kubernetes.io/serviceaccount/token
+                local ca_file=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                local url="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}/api/v1/namespaces/migration-system/configmaps/vjailbreak-settings"
+                local raw
+                if command -v curl >/dev/null 2>&1; then
+                  raw=$(curl -s --max-time 10 --connect-timeout 5 --cacert "$ca_file" -H "Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
+                elif command -v wget >/dev/null 2>&1; then
+                  # busybox wget has no --cacert equivalent, so --no-check-certificate is the only way to reach the API here.
+                  raw=$(wget -qO- -T 10 --no-check-certificate --header="Authorization: Bearer $(cat "$token_file")" "$url" 2>&1)
+                else
+                  echo "[retention] neither curl nor wget found in this image, using default 24h" >&2
+                  echo 24
+                  return
+                fi
+
+                if [ -z "$raw" ]; then
+                  echo "[retention] empty response from $url, using default 24h" >&2
+                  echo 24
+                  return
+                fi
+
+                local hours
+                hours=$(echo "$raw" | sed -n 's/.*"LOG_RETENTION_HOURS"[[:space:]]*:[[:space:]]*"\([0-9]*\)".*/\1/p')
+
+                if [ -z "$hours" ]; then
+                  echo "[retention] LOG_RETENTION_HOURS not found in response, using default 24h. Response: $(echo "$raw" | head -c 200)" >&2
+                  echo 24
+                  return
+                fi
+
+                if [ "$hours" -lt 24 ]; then
+                  echo "[retention] LOG_RETENTION_HOURS=$hours is below the 24h minimum, clamping to 24h" >&2
+                  echo 24
+                  return
+                fi
+
+                echo "$hours"
+              }
 
               # Deletes migration-<vm>-<id>.log + migration-<vm>-<id>/ as one unit,
               # skipping the pair if either was written to within ACTIVITY_WINDOW_MIN.
               cleanup_dir() {
+                local retention_min=$(( $(fetch_retention_hours) * 60 ))
                 local base_dir="$1"
                 [ -d "$base_dir" ] || return 0
 
@@ -86,15 +126,15 @@ spec:
                     continue
                   fi
 
-                  [ -f "$log_file" ] && find "$log_file" -mtime "$RETENTION_MTIME" -delete 2>/dev/null
+                  [ -f "$log_file" ] && find "$log_file" -mmin "+$retention_min" -delete 2>/dev/null
                   if [ -d "$dir" ]; then
-                    find "$dir" -type f -mtime "$RETENTION_MTIME" -delete 2>/dev/null
+                    find "$dir" -type f -mmin "+$retention_min" -delete 2>/dev/null
                     rmdir "$dir" 2>/dev/null || true
                   fi
                 done
 
                 # Stray non-migration files: clean by age alone.
-                find "$base_dir" -maxdepth 1 -type f ! -name 'migration-*.log' -mtime "$RETENTION_MTIME" -delete 2>/dev/null || true
+                find "$base_dir" -maxdepth 1 -type f ! -name 'migration-*.log' -mmin "+$retention_min" -delete 2>/dev/null || true
               }
 
               if [ "$IS_MASTER" = "true" ]; then
@@ -102,7 +142,7 @@ spec:
 
                 master_cleanup_loop() {
                   while true; do
-                    echo "Cleaning up logs older than 24 hours on master node ($(date))"
+                    echo "Cleaning up old logs on master node ($(date))"
                     cleanup_dir /var/log/pf9
                     sleep 300
                   done
@@ -122,7 +162,7 @@ spec:
 
                 agent_cleanup_loop() {
                   while true; do
-                    echo "Cleaning up logs older than 24 hours on worker node ($(date))"
+                    echo "Cleaning up old logs on worker node ($(date))"
                     cleanup_dir /var/log/pf9
                     sync
                     echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
@@ -164,3 +204,35 @@ spec:
           hostPath:
             type: DirectoryOrCreate
             path: /home/ubuntu/virtio-win
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sync-daemon
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vjailbreak-settings-reader
+  namespace: migration-system
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["vjailbreak-settings"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sync-daemon-read-vjailbreak-settings
+  namespace: migration-system
+subjects:
+  - kind: ServiceAccount
+    name: sync-daemon
+    namespace: kube-system
+roleRef:
+  kind: Role
+  name: vjailbreak-settings-reader
+  apiGroup: rbac.authorization.k8s.io
