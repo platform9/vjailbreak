@@ -46,6 +46,14 @@ If a migration is named `vm-migrate-001`, its logs will be available at:
 
 on the vjailbreak node.
 
+## Log Retention
+
+As of v0.5.0, these logs are cleaned up automatically:
+
+- The `sync-daemon` DaemonSet checks every 5 minutes and deletes files older than the retention period. A migration's logs are never deleted while it's still active (last modified within 60 minutes).
+- Default retention is **24 hours**, also the minimum allowed value.
+- Configure the retention period with the `LOG_RETENTION_HOURS` setting (Global Settings UI, or the `vjailbreak-settings` ConfigMap) — see [Use vJailbreak Settings](../../how-to/vjailbreak_settings/#available-settings).
+
 ## Downloading a Debug Bundle from the UI
 
 Instead of SSHing into the vjailbreak node to collect logs manually, you can download a full debug bundle directly from the migration's **Pod logs** tab.
