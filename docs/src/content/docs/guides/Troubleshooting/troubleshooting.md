@@ -275,12 +275,12 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   vJailbreak locates each attached disk inside the Proxy VM by matching its disk UUID to a block device. Two conditions must be met for this to work:
 
   1. `disk.EnableUUID` is set to `TRUE` on the Proxy VM, so the UUID is visible to the guest.
-  2. The Proxy VM's first SCSI controller (**SCSI controller 0**) is of type **VMware Paravirtual (PVSCSI)**. Only PVSCSI is supported — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel controllers do not work.
+  2. The Proxy VM has a **VMware Paravirtual (PVSCSI)** controller with a free slot. Only PVSCSI is supported — LSI Logic SAS, LSI Logic Parallel, and BusLogic Parallel controllers do not work. vJailbreak auto-adds a PVSCSI controller during onboarding, best-effort, but a disk can still land on a legacy controller if none had room.
 
 - **Resolution**
 
   1. Confirm `disk.EnableUUID = TRUE` on the Proxy VM: vSphere Client → **Edit Settings** → **VM Options** → **Advanced** → **Edit Configuration**.
-  2. Confirm **SCSI controller 0** is **VMware Paravirtual**. If it is not, power off the Proxy VM, then in **Edit Settings** → **Virtual Hardware** set **SCSI controller 0** → **Change Type** → **VMware Paravirtual**, and power it back on.
+  2. Confirm the Proxy VM has a **VMware Paravirtual (PVSCSI)** controller with a free slot. If not, power off the Proxy VM, then in **Edit Settings** → **Virtual Hardware** change a legacy SCSI controller (**LSI Logic SAS**, **LSI Logic Parallel**, or **BusLogic Parallel**) to **VMware Paravirtual**, and power it back on.
   3. Re-verify the Proxy VM in the vJailbreak UI and re-run the migration.
 
 - **Notes**
