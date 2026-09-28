@@ -8,11 +8,9 @@ vJailbreak Accelerated Copy is an advanced data copy method that attaches source
 > **Underlying feature:** vJailbreak Accelerated Copy is powered by VMware's **hot-add** disk transport mechanism to attach source disks to the Proxy VM.
 
 :::note[Hot and cold migration both supported]
-vJailbreak Accelerated Copy supports both **"Power off VMs, then copy"** (cold) and **"Copy live
-VMs, then power off"** (hot) as the Data Copy Method. Cold migration snapshots the source VM after
-powering it off, as described below. Hot migration keeps the source VM running and streams changed
-blocks via Change Block Tracking (CBT) over the hot-add NBD path — the same live-replication flow
-used by normal (non-accelerated) hot migrations.
+vJailbreak Accelerated Copy supports both Data Copy Method options — see
+[Migration Options](../migration-options/#data-copy-method) for what cold and hot mean. Hot
+migration reads changed blocks over the hot-add NBD path via the Proxy VM instead of VDDK.
 :::
 
 :::note[VDDK not required]
@@ -35,7 +33,7 @@ vJailbreak Accelerated Copy bypasses this limitation by:
 4. Exposing each disk as an NBD resource on the Proxy VM via `qemu-nbd`
 5. Running `nbdcopy` on the vJailbreak VM to pull data from the Proxy VM directly to the destination Cinder volume
 
-This describes the **cold** data copy path — see the note above for how **hot** migration differs.
+This describes the **cold** data copy path; see the note above for hot migration.
 
 ### Benefits
 
