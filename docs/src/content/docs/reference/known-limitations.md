@@ -247,6 +247,31 @@ CBT is not enabled on disk <id>
 To check a VM's hardware version in vCenter, select the VM and look at **VM Hardware → Compatibility** (shown as "ESXi X.X and later (VM version N)").
 :::
 
+## Independent Disks: Normal Copy Always Fails, Hot Migration Always Fails
+
+VMware **Independent** disks (Independent - Persistent or Independent - Nonpersistent) are excluded from a VM's snapshot lifecycle. Two separate vJailbreak mechanisms can't handle them, for two different reasons:
+
+- **Normal (Standard) storage copy** uses VMware VDDK, which has a known bug (VDDK ≥ 7) that cannot open independent-mode disks at all — regardless of Hot or Cold migration. See the [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html).
+- **Hot migration** (**Copy live VMs, then power off**), on any storage copy method, needs a CBT change ID for every disk. Independent disks never get one — with or without CBT enabled on the VM.
+
+**Symptoms**:
+
+```
+nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. Error occurred when obtaining the file name for scsi0:0.
+```
+
+```
+CBT is not enabled on disk <id>
+```
+
+**What to do**: Use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
+
+| Storage copy method | Hot migration | Cold migration |
+|---|---|---|
+| Normal (Standard) | Not supported | Not supported (VDDK bug) |
+| vJailbreak Accelerated Copy | Not supported (needs CBT) | Supported |
+| Storage-Accelerated Copy | N/A — always runs cold internally | Supported |
+
 ## vJailbreak Accelerated Copy
 
 The limitations below are specific to [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/). See its [full limitations list](../../concepts/vjailbreak-accelerated-copy/#limitations) for the remaining constraints.
