@@ -98,11 +98,13 @@ The **Assign IP** and **Persist Network** (Persist source network interfaces) op
 - Use **Assign IP** when you need to set a specific IP address on the destination VM.
 - Use **Persist Network** when you need to preserve the source VM's interface names and static routes.
 
-## Multi-IP Assignment Not Supported
+## Multi-IP Assignment: One Primary IP, Plus Virtual IPs
 
-Only one IP address per network interface is supported in the **Assign IPs** field. The UI enforces this — the field accepts a single IP per interface. If multiple IPs are specified via CLI, the migration will fail.
+Only one **primary** (fixed) IP address per network interface is supported when Preserve IP is off — the **Assign IPs** field enforces this.
 
-**Workaround**: Assign additional IPs manually inside the VM after migration, or use OpenStack port configuration to attach additional floating IPs post-migration.
+Additional addresses on the same NIC can be marked **Virtual IP** in the Assign IPs dialog. vJailbreak attaches these as Neutron allowed-address-pairs on the port instead of fixed IPs, so no post-migration manual step is needed.
+
+**Limitations**: Virtual IPs require at least one security group on the migration (Neutron needs port security enabled for allowed-address-pairs to take effect), are ignored on L2-only networks, and are not reconciled onto pre-created OpenStack ports — those keep whatever address pairs the port already has.
 
 ## VMware Tools Removal: Residual Artifacts
 
