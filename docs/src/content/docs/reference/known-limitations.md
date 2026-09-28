@@ -100,9 +100,9 @@ The **Assign IP** and **Persist Network** (Persist source network interfaces) op
 
 ## Multi-IP Assignment: One Primary IP, Plus Virtual IPs
 
-Only one **primary** (fixed) IP address per network interface is supported when Preserve IP is off — the **Assign IPs** field enforces this.
+Only one **primary**  IP address per network interface is enforced when Preserve IP is off — the **Assign IPs** field enforces this.
 
-Additional addresses on the same NIC can be marked **Virtual IP** in the Assign IPs dialog. vJailbreak attaches these as Neutron allowed-address-pairs on the port instead of fixed IPs, so no post-migration manual step is needed.
+Additional addresses on the same NIC can be marked **Virtual IP**, regardless of whether Preserve IP is on or off. vJailbreak attaches these as Neutron allowed-address-pairs on the port instead of fixed IPs, so no post-migration manual step is needed.
 
 **Limitations**: Virtual IPs require at least one security group on the migration (Neutron needs port security enabled for allowed-address-pairs to take effect), are ignored on L2-only networks, and are not reconciled onto pre-created OpenStack ports — those keep whatever address pairs the port already has.
 
