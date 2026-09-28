@@ -4,6 +4,11 @@ description: "Enabling environment variable injection for the VJB pods using a K
 ---
 
 Injecting environment variables into the VJB pods is a feature that allows users to inject environment variables into the VJB pods using a Kubernetes ConfigMap. 
+
+:::note[Preferred: Global Settings UI]
+As of v0.5.0, HTTP(S) proxy settings, including authentication, can be configured from the Global Settings page in the UI instead of the manual steps below. The UI writes to the same `pf9-env` ConfigMap; proxy credentials are stored separately in a `pf9-proxy-creds` Secret that is auto-injected into the controller, vpwned, and v2v-helper pods, restarting them automatically. Use the manual steps below only if you need to edit `pf9-env` directly.
+:::
+
 ## Injecting Environment Variables During vJailbreak VM Provisioning
 1. **Cloud-init populates environment variables**
 
