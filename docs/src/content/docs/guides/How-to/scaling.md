@@ -13,7 +13,7 @@ It is entirely possible to fully saturate a 10Gb network with many parallel migr
 
 ## Identifying Agent VMs in OpenStack/PCD
 
- An agent's OpenStack/PCD instance name is derived from the primary vJailbreak VM's name — `<primary-vm-name>-vjailbreak-agent-<hash>` instead of a bare `vjailbreak-agent-<hash>` — so an agent VM can be traced back to its primary vJailbreak VM directly from the OpenStack/PCD console. This name is set automatically and is not user-editable.
+ As of v0.5.0, an agent's OpenStack/PCD instance name is derived from the primary vJailbreak VM's name — `<primary-vm-name>-vjailbreak-agent-<hash>` instead of a bare `vjailbreak-agent-<hash>` — so an agent VM can be traced back to its primary vJailbreak VM directly from the OpenStack/PCD console. This name is set automatically and is not user-editable.
 
 ## Agent Node Sizing and Migration Capacity
 
