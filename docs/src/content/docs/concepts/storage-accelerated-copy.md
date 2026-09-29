@@ -34,7 +34,7 @@ Storage-Accelerated Copy bypasses this limitation by:
 
 ### Requirements
 
-- **Supported storage arrays**: Pure Storage FlashArray or NetApp ONTAP
+- **Supported storage arrays**: Pure Storage FlashArray, NetApp ONTAP, or Hitachi Vantara VSP
 - **Shared storage**: Both VMware datastores and PCD must be backed by the same storage array.
 - **ESXi SSH access**: SSH access to ESXi hosts with root privileges
 - **Storage connectivity**: ESXi hosts must be connected to the storage array via iSCSI (initiators configured) or Fibre Channel
@@ -45,6 +45,7 @@ Storage-Accelerated Copy bypasses this limitation by:
 |--------|---------|
 | Pure Storage | FlashArray | 
 | NetApp   | ONTAP    | 
+| Hitachi  | Vantara VSP family |
 
 :::note
 Additional storage vendors may be added in future releases. The storage SDK is designed to be extensible.
@@ -215,11 +216,11 @@ If SSH connection fails:
 
 ### Understanding Auto-Discovery
 
-When you add PCD credentials to vJailbreak, the system automatically discovers all storage volume backends configured in your PCD environment. For each detected storage backend (NetApp, Pure Storage, etc.), vJailbreak creates a placeholder ArrayCreds entry with status "Auto-discovered" and credentials marked as "Pending".
+When you add PCD credentials to vJailbreak, the system automatically discovers all storage volume backends configured in your PCD environment. For each detected storage backend (NetApp, Pure Storage, Hitachi Vantara, etc.), vJailbreak creates a placeholder ArrayCreds entry with status "Auto-discovered" and credentials marked as "Pending".
 
 #### How Auto-Discovery Works
 
-1. **PCD Configuration**: In PCD, you configure multiple storage volume backends under "Persistent Storage Connectivity" (Cluster Blueprint → Storage). Each volume backend represents a storage array with its driver type (NetApp Data ONTAP, Pure Storage iSCSI, NFS, etc.).
+1. **PCD Configuration**: In PCD, you configure multiple storage volume backends under "Persistent Storage Connectivity" (Cluster Blueprint → Storage). Each volume backend represents a storage array with its driver type (NetApp Data ONTAP, Pure Storage iSCSI, Hitachi, NFS, etc.).
 
 2. **Backend Detection**: When PCD credentials are added to vJailbreak, the system queries the Cinder API to discover all configured volume backends and their properties:
    - Volume Type (e.g., `netapp`, `vt-pure-iscsi`)
@@ -243,7 +244,7 @@ The Storage Management page displays all auto-discovered storage backends:
 | Column | Description |
 |--------|-------------|
 | **Name** | Auto-generated name based on volume type and backend |
-| **Vendor** | Storage array vendor (NetApp Storage, Pure Storage, N/A) |
+| **Vendor** | Storage array vendor (NetApp Storage, Pure Storage, Hitachi Vantara, N/A) |
 | **Volume Type** | Cinder volume type name |
 | **Backend Name** | Cinder backend name from configuration |
 | **Source** | "Auto-discovered" for automatically detected backends |
@@ -296,8 +297,27 @@ After adding PCD credentials to vJailbreak, the system automatically creates Arr
 - `vt-pure-iscsi-pure-iscsi-2` (Vendor: Pure Storage, Credentials: Pending)
 
 :::tip
-Only storage backends with supported vendors (Pure Storage and NetApp) can be configured for array-level XCOPY operations. NFS and other backends are still auto-discovered, but cannot be used for Storage Accelerated Copy. Support for additional storage vendors will be added in future releases.
+Only storage backends with supported vendors (Pure Storage, NetApp, and Hitachi Vantara) can be configured for array-level XCOPY operations. NFS and other backends are still auto-discovered, but cannot be used for Storage Accelerated Copy. Support for additional storage vendors will be added in future releases.
 :::
+
+## Hitachi Vantara
+
+Hitachi Vantara VSP arrays are supported for Storage-Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
+
+### Hitachi-specific fields
+
+When you edit a Hitachi Vantara entry, an extra **Hitachi Vantara Target** section is shown. Both fields are optional:
+
+| Field | Description |
+|-------|-------------|
+| **Pool ID** | Decimal DP pool ID where target volumes are created. Leave empty to auto-select when the array has exactly one DP pool. |
+| **REST Port** | Configuration Manager REST API port. Defaults to `443`. |
+
+### Hitachi prerequisites
+
+- The Hitachi backend is configured in PCD Cinder and its volume service is running
+- The ESXi hosts have SAN connectivity (iSCSI or Fibre Channel) to the array
+- vJailbreak can reach the array's management endpoint
 
 ## Using the UI
 
@@ -312,7 +332,7 @@ If not already done:
 
 ### Step 2: Configure Storage Array Credentials
 
-1. Navigate to **Storage Management** (Beta feature)
+1. Navigate to **Storage Management**
 2. You'll see auto-discovered entries for each PCD storage backend:
    - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
    - **Vendor**: Auto-identified from driver type
@@ -330,6 +350,8 @@ If not already done:
    - **Username**: Array administrator username
    - **Password**: Array administrator password
    - **Skip SSL Verification**: Enable for testing environments (disable in production)
+   - **NetApp only**: SVM and FlexVol where LUNs will be created
+   - **Hitachi Vantara only**: optional Pool ID and REST Port (see [Hitachi Vantara](#hitachi-vantara))
 5. Click **Save**
 6. The system will:
    - Validate the credentials
@@ -455,6 +477,7 @@ Error: failed to connect to storage array: authentication failed
 3. Check array-specific requirements:
    - **Pure Storage**: Ensure API token or username/password has sufficient permissions
    - **NetApp**: Verify ONTAP management interface is accessible
+   - **Hitachi Vantara**: Verify the array management endpoint is reachable on the configured REST port (default 443)
 
 #### ESXi Device Not Found
 

@@ -15,7 +15,7 @@ used immediately:
   datastore; **cold migration only** (source VM must be powered off before copy begins, live/hot
   migration is not supported)
 - [Storage-Accelerated Copy](../../concepts/storage-accelerated-copy/): requires a supported
-  storage array (Pure Storage or NetApp); cold migration only
+  storage array (Pure Storage, NetApp, or Hitachi Vantara); cold migration only
 
 ### Are IPs and MAC addresses persisted?
 Yes, if your OpenStack network has a valid subnet range that allows the IP to be allocated, vJailbreak will create a port with the same MAC address and IP address as the source VM.
