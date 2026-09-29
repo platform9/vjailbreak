@@ -50,7 +50,7 @@ Migration of VMs with 32-bit operating system is not supported.
 | Red Hat Enterprise Linux 10 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 8 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 9 | linux/amd64 | Yes | Yes |
-| Red Hat Enterprise Linux 7 | linux/amd64 | No | Yes |
+| Red Hat Enterprise Linux 7 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 5 | linux/amd64 | No | Yes |
 | Red Hat Enterprise Linux 4 | linux/amd64 | No | Yes |
 | Rocky 8 | linux/amd64 | Yes | Yes |
