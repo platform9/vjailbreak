@@ -18,6 +18,10 @@ to test some of them, there are still gaps specifically with the older
 versions. This list is expected to grow over time and we will continue to
 add support for additional versions. Verified implies it has been tested and converted vs expected means it has not been tested but is expected to work.
 
+:::note
+Migration of VMs with 32-bit operating system is not supported.
+:::
+
 
 | Operating System | Platform | Verified | Expected |
 | :--- | :--- | :--- | :--- |
@@ -31,7 +35,7 @@ add support for additional versions. Verified implies it has been tested and con
 | CentOS 8 | linux/amd64 | Yes | Yes |
 | CentOS 9 | linux/amd64 | Yes | Yes |
 | CentOS Stream10 | linux/amd64 | No | Yes |
-| Debian GNU/Linux 8 (64-bit) | linux/amd64 | No | Yes |
+| Debian GNU/Linux 8 (64-bit) | linux/amd64 | Yes | Yes |
 | Debian 12 | linux/amd64 | Yes | Yes |
 | FreeBSD 14 | bsd/amd64 | Yes | Yes |
 | Microsoft Windows 11 | windows/amd64 | Yes | Yes |
@@ -41,17 +45,18 @@ add support for additional versions. Verified implies it has been tested and con
 | Microsoft Windows Server 2019 | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2022 | windows/amd64 | Yes | Yes |
 | Microsoft Windows Server 2025 | windows/amd64 | Yes | Yes |
-| Oracle Linux 7 | linux/amd64 | No | Yes |
+| Oracle Linux 7 | linux/amd64 | Yes | Yes |
 | Oracle Linux 8 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 10 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 8 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 9 | linux/amd64 | Yes | Yes |
-| Red Hat Enterprise Linux 7 | linux/amd64 | No | Yes |
+| Red Hat Enterprise Linux 7 | linux/amd64 | Yes | Yes |
 | Red Hat Enterprise Linux 5 | linux/amd64 | No | Yes |
 | Red Hat Enterprise Linux 4 | linux/amd64 | No | Yes |
 | Rocky 8 | linux/amd64 | Yes | Yes |
 | Rocky 9 | linux/amd64 | Yes | Yes |
 | Rocky 10 | linux/amd64 | Yes | Yes |
+| SUSE Linux Enterprise 12 | linux/amd64 | No | No |
 | SUSE Linux Enterprise 15 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 14 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 15 | linux/amd64 | Yes | Yes |
