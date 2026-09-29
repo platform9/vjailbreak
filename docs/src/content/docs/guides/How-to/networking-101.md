@@ -109,7 +109,7 @@ If the address is already in use, the migration fails with a port conflict. That
 - **Inside the guest:** DHCP configuration on the assigned address.
 
 :::caution
-**Only one primary address per NIC is allowed, when Preserve IP is off** Extra addresses can still be attached as Virtual IPs, regardless of the Preserve IP setting — see [Multi-IP Assignment](../../../reference/known-limitations/#multi-ip-assignment-one-primary-ip-plus-virtual-ips).
+**Only one primary address per NIC is allowed, when Preserve IP is off.** Extra addresses can still be attached as Virtual IPs, regardless of the Preserve IP setting — see [Multi-IP Assignment](../../../reference/known-limitations/#multi-ip-assignment-one-primary-ip-plus-virtual-ips).
 
 A typed address carries no prefix length, so the guest assumes `/24`. Verify the netmask if your subnet is not a `/24`.
 :::
