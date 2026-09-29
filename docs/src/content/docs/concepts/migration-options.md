@@ -29,7 +29,7 @@ Determines the underlying mechanism used to transfer disk data.
 * **Normal** - Uses the traditional network-based copy via VMware's NFC protocol. Data is transferred from ESXi hosts to OpenStack Cinder volumes over the network. This method is limited to approximately 1 Gbps per VMDK due to NFC protocol constraints. **Requires VDDK.**
 
 * **Storage-Accelerated Copy** - Leverages storage array-level XCOPY operations for dramatically faster migrations. Instead of copying data over the network, this method offloads the copy to the storage array itself. **Does not require VDDK.** Requires:
-  - Supported storage array (Pure Storage or NetApp)
+  - Supported storage array (Pure Storage, NetApp, or Hitachi Vantara)
   - Both VMware datastores and OpenStack Cinder backed by the same array
   - ESXi SSH access configured
   - VMs must be powered off during copy (cold migration only)

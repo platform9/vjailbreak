@@ -47,7 +47,7 @@ Since the migration involves copying the data from VMware to OpenStack/PCD, the 
 
 ## Storage-Accelerated Copy
 
-For environments where both VMware and OpenStack share the same storage array (Pure Storage or NetApp), vJailbreak supports **Storage-Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
+For environments where both VMware and OpenStack share the same storage array (Pure Storage, NetApp, or Hitachi Vantara), vJailbreak supports **Storage-Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
 
 Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage-Accelerated Copy performs the copy directly on the storage array at array speeds, which can be considerably faster than normal copy.
 
