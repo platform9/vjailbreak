@@ -104,7 +104,7 @@ Only one **primary** IP address per network interface is allowed when Preserve I
 
 Additional addresses on the same NIC can be marked **Virtual IP**, regardless of whether Preserve IP is on or off. vJailbreak attaches these to the port as Neutron allowed-address-pairs instead of fixed IPs, so no post-migration manual step is needed.
 
-**Limitations**: Virtual IPs require at least one security group on the migration (Neutron needs port security enabled for allowed-address-pairs to take effect), are ignored on L2-only networks, and are not reconciled onto pre-created OpenStack ports — those keep whatever address pairs the port already has.
+**Limitations**: For Virtual IPs to take effect on destination network, the port security shall be enabled on the Network along with port having atleast 1 security group. This also implies that virtual Ips are ignored on L2-only networks.
 
 ## VMware Tools Removal: Residual Artifacts
 
