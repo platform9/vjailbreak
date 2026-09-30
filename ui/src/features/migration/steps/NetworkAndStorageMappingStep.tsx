@@ -20,6 +20,7 @@ import { Step } from 'src/shared/components/forms'
 import { FieldLabel } from 'src/components'
 import { useArrayCredentialsQuery } from 'src/hooks/api/useArrayCredentialsQuery'
 import { useProxyVMsQuery } from 'src/hooks/api/useProxyVMsQuery'
+import { useVddkStatusQuery } from 'src/hooks/api/useVddkStatusQuery'
 import type { NetworkAndStorageMappingStepProps } from '../types'
 import { STORAGE_COPY_METHOD_OPTIONS } from '../constants'
 
@@ -55,6 +56,10 @@ export default function NetworkAndStorageMappingStep({
   templateMappingPool
 }: NetworkAndStorageMappingStepProps) {
   const storageCopyMethod = params.storageCopyMethod || 'normal'
+
+  // Check if VDDK is uploaded (needed for Standard Copy)
+  const { data: vddkStatus } = useVddkStatusQuery()
+  const vddkAvailable = vddkStatus?.uploaded === true
 
   // Fetch validated array credentials for StorageAcceleratedCopy
   const { data: arrayCredentials, isLoading: arrayCredsLoading } = useArrayCredentialsQuery(
@@ -278,6 +283,15 @@ export default function NetworkAndStorageMappingStep({
 
               {storageCopyMethod === 'normal' ? (
                 <>
+                  {!vddkAvailable && (
+                    <Alert severity="warning" sx={{ mb: 2 }}>
+                      VDDK is required for Standard Copy but has not been uploaded yet. Please upload it in{' '}
+                      <Link href="/dashboard/global-settings" underline="always">
+                        Global Settings → VDDK
+                      </Link>{' '}
+                      before starting the migration. Without VDDK, the migration will fail during disk copy.
+                    </Alert>
+                  )}
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     Select source and target storage to automatically create mappings. All storage
                     devices must be mapped in order to proceed.
