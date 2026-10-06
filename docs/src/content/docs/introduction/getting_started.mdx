@@ -227,10 +227,6 @@ ip route | grep default
 
 Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
 
-:::note
-If you do not set a password using cloud-init, the default password for the `ubuntu` user is `password` and you will be prompted to change it on first login. Setting a password via cloud-init disables this forced-change prompt.
-:::
-
 #### DHCP Networks (Default)
 
 For networks with DHCP, you only need to configure a password and `/etc/hosts` entries:
@@ -249,9 +245,6 @@ write_files:
       192.168.1.100 vcenter.example.com
       # OpenStack / PCD endpoints
       192.168.2.100 pcd.example.com
-      # ESXi hosts (required for VM copy phase)
-      192.168.1.101 esxi01.example.com esxi01
-      192.168.1.102 esxi02.example.com esxi02
 ```
 
 #### L2-Only Networks (Static IP)
