@@ -224,31 +224,95 @@ ip route | grep default
 ```
 
 ### Configure VM with cloud-init
-Cloud-init can be used during VM creation to automate initial configuration including setting passwords and configuring /etc/hosts entries for DNS resolution.
-- When creating the VM, use a cloud-init configuration script to:
-  - Set a password for the ubuntu user
-  - Add static DNS entries to /etc/hosts
 
-  ```yaml
-  #cloud-config
-  password: your-secure-password
-  chpasswd: { expire: False }
-  ssh_pwauth: True
-  
-  write_files:
-  - path: /etc/hosts.append
+Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
+
+:::note
+If you do not set a password using cloud-init, the default password for the `ubuntu` user is `password` and you will be prompted to change it on first login. Setting a password via cloud-init disables this forced-change prompt.
+:::
+
+#### DHCP Networks (Default)
+
+For networks with DHCP, you only need to configure a password and `/etc/hosts` entries:
+
+```yaml
+#cloud-config
+password: "your-secure-password"
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+write_files:
+  - path: /etc/hosts
     append: true
     content: |
-      # VMware and OpenStack endpoints
+      # VMware endpoints
       192.168.1.100 vcenter.example.com
-      192.168.2.100 openstack.example.com
-  
-  runcmd:
-    - cat /etc/hosts.append >> /etc/hosts
-  ```
-- You can provide this cloud-init configuration when creating the VM through the OpenStack dashboard or CLI.
+      # OpenStack / PCD endpoints
+      192.168.2.100 pcd.example.com
+      # ESXi hosts (required for VM copy phase)
+      192.168.1.101 esxi01.example.com esxi01
+      192.168.1.102 esxi02.example.com esxi02
+```
 
-**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+#### L2-Only Networks (Static IP)
+
+For networks without DHCP, use the following cloud-init configuration to assign a static IP, configure DNS, and set `/etc/hosts` entries — all at boot time. This eliminates the need to manually configure networking via the console.
+
+Replace the placeholder values with your actual network details:
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `<STATIC_IP>` | IP address for the vJailbreak VM | `10.128.240.50` |
+| `<CIDR>` | Subnet prefix length | `24` |
+| `<GATEWAY>` | Default gateway IP | `10.128.240.1` |
+| `<DNS_SERVER>` | DNS server IP | `8.8.8.8` |
+| `<SEARCH_DOMAIN>` | DNS search domain | `example.com` |
+| `<VCENTER_IP>` | vCenter server IP | `10.128.240.10` |
+| `<VCENTER_FQDN>` | vCenter FQDN | `vcenter.example.com` |
+| `<PCD_IP>` | PCD / OpenStack endpoint IP | `10.128.240.20` |
+| `<PCD_FQDN>` | PCD / OpenStack FQDN | `pcd.example.com` |
+
+```yaml
+#cloud-config
+password: "your-secure-password"
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+bootcmd:
+  - ip addr add <STATIC_IP>/<CIDR> dev ens3
+  - ip link set ens3 up
+  - ip route add default via <GATEWAY>
+
+write_files:
+  - path: /etc/netplan/99-static.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ens3:
+            addresses:
+              - <STATIC_IP>/<CIDR>
+            routes:
+              - to: default
+                via: <GATEWAY>
+            nameservers:
+              addresses:
+                - <DNS_SERVER>
+              search:
+                - <SEARCH_DOMAIN>
+
+runcmd:
+  - netplan apply
+  - echo "<VCENTER_IP> <VCENTER_FQDN>" >> /etc/hosts
+  - echo "<PCD_IP> <PCD_FQDN>" >> /etc/hosts
+```
+
+:::tip[How this works]
+- **`bootcmd`** runs early in boot, before vJailbreak's install script checks for network. This assigns the IP immediately so the install proceeds without manual intervention.
+- **`write_files`** writes a persistent netplan config so the static IP survives reboots.
+- **`runcmd`** applies netplan and adds `/etc/hosts` entries for vCenter and PCD endpoints. Add additional lines for each ESXi host if DNS does not resolve them.
+:::
+
 
 
 
