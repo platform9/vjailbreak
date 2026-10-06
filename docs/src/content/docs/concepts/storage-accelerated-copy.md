@@ -605,6 +605,33 @@ Error: clone progress stalled - no update for 5 minutes
    - For very large disks, the operation may take longer than expected
    - Monitor array performance to ensure copy is progressing
 
+#### Retry Fails: Volume Name Already in Use on the Array
+
+**Symptoms:**
+```
+failed to create target volume vjb-<vm-name>-<disk-name>: failed to create volume vjb-<vm-name>-<disk-name>: Response code: 400, ResponeBody: [{"msg": "Name belongs to a volume that has been destroyed and is pending eradication.", ...}]
+```
+
+**Cause:**
+
+When a Storage Accelerated Copy migration fails, vJailbreak deletes the target volume it created on the array (named `vjb-<vm-name>-<disk-name>`). Many arrays do not remove a deleted volume immediately. They keep it in a trash or recovery queue for a retention period and continue to reserve its name. A retry creates a volume with the same name, so it fails until the deleted volume is purged. How long the volume is retained, and how to purge it, depends on the array.
+
+**Resolution:**
+
+1. Note the volume name from the error message (`vjb-<vm-name>-<disk-name>`).
+2. On the storage array, remove the leftover volume as described below.
+3. [Retry the migration](../../guides/how-to/retry_failed_migration/).
+
+| Array | What happens on delete | What to do before retrying |
+|-------|------------------------|----------------------------|
+| **Pure Storage FlashArray** | The volume is destroyed and moved to **Destroyed Volumes**. It stays there, with its name reserved, until the array's eradication delay expires (24 hours by default). | Eradicate the volume: in the Purity UI go to **Storage → Volumes → Destroyed Volumes** and eradicate it, or run `purevol eradicate <volume-name>`. Alternatively, wait for the eradication delay to expire. |
+| **NetApp ONTAP** | vJailbreak deletes the LUN. If the containing volume was also deleted, ONTAP keeps it in the volume recovery queue for its retention period. | Check for a leftover LUN with the same name and delete it. If a deleted volume is in the recovery queue, run `volume recovery-queue show`, then `volume recovery-queue purge -vserver <svm> -volume <volume-name>`. |
+| **Hitachi Vantara VSP** | The LDEV is deleted directly, with no recycle bin. A leftover LDEV is usually from an interrupted cleanup. | Look for an LDEV whose label starts with `vjb-<vm-name>-<disk-name>`. Remove its host group path (LUN mapping), then delete the LDEV. |
+
+:::caution
+Only remove volumes that belong to the failed migration, which you can identify by the `vjb-` prefix and the VM and disk name in the error. Do not remove a volume that is attached to a running VM. Retention periods and purge permissions depend on your array configuration, so check your array's documentation if the steps above do not apply.
+:::
+
 ### Checking ArrayCreds Status
 
 You can check the status of your storage array credentials in the UI:
