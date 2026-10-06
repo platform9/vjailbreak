@@ -227,9 +227,9 @@ ip route | grep default
 
 Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
 
-#### DHCP Networks (Default)
+#### Networks with DHCP
 
-For networks with DHCP, you only need to configure a password and `/etc/hosts` entries:
+For networks where DHCP is enabled, you only need to configure a password and `/etc/hosts` entries:
 
 ```yaml
 #cloud-config
@@ -247,9 +247,9 @@ write_files:
       192.168.2.100 pcd.example.com
 ```
 
-#### L2-Only Networks (Static IP)
+#### Networks without DHCP (Static IP)
 
-For networks without DHCP, use the following cloud-init configuration to assign a static IP, configure DNS, and set `/etc/hosts` entries — all at boot time. This eliminates the need to manually configure networking via the console.
+For networks where DHCP is disabled — whether L2-only or L3 networks with DHCP turned off — use the following cloud-init configuration to assign a static IP, configure DNS, and set `/etc/hosts` entries at boot time. This eliminates the need to manually configure networking via the console.
 
 Replace the placeholder values with your actual network details:
 
