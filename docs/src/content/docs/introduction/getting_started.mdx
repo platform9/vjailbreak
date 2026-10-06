@@ -227,6 +227,8 @@ ip route | grep default
 
 Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
 
+**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+
 #### Networks with DHCP
 
 For networks where DHCP is enabled, you only need to configure a password and `/etc/hosts` entries:
