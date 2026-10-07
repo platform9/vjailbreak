@@ -98,6 +98,7 @@ Required only when using the **Deploy a new vJailbreak Proxy VM** option in the 
 | --- | --- |
 | `vApp.Import` | Allows importing an OVF/OVA package into vCenter — used to deploy the pre-built Proxy VM appliance. |
 | `Datastore.AllocateSpace` | Allows allocating disk space on a datastore — used to create the Proxy VM disk files during OVA import. |
+| `Virtual machine.Config.AddNewDisk` | Allows adding a new virtual disk to a VM — required during OVA import to create the Proxy VM's disk files. |
 | `Network.Assign` | Allows assigning a network to a virtual machine or vApp — used to connect the Proxy VM to the selected portgroup. |
 | `Resource.AssignVAppToPool` | Allows assigning a vApp to a resource pool — used to place the deployed Proxy VM in the target compute resource. |
 | `Virtual machine.Inventory.Create` | Allows creating a virtual machine in the vCenter inventory — used to register the Proxy VM after OVA import. |
