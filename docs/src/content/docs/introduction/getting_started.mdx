@@ -224,31 +224,90 @@ ip route | grep default
 ```
 
 ### Configure VM with cloud-init
-Cloud-init can be used during VM creation to automate initial configuration including setting passwords and configuring /etc/hosts entries for DNS resolution.
-- When creating the VM, use a cloud-init configuration script to:
-  - Set a password for the ubuntu user
-  - Add static DNS entries to /etc/hosts
 
-  ```yaml
-  #cloud-config
-  password: your-secure-password
-  chpasswd: { expire: False }
-  ssh_pwauth: True
-  
-  write_files:
-  - path: /etc/hosts.append
-    append: true
-    content: |
-      # VMware and OpenStack endpoints
-      192.168.1.100 vcenter.example.com
-      192.168.2.100 openstack.example.com
-  
-  runcmd:
-    - cat /etc/hosts.append >> /etc/hosts
-  ```
-- You can provide this cloud-init configuration when creating the VM through the OpenStack dashboard or CLI.
+Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
 
 **Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+
+#### Networks with DHCP
+
+For networks where DHCP is enabled, you only need to configure a password and `/etc/hosts` entries:
+
+```yaml
+#cloud-config
+password: "your-secure-password"
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+write_files:
+  - path: /etc/hosts
+    append: true
+    content: |
+      # VMware endpoints
+      192.168.1.100 vcenter.example.com
+      # OpenStack / PCD endpoints
+      192.168.2.100 pcd.example.com
+```
+
+#### Networks without DHCP (Static IP)
+
+For networks where DHCP is disabled — whether L2-only or L3 networks with DHCP turned off — use the following cloud-init configuration to assign a static IP, configure DNS, and set `/etc/hosts` entries at boot time. This eliminates the need to manually configure networking via the console.
+
+Replace the placeholder values with your actual network details:
+
+| Placeholder | Description | Example |
+|-------------|-------------|---------|
+| `<STATIC_IP>` | IP address for the vJailbreak VM | `10.128.240.50` |
+| `<CIDR>` | Subnet prefix length | `24` |
+| `<GATEWAY>` | Default gateway IP | `10.128.240.1` |
+| `<DNS_SERVER>` | DNS server IP | `8.8.8.8` |
+| `<SEARCH_DOMAIN>` | DNS search domain | `example.com` |
+| `<VCENTER_IP>` | vCenter server IP | `10.128.240.10` |
+| `<VCENTER_FQDN>` | vCenter FQDN | `vcenter.example.com` |
+| `<PCD_IP>` | PCD / OpenStack endpoint IP | `10.128.240.20` |
+| `<PCD_FQDN>` | PCD / OpenStack FQDN | `pcd.example.com` |
+
+```yaml
+#cloud-config
+password: "your-secure-password"
+chpasswd: { expire: False }
+ssh_pwauth: True
+
+bootcmd:
+  - ip addr add <STATIC_IP>/<CIDR> dev ens3
+  - ip link set ens3 up
+  - ip route add default via <GATEWAY>
+
+write_files:
+  - path: /etc/netplan/99-static.yaml
+    content: |
+      network:
+        version: 2
+        ethernets:
+          ens3:
+            addresses:
+              - <STATIC_IP>/<CIDR>
+            routes:
+              - to: default
+                via: <GATEWAY>
+            nameservers:
+              addresses:
+                - <DNS_SERVER>
+              search:
+                - <SEARCH_DOMAIN>
+
+runcmd:
+  - netplan apply
+  - echo "<VCENTER_IP> <VCENTER_FQDN>" >> /etc/hosts
+  - echo "<PCD_IP> <PCD_FQDN>" >> /etc/hosts
+```
+
+:::tip[How this works]
+- **`bootcmd`** runs early in boot, before vJailbreak's install script checks for network. This assigns the IP immediately so the install proceeds without manual intervention.
+- **`write_files`** writes a persistent netplan config so the static IP survives reboots.
+- **`runcmd`** applies netplan and adds `/etc/hosts` entries for vCenter and PCD endpoints. Add additional lines for each ESXi host if DNS does not resolve them.
+:::
+
 
 
 
