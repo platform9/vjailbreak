@@ -314,12 +314,14 @@ architecture-beta
 
     admin:R -- L:ctrl
     ctrl:R -- L:vc
+    ctrl:B -- T:pod
+    pod:R -- L:proxy
     ctrl:B -- T:proxy
-    pod:L -- R:proxy
     pod:B -- T:os
 ```
 
 - **Admin UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
+- **Controller → Migration Pod**: create and manage the Migration Pod (v2v-helper) that performs the copy
 - **Controller → vCenter/ESXi**: deploy/register the Proxy VM (OVA import), read host inventory
 - **Controller → Proxy VM**: push/verify SSH key, confirm `qemu-nbd` and `disk.EnableUUID`
 - **vCenter/ESXi → Proxy VM**: hot-add the frozen source-VM disks
