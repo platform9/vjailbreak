@@ -315,6 +315,7 @@ architecture-beta
     admin:R -- L:ctrl
     ctrl:R -- L:vc
     ctrl:B -- T:proxy
+    vc:B -- L:proxy
     pod:L -- R:proxy
     pod:B -- T:os
 ```
