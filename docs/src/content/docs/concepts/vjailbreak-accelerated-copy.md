@@ -295,32 +295,30 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 
 ### Component Diagram
 
-The pieces involved and how they talk to each other:
+The pieces involved and how they interact with each other:
 
 ```mermaid
 architecture-beta
-    service admin(internet)[Admin UI]
-
-    group vjb(cloud)[vJailbreak Appliance]
-        service ctrl(server)[Controller] in vjb
-        service pod(server)[Migration Pod] in vjb
-
-    group vmw(cloud)[VMware Environment]
-        service vc(server)[vCenter] in vmw
-        service proxy(server)[Proxy VM] in vmw
-
     group pcd(cloud)[Platform9 PCD]
-        service os(disk)[Cinder Volume] in pcd
+    group vjb(cloud)[vJailbreak Appliance]
+    group vmw(cloud)[VMware Environment]
+
+    service admin(internet)[vJailbreak UI]
+    service os(disk)[Cinder Volume] in pcd
+    service ctrl(server)[Controller] in vjb
+    service pod(server)[Migration Pod] in vjb
+    service vc(server)[vCenter] in vmw
+    service proxy(server)[Proxy VM] in vmw
 
     admin:R -- L:ctrl
     ctrl:R -- L:vc
-    ctrl:B -- T:proxy
-    vc:B -- L:proxy
-    pod:L -- R:proxy
-    pod:B -- T:os
+    os:B -- T:pod
+    pod:R -- L:proxy
+    pod:T -- B:vc
 ```
 
-- **Admin UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
+- **vJailbreak UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
+- **Controller → Migration Pod**: create and manage the Migration Pod (v2v-helper) that performs the copy
 - **Controller → vCenter/ESXi**: deploy/register the Proxy VM (OVA import), read host inventory
 - **Controller → Proxy VM**: push/verify SSH key, confirm `qemu-nbd` and `disk.EnableUUID`
 - **vCenter/ESXi → Proxy VM**: hot-add the frozen source-VM disks
