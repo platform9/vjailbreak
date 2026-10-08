@@ -298,26 +298,42 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 The pieces involved and how they talk to each other:
 
 ```mermaid
-architecture-beta
-    service admin(internet)[Admin UI]
+flowchart LR
+    admin([vJailbreak UI])
 
-    group vjb(cloud)[vJailbreak Appliance]
-        service ctrl(server)[Controller] in vjb
-        service pod(server)[Migration Pod] in vjb
+    subgraph pcd[Platform9 PCD]
+        subgraph vjb[vJailbreak Appliance]
+            direction TB
+            ctrl[Controller]
+            pod[Migration Pod]
+        end
+        os[(Cinder Volume)]
+    end
 
-    group vmw(cloud)[VMware Environment]
-        service vc(server)[vCenter] in vmw
-        service proxy(server)[Proxy VM] in vmw
+    subgraph vmw[VMware Environment]
+        vc[vCenter]
+        proxy[Proxy VM]
+    end
 
-    group pcd(cloud)[Platform9 PCD]
-        service os(disk)[Cinder Volume] in pcd
+    admin --- ctrl
+    ctrl --- vc
+    pod --- vc
+    vc --- proxy
+    pod --- proxy
+    pod --- os
 
-    admin:R -- L:ctrl
-    ctrl:R -- L:vc
-    ctrl:B -- T:pod
-    pod:R -- L:proxy
-    ctrl:B -- T:proxy
-    pod:B -- T:os
+    classDef appliance fill:#1e3a5f,stroke:#4a90d9,color:#fff
+    classDef vmware fill:#0f5e6b,stroke:#3cc5d6,color:#fff
+    classDef pcd fill:#1f4d3a,stroke:#4caf7d,color:#fff
+    class ctrl,pod appliance
+    class vc,proxy vmware
+    class os pcd
+
+    style pcd fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
+    style vjb fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
+    style vmw fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
+
+    linkStyle default stroke:#ffffff,stroke-width:3px
 ```
 
 - **Admin UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
