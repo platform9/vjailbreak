@@ -295,48 +295,29 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 
 ### Component Diagram
 
-The pieces involved and how they talk to each other:
+The pieces involved and how they interact with each other:
 
 ```mermaid
-flowchart LR
-    admin([vJailbreak UI])
+architecture-beta
+    group pcd(cloud)[Platform9 PCD]
+    group vjb(cloud)[vJailbreak Appliance]
+    group vmw(cloud)[VMware Environment]
 
-    subgraph pcd[Platform9 PCD]
-        subgraph vjb[vJailbreak Appliance]
-            direction TB
-            ctrl[Controller]
-            pod[Migration Pod]
-        end
-        os[(Cinder Volume)]
-    end
+    service admin(internet)[vJailbreak UI]
+    service os(disk)[Cinder Volume] in pcd
+    service ctrl(server)[Controller] in vjb
+    service pod(server)[Migration Pod] in vjb
+    service vc(server)[vCenter] in vmw
+    service proxy(server)[Proxy VM] in vmw
 
-    subgraph vmw[VMware Environment]
-        vc[vCenter]
-        proxy[Proxy VM]
-    end
-
-    admin --- ctrl
-    ctrl --- vc
-    pod --- vc
-    vc --- proxy
-    pod --- proxy
-    pod --- os
-
-    classDef appliance fill:#1e3a5f,stroke:#4a90d9,color:#fff
-    classDef vmware fill:#0f5e6b,stroke:#3cc5d6,color:#fff
-    classDef pcd fill:#1f4d3a,stroke:#4caf7d,color:#fff
-    class ctrl,pod appliance
-    class vc,proxy vmware
-    class os pcd
-
-    style pcd fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
-    style vjb fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
-    style vmw fill:transparent,stroke:#8899a6,stroke-width:1.5px,stroke-dasharray:6 4
-
-    linkStyle default stroke:#ffffff,stroke-width:3px
+    admin:R -- L:ctrl
+    ctrl:R -- L:vc
+    os:B -- T:pod
+    pod:R -- L:proxy
+    pod:T -- B:vc
 ```
 
-- **Admin UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
+- **vJailbreak UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
 - **Controller → Migration Pod**: create and manage the Migration Pod (v2v-helper) that performs the copy
 - **Controller → vCenter/ESXi**: deploy/register the Proxy VM (OVA import), read host inventory
 - **Controller → Proxy VM**: push/verify SSH key, confirm `qemu-nbd` and `disk.EnableUUID`
