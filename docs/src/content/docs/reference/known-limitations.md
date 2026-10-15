@@ -120,6 +120,14 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 **Workaround**: Migrate each OS as a separate VM, or convert the disk to a single-boot configuration before migration.
 
+## LUKS-Encrypted Disks Not Supported
+
+vJailbreak does not support migrating Linux VMs with **LUKS-encrypted** disks or partitions. `virt-v2v` cannot inspect or convert the guest without the decryption key, and vJailbreak has no way to supply one, so conversion fails.
+
+This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/).
+
+**Workaround**: Decrypt the LUKS volumes on the source VM before migration.
+
 ## SUSE Linux (SLES / SLED) with Legacy GRUB 0.97
 
 Older SUSE-family VMs — **SLES**, **SLED**, and other **SUSE** distributions — that still boot with **legacy GRUB (0.97)** require special handling. These are typically BIOS VMs on a multi-disk layout, where the first boot stage sits in one disk's MBR while its second stage and `/boot` live on a separate disk. After migration to KVM, the virtual disks are re-numbered and no longer match the original VMware ordering, so GRUB cannot find its second stage and the VM fails to boot with `GRUB Error 21`.
