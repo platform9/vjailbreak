@@ -45,6 +45,10 @@ For OpenStack/PCD environment, the volumes are created using 'Cinder' and can be
 
 Since the migration involves copying the data from VMware to OpenStack/PCD, the storage types can be of different types, for example `NFS` datastore volume can be copied to `iSCSI` volume in OpenStack/PCD.
 
+### Volume Sizing
+
+With the Standard and vJailbreak Accelerated Copy storage copy methods, vJailbreak allocates an additional **1 GiB** to each Cinder volume it creates, on top of the source disk size. This extra space is a safety margin that provides headroom for the conversion process.
+
 ## Storage-Accelerated Copy
 
 For environments where both VMware and OpenStack share the same storage array (Pure Storage, NetApp, or Hitachi Vantara), vJailbreak supports **Storage-Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
