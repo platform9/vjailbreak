@@ -96,6 +96,10 @@ The bundled OVA uses virtual hardware version **vmx-21**, which requires **ESXi 
 
 ### Option B: Register an Existing Linux VM
 
+:::note
+This option appears in the UI only when **Allow Manual Proxy Onboarding** is enabled on the **Global Settings** page.
+:::
+
 Any Linux VM can serve as the Proxy VM provided it meets the requirements. Install the necessary utilities:
 
 **Ubuntu / Debian:**
