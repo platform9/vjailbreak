@@ -94,7 +94,25 @@ The OVA image uses default credentials (`root` / `password`) for the initial SSH
 The bundled OVA uses virtual hardware version **vmx-21**, which requires **ESXi 8.0 U2 (vCenter 8.0 U2) or newer**. Deploying it to an older host fails with an "unsupported hardware family" error. On ESXi/vCenter 7.x, use **Option B** to register a manually created Linux VM instead.
 :::
 
+### Download the OVA and Deploy Manually
+
+If you prefer to deploy the Proxy VM yourself, download the OVA from the vJailbreak UI and deploy it in vCenter:
+
+1. In the UI, open **vJailbreak Accelerated Copy** and click **Download OVA template** (also available as the download icon on the **Register an existing VM** card).
+2. In vSphere Client, right-click the target cluster or host and select **Deploy OVF Template**.
+3. Select **Local file**, choose the downloaded `ha-proxy-vm.ova`, and complete the wizard (name, compute resource, datastore, network).
+4. Power on the VM and note its IP address.
+5. Register it using [Option B](#option-b-register-an-existing-linux-vm).
+
+:::note
+The OVA has the same requirements as Option A (ESXi/vCenter 8.0 U2 or newer). Once deployed, always register the VM with **Option B**. **Deploy a new vJailbreak Proxy VM** (Option A) is only for deploying a new VM from the UI.
+:::
+
 ### Option B: Register an Existing Linux VM
+
+:::note
+This option appears in the UI only when **Allow Manual Proxy Onboarding** is enabled on the **Global Settings** page.
+:::
 
 Any Linux VM can serve as the Proxy VM provided it meets the requirements. Install the necessary utilities:
 
