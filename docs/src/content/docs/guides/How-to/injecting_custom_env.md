@@ -28,27 +28,27 @@ As of v0.5.0, HTTP(S) proxy settings, including authentication, can be configure
 2. **ConfigMap creation from /etc/pf9/env**
 
    A helper script or manual command reads `/etc/pf9/env` and creates a Kubernetes ConfigMap named `pf9-env`.
-   This is done while the vjailbreak VM is being provisioned.
+   This is done while the vJailbreak VM is being provisioned.
    ```bash
    kubectl create configmap pf9-env --from-env-file=/etc/pf9/env -n migration-system
    ```
 
    You can either populate the `/etc/pf9/env` file via cloud-init or manually.
 
-   If done manually please follow the steps mentioned in [Injecting Environment Variables Post-Provisioning](#injecting-environment-variables-post-provisioning):
+   If done manually, please follow the steps mentioned in [Injecting Environment Variables Post-Provisioning](#injecting-environment-variables-post-provisioning).
    
 
-   Now this will be picked up by the v2v-helper pod and the proxy variables will be available in the pod and it would be respected by the v2v-helper pod.
+   Now this will be picked up by the v2v-helper pod and the proxy variables will be available in the pod and will be respected by the v2v-helper pod.
 
 ## Injecting Environment Variables Post-Provisioning
 
-If you would like to inject environment variables after the vjailbreak VM has been provisioned, follow these steps:
+If you would like to inject environment variables after the vJailbreak VM has been provisioned, follow these steps:
 1. **Delete the existing ConfigMap**
 
    ```bash
    kubectl delete configmap pf9-env -n migration-system
    ```
-2. **Populate the `/etc/pf9/env` file with whatever env variables needed**
+2. **Populate the `/etc/pf9/env` file with whatever env variables are needed**
 
    ```bash
    echo "http_proxy=http://<proxy-server>:<proxy-port>" >> /etc/pf9/env
@@ -70,7 +70,7 @@ If you would like to inject environment variables after the vjailbreak VM has be
    
 5. **Trigger a new migration for the envs to be reflected in the pod**
 
-    Trigger via UI or via api. 
+    Trigger via UI or via API. 
 
     
    

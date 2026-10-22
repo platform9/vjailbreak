@@ -34,8 +34,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `false` | `true`, `false` |
 | `AUTO_PXE_BOOT_ON_CONVERSION` | Automatically configure PXE boot during conversion | `false` | `true`, `false` |
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks during hot migration | `20` | Any positive integer |
-| `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically cleanup OpenStack ports after migration failure | `false` | `true`, `false` |
-| `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically cleanup OpenStack volumes after conversion failure | `false` | `true`, `false` |
+| `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically clean up OpenStack ports after migration failure | `false` | `true`, `false` |
+| `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically clean up OpenStack volumes after conversion failure | `false` | `true`, `false` |
 | `DEFAULT_MIGRATION_METHOD` | Default method for VM migration | `cold` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
 | `DEPLOYMENT_NAME` | Name of the vJailbreak deployment | `vJailbreak` | Any string |
 | `NTP_SERVERS` | NTP servers the appliance synchronizes against. | Empty (default public pools) | Space-separated hostnames or IPv4 addresses (e.g., `ntp1.corp.local ntp2.corp.local`) |
@@ -58,7 +58,7 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
 | `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
 | `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
-| `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vjailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
+| `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vJailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |
 
@@ -186,7 +186,7 @@ This configures the system to sync every 30 minutes, with a maximum of 5 retries
 
 ### Enabling Automatic Cleanup After Failures
 
-To automatically cleanup resources after migration failures:
+To automatically clean up resources after migration failures:
 
 ```bash
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"CLEANUP_PORTS_AFTER_MIGRATION_FAILURE":"true","CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE":"true"}}'
@@ -284,7 +284,7 @@ All other settings are read dynamically at runtime and do not require a restart:
 
 ### When Changes Take Effect
 
-For settings that don't require restart:
+For settings that don't require a restart:
 
 - **On-demand access**: Values are read from the ConfigMap when they are needed for an operation
 - **New operations**: Changes affect only new operations that start after the ConfigMap is updated

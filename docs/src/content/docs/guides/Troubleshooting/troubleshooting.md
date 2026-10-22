@@ -1,12 +1,12 @@
 ---
-title: Troubleshooting vJailbreak 
+title: Troubleshooting vJailbreak
 description: Tips on effectively troubleshooting vJailbreak deployment and migration
 ---
 
 :::note
 All of the following Kubernetes commands will need to be run from the vJailbreak VM, or remotely using the vJailbreak VM's kubeconfig, located at `/etc/ranger/k3s/k3s.yaml` on the vJailbreak VM.
 :::
- 
+
 ## Common issues
 
 - [VDDK unavailable: VMware's public download pages are down](#vddk-unavailable-vmwares-public-download-pages-are-down)
@@ -17,7 +17,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 - [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
 - [vJailbreak Accelerated Copy fails: could not identify block device](#vjailbreak-accelerated-copy-fails-could-not-identify-block-device)
 
-vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
+vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high-level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
 ### Getting logs
 List all pods in the migration namespace
@@ -217,11 +217,11 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
 - **Impact**
 
   Only the **Standard copy method** requires VDDK. **vJailbreak Accelerated Copy** and
-  **Storage-Accelerated Copy** do not need VDDK and are fully unaffected.
+  **Storage Accelerated Copy** do not need VDDK and are fully unaffected.
 
 - **Resolution**
 
-  Use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead of Standard copy.
+  Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead of Standard copy.
   Both methods work without VDDK installed on the vJailbreak appliance.
 
   :::caution[Cold migration only]
@@ -231,7 +231,7 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   :::
 
   See [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) and
-  [Storage-Accelerated Copy](../../../concepts/storage-accelerated-copy/) for setup instructions.
+  [Storage Accelerated Copy](../../../concepts/storage-accelerated-copy/) for setup instructions.
 
 ---
 

@@ -6,11 +6,11 @@ description: Usage
 vJailbreak works by running itself as a VM on the target OpenStack cloud. It connects remotely
 to the VMware vSphere environment to perform the migration. vJailbreak supports multiple storage
 copy methods: the **Standard** copy method uses the VMware VDDK library, while **vJailbreak
-Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK. These are
+Accelerated Copy** and **Storage Accelerated Copy** do not require VDDK. These are
 the recommended methods when VDDK is unavailable.
 
 It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
-provisioning operations including creation of volumes, VMs.
+provisioning operations, including creation of volumes and VMs.
 
 ### Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
@@ -55,10 +55,10 @@ wget https://vjailbreak.s3.us-west-2.amazonaws.com/releases/<version>/vjailbreak
 
 These will download the vJailbreak qcow2 image locally in the same directory named `vjailbreak.qcow2`.
 
-Note: This direct download method is supported starting from v0.3.2 and later versions.
+Note: This direct download method is supported in v0.3.2 and later versions.
 
 ### Upload image to OpenStack
-These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9 hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
+These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9-hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
 - Follow the instructions in _Private Cloud Director > Images > Import with CLI_ to upload the image from the command line.
 - Upload the vJailbreak qcow2 image to your image library.
 ```shell
@@ -71,7 +71,7 @@ openstack image set --property hw_disk_bus=scsi --property hw_scsi_model=virtio-
 ```
 
 ### Create vJailbreak VM
-- Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use larger flavor for larger VM migration).
+- Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use a larger flavor for larger VM migrations).
 - Choose a network that can reach your VMware vCenter environment.
 - Assign a network security group that allows inbound and outbound traffic.
 
@@ -225,9 +225,9 @@ ip route | grep default
 
 ### Configure VM with cloud-init
 
-Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
+Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or the CLI.
 
-**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
 
 #### Networks with DHCP
 
@@ -314,12 +314,12 @@ runcmd:
 ### Copy VDDK Libraries (Standard Copy Only)
 
 VDDK is required only if you plan to use the **Standard** storage copy method. If you are using
-**vJailbreak Accelerated Copy** or **Storage-Accelerated Copy**, skip this step; neither method
+**vJailbreak Accelerated Copy** or **Storage Accelerated Copy**, skip this step; neither method
 requires VDDK.
 
 :::caution[VDDK currently unavailable]
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
-package, use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead. Both work
+package, use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead. Both work
 without VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only** (source VM
 must be powered off before copy).
 :::
@@ -349,7 +349,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
   sudo sh -c 'echo "192.168.1.101 esxi01.example.com esxi01" >> /etc/hosts'
   sudo sh -c 'echo "192.168.1.102 esxi02.example.com esxi02" >> /etc/hosts'
   ```
-  Once the `/etc/hosts` file is modified execute below commands to apply the changes.
+  Once the `/etc/hosts` file is modified, execute the command below to apply the changes.
   ```
   kubectl -n migration-system rollout restart deployment migration-controller-manager
   ```
@@ -374,7 +374,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
  
 ### Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
-- Add VMware and OpenStack credentials. See more here [Credential Management](../../concepts/credential-management/).
+- Add VMware and OpenStack credentials. See more in [Credential Management](../../concepts/credential-management/).
 - Select the VMs you wish to migrate and complete the rest of the migration form.
 - Migrate your VMs.
 
