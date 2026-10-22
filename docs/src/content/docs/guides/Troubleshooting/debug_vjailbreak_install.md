@@ -7,7 +7,7 @@ description: "Learn how to debug installation issues related to vJailbreak, incl
 
 All logs related to the install process are written to:
 
-`/var/log/pf9-install.log`  
+`/var/log/pf9-install.log`
 
 Look here for:
 - Image pull errors

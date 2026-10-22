@@ -31,7 +31,7 @@ The key is stored in a Kubernetes Secret in `migration-system` and never exposed
 kubectl -n migration-system get pods -l app=vjailbreak-ai
 ```
 
-The pod should be in `Running` state. If not, check logs:
+The pod should be in the `Running` state. If not, check logs:
 
 ```bash
 kubectl -n migration-system logs -l app=vjailbreak-ai

@@ -1,6 +1,6 @@
 ---
 title: "Perform Admin Cutover"
-description: "Guide to perform admin cutover over UI and CLI"
+description: "Guide to perform admin cutover via the UI and CLI"
 ---
 
 The **Admin Cutover** feature in vJailbreak is used to finalize a migration after the data transfer is complete.  
@@ -10,12 +10,12 @@ It can be triggered in two ways:
 
 
 ## Admin Cutover from the UI
-1. Navigate to the migration you want to perform the admin cutover for, in the migration Options column, 
-Select the cutover options and select Admin Initiated Cutover as shown in the Image below. 
+1. Navigate to the migration you want to perform the admin cutover for. In the migration Options column,
+select the cutover options and select Admin Initiated Cutover as shown in the image below.
 ![Admin Cutover](../../../../../public/images/admin_cutover_form.png)
 
 Once the migration is done with copying data, the status of the migration will change to `waitforAdminCutover`.
-You can then click on the **Admin Cutover** button to trigger the cutover process. 
+You can then click on the **Admin Cutover** button to trigger the cutover process.
 ![Admin Cutover Button](../../../../../public/images/admin_cutover_button.png)
 
 2. A confirmation dialog will appear. Click on the **Confirm** button to proceed with the admin cutover.
@@ -34,7 +34,7 @@ cutover for. You can do that by doing the following things:
      kubectl get migration -n migration-system | grep -i <migration-name>
      migration-name                AwaitingAdminCutOve   vjb    1h
      ```
-    * Get the podRef of migration object
+    * Get the podRef of the migration object
     ```bash
     kubectl get migration <migration-name> -n migration-system -o jsonpath='{.spec.podRef}'
     <pod-name>

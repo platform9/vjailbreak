@@ -104,7 +104,7 @@ Only one **primary** IP address per network interface is allowed when Preserve I
 
 Additional addresses on the same NIC can be marked **Virtual IP**, regardless of whether Preserve IP is on or off. vJailbreak attaches these to the port as Neutron allowed-address-pairs instead of fixed IPs, so no post-migration manual step is needed.
 
-**Limitations**: For Virtual IPs to take effect on destination network, the port security shall be enabled on the Network along with port having atleast 1 security group. This also implies that virtual Ips are ignored on L2-only networks.
+**Limitations**: For Virtual IPs to take effect on the destination network, port security shall be enabled on the network along with the port having at least 1 security group. This also implies that virtual IPs are ignored on L2-only networks.
 
 ## VMware Tools Removal: Residual Artifacts
 
@@ -193,7 +193,7 @@ Standard flavors without hotplug extra specs will not support live resize. The V
 
 ## PCI Slot Exhaustion When Attaching Disks with virtio-blk
 
-During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, Maximum 26 devices can be attached after which PCI slots will exhaust and volume attach fails with:
+During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, can exhaust PCI slots: a maximum of 26 devices can be attached, after which volume attach fails with:
 
 ```text
 libvirt.libvirtError: internal error: No more available PCI slots
@@ -209,7 +209,7 @@ openstack image set \
 ```
 
 :::note
-The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale up use the same image, so set these properties before scaling up.
+The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale-up use the same image, so set these properties before scaling up.
 :::
 
 See the full troubleshooting entry: [Disk attach fails during migration: No more available PCI slots](../../guides/troubleshooting/troubleshooting/#disk-attach-fails-during-migration-no-more-available-pci-slots).
@@ -274,13 +274,13 @@ nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. E
 CBT is not enabled on disk <id>
 ```
 
-**What to do**: Use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
+**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
 
 | Storage copy method | Hot migration | Cold migration |
 |---|---|---|
 | Normal (Standard) | Not supported | Not supported (VDDK bug) |
 | vJailbreak Accelerated Copy | Not supported (needs CBT) | Supported |
-| Storage-Accelerated Copy | N/A — always runs cold internally | Supported |
+| Storage Accelerated Copy | N/A — always runs cold internally | Supported |
 
 ## vJailbreak Accelerated Copy
 

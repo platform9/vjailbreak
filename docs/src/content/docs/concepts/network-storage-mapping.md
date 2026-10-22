@@ -3,30 +3,30 @@ title: Network & Storage Mapping
 description: Overview of Network and Storage Mapping
 ---
 
-A large scale VMWare migration may require a large number of VMs to be migrated. In such cases, it is recommended to use network and storage mapping to optimize the migration process and keep both the environments running at the same time while migration is progressing. Network and Storage mapping are part of the migration wizard and are required for the migration to proceed.
+A large-scale VMware migration may require a large number of VMs to be migrated. In such cases, it is recommended to use network and storage mapping to optimize the migration process and keep both the environments running at the same time while migration is progressing. Network and storage mapping are part of the migration wizard and are required for the migration to proceed.
 
 ## Network Mapping
 
 vJailbreak recognizes the different types of networks in VMware and OpenStack/PCD environments.
-We recommend to create the OpenStack/PCD networks in advance such that some multi-VM applications can continue to run while the migration is in progress.
+We recommend creating the OpenStack/PCD networks in advance such that some multi-VM applications can continue to run while the migration is in progress.
 
 :::note
-If you enable **Persist source network interfaces**, network persistence may not work for cross network migration and will be blocked in such cases. Read more in [Migration Options](../migration-options/#persist-source-network-interfaces).
+If you enable **Persist source network interfaces**, network persistence may not work for cross-network migration and will be blocked in such cases. Read more in [Migration Options](../migration-options/#persist-source-network-interfaces).
 :::
 
 ### VMware Network Types
-For VMware environment, the networks are typically of type  `vSphere Standard Port Group` or `vSphere Distributed Port Group`. Currently, vJailbreak supports only these two types of networks and not `NSX` created networks.
+For VMware environments, the networks are typically of type `vSphere Standard Port Group` or `vSphere Distributed Port Group`. Currently, vJailbreak supports only these two types of networks and not `NSX`-created networks.
 
-Typical VMware networks use VLAn configuration to define the network properties.
+Typical VMware networks use VLAN configuration to define the network properties.
 
 ### OpenStack/PCD Network Types
-For OpenStack/PCD environment, there are many more choices, refer to the PCD and OpenStack documentation on the various provider, physical and virtual networks.
+For OpenStack/PCD environments, there are many more choices; refer to the PCD and OpenStack documentation on the various provider, physical and virtual networks.
 
-vJailbreak expects the user to create the OpenStack/PCD networks in advance. In a typical environment for each VMware network an OpenStack/PCD physical network is created that use the corresponding VLAN of the Port Group or Distributed Port Group.
+vJailbreak expects the user to create the OpenStack/PCD networks in advance. In a typical environment, for each VMware network, an OpenStack/PCD physical network is created that uses the corresponding VLAN of the Port Group or Distributed Port Group.
 
 ## Storage Mapping
 
-Unlike network mapping, storage mapping is different. For networking, interconnectivity is the key, for storage it is not. During migration vJailbreak 'copies' the data over from VMware to OpenStack/PCD and this can be used to your advantage as needed.
+Unlike network mapping, storage mapping is different. For networking, interconnectivity is the key; for storage, it is not. During migration, vJailbreak 'copies' the data over from VMware to OpenStack/PCD and this can be used to your advantage as needed.
 
 ### VMware Storage Types
 
@@ -41,23 +41,23 @@ There are a few exceptions and unsupported configurations.
 * For Rolling Conversion or other vMotion-based workflows, RDM disks in physical mode remain unsupported.
 
 ### OpenStack/PCD Volume Types
-For OpenStack/PCD environment, the volumes are created using 'Cinder' and can be of type `NFS` `iSCSI`, `FiberChannel`. vJailbreak supports all of these types of storage with the help of the corresponding OpenStack/PCD Cinder drivers. The Cinder and corresponding volume types must be precreated before the migration starts.
+For OpenStack/PCD environments, the volumes are created using 'Cinder' and can be of type `NFS`, `iSCSI`, `Fibre Channel`. vJailbreak supports all of these types of storage with the help of the corresponding OpenStack/PCD Cinder drivers. The Cinder and corresponding volume types must be pre-created before the migration starts.
 
-Since the migration involves copying the data from VMware to OpenStack/PCD, the storage types can be of different types, for example `NFS` datastore volume can be copied to `iSCSI` volume in OpenStack/PCD.
+Since the migration involves copying the data from VMware to OpenStack/PCD, the storage types can be of different types; for example, an `NFS` datastore volume can be copied to an `iSCSI` volume in OpenStack/PCD.
 
 ### Volume Sizing
 
 With the Standard and vJailbreak Accelerated Copy storage copy methods, vJailbreak allocates an additional **1 GiB** to each Cinder volume it creates, on top of the source disk size. This extra space is a safety margin that provides headroom for the conversion process.
 
-## Storage-Accelerated Copy
+## Storage Accelerated Copy
 
-For environments where both VMware and OpenStack share the same storage array (Pure Storage, NetApp, or Hitachi Vantara), vJailbreak supports **Storage-Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
+For environments where both VMware and OpenStack share the same storage array (Pure Storage, NetApp, or Hitachi Vantara), vJailbreak supports **Storage Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
 
-Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage-Accelerated Copy performs the copy directly on the storage array at array speeds, which can be considerably faster than normal copy.
+Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage Accelerated Copy performs the copy directly on the storage array at array speeds, which can be considerably faster than normal copy.
 
 
-See [Storage-Accelerated Copy](../storage-accelerated-copy/) for detailed configuration and usage instructions.
+See [Storage Accelerated Copy](../storage-accelerated-copy/) for detailed configuration and usage instructions.
 
 :::note
-Migration involves copying of the data from VMware to PCD, depending on the bandwidth and the network congestion, the migration can take a long time and needs more resources on the vJailbreak VM. See [scaling guide](../../guides/how-to/scaling/) for parallel migrations.
+Migration involves copying of the data from VMware to PCD; depending on the bandwidth and the network congestion, the migration can take a long time and needs more resources on the vJailbreak VM. See [scaling guide](../../guides/how-to/scaling/) for parallel migrations.
 :::

@@ -26,14 +26,14 @@ description: Archived Release Notes for vJailbreak
 * Mapped OS_PROJECT_DOMAIN_NAME to OS_DOMAIN_NAME and OS_PROJECT_NAME t… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/130
 * add IpAddress and VM state info to migrationtemplate status by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/133
 * 106 - disabled stopped VMs from migrating and notified with a tooltip by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/136
-* Allowed one to many network mappings from VMware to Openstack by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/137
+* Allowed one to many network mappings from VMware to OpenStack by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/137
 * UI: If the form is not submitted CRs created, should be deleted by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/139
 * UI: Handle VM refresh with additional put call to migration template and add adjust the timeout needed for it to reflect latest detail by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/142
 * check if disks have os installed in lexical order (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/140
 
 ### Known Issues
 * If the VM to be migrated has an LV spanning multiple physical devices used as boot volume unless both are mounted simultaneously to the OS-VM, vJailbreak cannot detect whether it is bootable, or not. ([issue link](https://github.com/platform9/vjailbreak/issues/146))
-* If a user turns on a VM on VCenter after migration and tries to migrate it again, the migration object will not be created. In this case, the user should delete the VM from PCD/Openstack before trying the migration again. This error will be pushed up the stack for visibility.
+* If a user turns on a VM on vCenter after migration and tries to migrate it again, the migration object will not be created. In this case, the user should delete the VM from PCD/OpenStack before trying the migration again. This error will be pushed up the stack for visibility.
 
 ### New Contributors
 * @patil-pratik-87 made their first contribution in https://github.com/platform9/vjailbreak/pull/130
@@ -55,7 +55,7 @@ description: Archived Release Notes for vJailbreak
 * Update README.md by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/149
 * Update model.ts by @markp93 in https://github.com/platform9/vjailbreak/pull/152
 * Added delete migration functionality to the migration table by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/155
-* Adding workers nodes to the vjailbreak by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/161
+* Adding workers nodes to the vJailbreak by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/161
 * update package.json by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/172
 * Update issue templates by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/158
 * Update bug_report.yaml by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/175
@@ -72,8 +72,8 @@ description: Archived Release Notes for vJailbreak
 
 ## v0.1.5
 ### What's Changed
-* Accept vmware and openstack creds via secert by @spai-p9 in https://github.com/platform9/vjailbreak/pull/228
-* Create and Reuse existing open stack and vmware creds with other mino… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/237
+* Accept VMware and OpenStack creds via secret by @spai-p9 in https://github.com/platform9/vjailbreak/pull/228
+* Create and Reuse existing OpenStack and VMware creds with other mino… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/237
 * Support OS installed on LV by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/227
 * Adding templates for github wiki by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/226
 * resolving lint issues by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/239
@@ -98,8 +98,8 @@ description: Archived Release Notes for vJailbreak
 * Update the correct icon for gh-pages by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/266
 * Update the correct version for gh-pages by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/267
 * Bug :: #269 :: Unable to use uppercase letters in a credential's name by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/273
-* fix insecure openstack authentication (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/278
-* Fixed issues with openstack cred creation + validation by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/280
+* fix insecure OpenStack authentication (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/278
+* Fixed issues with OpenStack cred creation + validation by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/280
 
 ### New Contributors
 * @AbhijeetThakur made their first contribution in https://github.com/platform9/vjailbreak/pull/273
@@ -109,7 +109,7 @@ description: Archived Release Notes for vJailbreak
 ## v0.1.7
 ### What's Changed
 * Update video link to latest by @anmolsachan in https://github.com/platform9/vjailbreak/pull/290
-* fix readme for openstackcreds and vmware creds by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/288
+* fix readme for openstackcreds and VMware creds by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/288
 * ( release ) Change base image to ubuntu base image, reduced image size.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/286
 * Ignore Failed phase on retry by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/289
 * api cosmetic fixes by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/274
@@ -155,7 +155,7 @@ description: Archived Release Notes for vJailbreak
 * Backend: Add check if datacenter exists by @spai-p9 in https://github.com/platform9/vjailbreak/pull/368
 * Proxy env injection via configmap by @spai-p9 in https://github.com/platform9/vjailbreak/pull/364
 * removed creds from logs and Made changes to match OS_INSECURE value t… by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/379
-* vddk files check before migration ( release ) by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/375
+* VDDK files check before migration ( release ) by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/375
 * Damian doc updates by @damian-pf9 in https://github.com/platform9/vjailbreak/pull/377
 * Doc: Inject any environment variables required by user into v2v-helper pod.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/381
 * Backend: Change ownership of /home/ubuntu/vmware-vix-disklib-distrib to ubuntu:ubuntu via init container.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/378
@@ -171,7 +171,7 @@ description: Archived Release Notes for vJailbreak
 ## v0.1.10
 ### What's Changed
 * added os icons in vms list table in Migrations by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/431
-* Backend change to block selection of vms without appropriate flavors in openstack by @spai-p9 in https://github.com/platform9/vjailbreak/pull/424
+* Backend change to block selection of vms without appropriate flavors in OpenStack by @spai-p9 in https://github.com/platform9/vjailbreak/pull/424
 * Backend:Retrieve correct network names from backing Network references instead of device summary by @spai-p9 in https://github.com/platform9/vjailbreak/pull/432
 * Backend: Improve the error handling and event reporting on these failures.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/411
 * Backend: Preserve the job logs.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/435
@@ -185,9 +185,9 @@ description: Archived Release Notes for vJailbreak
 * counter output for incremental copy by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/451
 * automated swagger ui at every push by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/450
 * Migration stuck in Pending on UI by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/459
-* Wait for volume attachements also to clear out. by @spai-p9 in https://github.com/platform9/vjailbreak/pull/461
+* Wait for volume attachments also to clear out. by @spai-p9 in https://github.com/platform9/vjailbreak/pull/461
 * v2v-helper: Add check if subnet exists to avoid panic.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/460
-* enable openstack re-auth by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/464
+* enable OpenStack re-auth by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/464
 * use flavor id instead of name in label by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/465
 
 
@@ -197,13 +197,13 @@ description: Archived Release Notes for vJailbreak
 ### What's Changed
 * save migration debug logs at hostPath '/var/log/pf9' ( release ) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/479
 * Add ons in v2v-helper for post-migration actions by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/490
-* Updated documentation for all external connectivity required for vjailbreak by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/467
+* Updated documentation for all external connectivity required for vJailbreak by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/467
 * Sync migration logs from worker to master ( release ) by @spai-p9 in https://github.com/platform9/vjailbreak/pull/494
 * User should be able to delete migration when in pending or any stage by @spai-p9 in https://github.com/platform9/vjailbreak/pull/511
 * added the admincutover option to the migration strategy by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/514
 * disabled migration form submission on enter key when text inputs are … by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/515
-* added insecure option to the vmware creds form by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/516
-* Add check from nova side also for volume dettach  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/480
+* added insecure option to the VMware creds form by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/516
+* Add check from nova side also for volume detach  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/480
 * Document: Add cbt privilege and flavor selection logic in Doc.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/502
 * Increase timeout for vm status to become active by @spai-p9 in https://github.com/platform9/vjailbreak/pull/525
 * create delete update vmwaremachines by @spai-p9 in https://github.com/platform9/vjailbreak/pull/523
@@ -221,7 +221,7 @@ description: Archived Release Notes for vJailbreak
 * convert PCD Cluster name to k8s compatible by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/576
 * fix issues when VM is attached to same network twice by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/579
 * Release v0.1.13 (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/581
-* Add proxy for vjailbreak  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/562
+* Add proxy for vJailbreak  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/562
 * add/update/edit  os and flavors in vms list in rolling conversion by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/586
 * Add alpine docker image with rsync,coreutils in quay  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/590
 * DOC: Add doc for virtio drivers injection by the user by @spai-p9 in https://github.com/platform9/vjailbreak/pull/589
@@ -229,14 +229,14 @@ description: Archived Release Notes for vJailbreak
 * Change the base ubuntu image for vJailbreak qcow by @spai-p9 in https://github.com/platform9/vjailbreak/pull/598
 * Fix scale up by @spai-p9 in https://github.com/platform9/vjailbreak/pull/601
 * Fix cluster name by @spai-p9 in https://github.com/platform9/vjailbreak/pull/602
-* fix openstack volume sizes being smaller than original disk size by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/558
+* fix OpenStack volume sizes being smaller than original disk size by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/558
 * improved guestfish logging by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/565
 * Rolling Conversion UI changes by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/548
 * fix debug log file for migration re-runs by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/560
 * move os family selection to per VM basis by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/568
 * save disk space on vjb VM by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/571
 * Prebake components by @spai-p9 in https://github.com/platform9/vjailbreak/pull/574
-* Give users option to upload virtio drivers to a path in master and then propogate it down to agents by @spai-p9 in https://github.com/platform9/vjailbreak/pull/575
+* Give users option to upload virtio drivers to a path in master and then propagate it down to agents by @spai-p9 in https://github.com/platform9/vjailbreak/pull/575
 * make delete migration-controller-manager pod work by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/572
 
 #### Usability Enhancements and Stability Improvements
@@ -264,8 +264,8 @@ description: Archived Release Notes for vJailbreak
 ### What's Changed
 * revert the changes for duplicate networks by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/605
 * accept os_family correctly and override if present by @spai-p9 in https://github.com/platform9/vjailbreak/pull/607
-* support migration without a cluster on pcd by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/608
-* do not fail migrations for snapshot delettions by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/611
+* support migration without a cluster on PCD by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/608
+* do not fail migrations for snapshot deletions by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/611
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.1.13...v0.1.14
@@ -274,7 +274,7 @@ description: Archived Release Notes for vJailbreak
 ### What's Changed
 * fix part-to-dev input by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/614
 * Fix RC file parsing to support special characters in OpenStack credentials. by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/619
-* Made changes to the desination cluster selection by showing cred name… by @patil-pratik-87 n https://github.com/platform9/vjailbreak/pull/634
+* Made changes to the destination cluster selection by showing cred name… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/634
 * pcdclusters and tenant in UI (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/633
 * Destination cluster dropdown changes for same id by @patil-pratik-87  in https://github.com/platform9/vjailbreak/pull/636
 
@@ -287,7 +287,7 @@ description: Archived Release Notes for vJailbreak
 * Update release notes for v0.1.14 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/645
 * Update release notes for v0.1.15 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/646
 * PR description for testing by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/647
-* configmap for current vjailbreak version (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/632
+* configmap for current vJailbreak version (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/632
 * Update docs from gh-pages by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/649
 * Updated VMware custom resource to capture RDM disk information in VM details by @rishabh625 in https://github.com/platform9/vjailbreak/pull/563
 * sanitize kubernetes label values by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/655
@@ -298,9 +298,9 @@ description: Archived Release Notes for vJailbreak
 * #667 Fixes the Rebase Action by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/668
 * Check the target IP Allocation Pool to determine if Source VM IP is Available and Handle Port Creation 409 Conflict (release) by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/662
 * fix docs for yamls by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/670
-* Validate Openstack creds only for same env by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/681
-* Delete the mastercreds for openstack by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/678
-* Bugsnag and sidenav enahancements by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/679
+* Validate OpenStack creds only for same env by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/681
+* Delete the mastercreds for OpenStack by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/678
+* Bugsnag and sidenav enhancements by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/679
 * Delete VMware credentials stuck in Unknown state by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/683
 * Detect ubuntu vm's < 17.10 and appropriately handle the networking for the interfaces  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/674
 * Fixed issue where sidenav collapse icon was coming on top of the Migr… by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/695
@@ -327,7 +327,7 @@ description: Archived Release Notes for vJailbreak
 ## v0.3.0
 
 ### What's Changed
-* RDM disk migration from VMware to Openstack on Same SAN array - if RDM is attached to single VM by @rishabh625 in https://github.com/platform9/vjailbreak/pull/654
+* RDM disk migration from VMware to OpenStack on Same SAN array - if RDM is attached to single VM by @rishabh625 in https://github.com/platform9/vjailbreak/pull/654
 * persist host dns by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/735
 * fix for long vm names by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/738
 * additional vm name changes (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/746
@@ -335,7 +335,7 @@ description: Archived Release Notes for vJailbreak
 * Feature: add volume backend to openstackcreds custom resource by @rishabh625 in https://github.com/platform9/vjailbreak/pull/745
 * v2v-helper: log time taken by disk copy and conversion by @jessicaralhan in https://github.com/platform9/vjailbreak/pull/737
 * throttle goroutines by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/758
-* unblock vcenter with no clusters by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/755
+* unblock vCenter with no clusters by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/755
 * added option to select security group by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/761
 * Delete rolling migration plan by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/754
 * Reset migrated status on migration object deletion by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/744
@@ -343,14 +343,14 @@ description: Archived Release Notes for vJailbreak
 * added amplitude changes by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/765
 * Adding time elapsed for migration and cluster conversions + fixed the … by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/767
 * Improve ESXi host configuration UX by removing selection confusion by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/757
-* Disconnect all Virtual NICs on VMWare Source VM upon successful migration by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/768
+* Disconnect all Virtual NICs on VMware Source VM upon successful migration by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/768
 * Backend: rhel family guest network ip retention ( release ) by @spai-p9 in https://github.com/platform9/vjailbreak/pull/766
 * v0.3.0 fixes for SG and os creds validation by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/773
 * fix ui for clusters by @spai-p9 in https://github.com/platform9/vjailbreak/pull/775
 * Fix time elapsed issue  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/776
 * fix for wait active timeout by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/777
 * fix vpwned unavailable issue by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/779
-* idle connection timeout for vcenter by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/781
+* idle connection timeout for vCenter by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/781
 * revert back to metadata name by @spai-p9 in https://github.com/platform9/vjailbreak/pull/780
 
 ### New Contributors
@@ -361,12 +361,12 @@ description: Archived Release Notes for vJailbreak
 
 ### What's Changed
 * Feature: Addition of  rdm disk custom resource and controller by @rishabh625 in https://github.com/platform9/vjailbreak/pull/753
-* re-auth vcenter after timeout by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/787
+* re-auth vCenter after timeout by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/787
 * reduce default vm scan concurrency, improve logging by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/791
 * Add fallback if /etc/os-release doesn't exist by @spai-p9 in https://github.com/platform9/vjailbreak/pull/772
 * bring back dhcp for non-matching subnets by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/795
 * amplitude and bugsnag keys (release) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/769
-* fix vm refresh for new govomi clients by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/803
+* fix vm refresh for new govmomi clients by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/803
 * fix: one of the status.phase  correctly renamed from pending to available  by @rishabh625 in https://github.com/platform9/vjailbreak/pull/806
 * Add vjailbreak-settings.yaml ( release ) by @spai-p9 in https://github.com/platform9/vjailbreak/pull/808
 
@@ -380,13 +380,13 @@ description: Archived Release Notes for vJailbreak
 * UI: Do admin cutover via UI  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/810
 * Added polling for QCOW2 image before docs update by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/804
 * add a setting to keep the copied volumes in case of failure by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/823
-* optimisations for openstack creds upload time by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/829
-* fix dasboard count mismatch by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/826
+* optimisations for OpenStack creds upload time by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/829
+* fix dashboard count mismatch by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/826
 * optimise disk pressure problem due to logs by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/832
 * In-place upgrade by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/792
 * Filtering security group according to particular tenant  by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/824
 * change completed at to created at by @spai-p9 in https://github.com/platform9/vjailbreak/pull/835
-* Support Dynamic Hotplug-Enabled Flavors in Target Openstack Environment by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/838
+* Support Dynamic Hotplug-Enabled Flavors in Target OpenStack Environment by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/838
 * crd update and ui changes required for hotplug by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/842
 * indicate missing base flavor for specific vmwaremachine by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/843
 * search option(s) for faster migration triggers by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/844
@@ -409,7 +409,7 @@ description: Archived Release Notes for vJailbreak
 * Fix admin cutover by @spai-p9 in https://github.com/platform9/vjailbreak/pull/862
 * locked versions for nbdkit by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/865
 * fetch rpm from main by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/870
-* Fixed the os assigment in the migration form by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/867
+* Fixed the os assignment in the migration form by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/867
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.2...v0.3.3
@@ -417,11 +417,11 @@ description: Archived Release Notes for vJailbreak
 
 ### What's Changed
 * volume wait interval through settings by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/872
-* logs all openstack calls that we make by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/873
+* logs all OpenStack calls that we make by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/873
 * admin cut over poweroff sequence prevent user error by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/874
 * Added cronjob to fetch for latest release and notify in UI by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/882
 * bugfix: Add logic to assign IP from network interfaces if not already… by @rishabh625 in https://github.com/platform9/vjailbreak/pull/895
-* create openstack ports before copy by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/879
+* create OpenStack ports before copy by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/879
 * Admin cutover improve the pod label watch function by @spai-p9 in https://github.com/platform9/vjailbreak/pull/881
 * remove --delete to not purge each others logs in master by @spai-p9 in https://github.com/platform9/vjailbreak/pull/904
 * Advance option in UI to ask for fallback to DHCP if static IP assignment fails by @sarika-p9 in https://github.com/platform9/vjailbreak/pull/906
@@ -446,13 +446,13 @@ description: Archived Release Notes for vJailbreak
 * disabled upgrade button while migrations are in progress by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/934
 * disabled docs update workflow to run on release event by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/935
 * Updated CRD Upgrade logic with missing permissions  by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/933
-* Bugfix: Added vmwaresession logged out, after retrieving data from vmware by @rishabh625 in https://github.com/platform9/vjailbreak/pull/939
+* Bugfix: Added vmwaresession logged out, after retrieving data from VMware by @rishabh625 in https://github.com/platform9/vjailbreak/pull/939
 * Changed description of a advanced option - Fallback to DHCP by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/948
 * feat: View Migration pod logs from UI  by @rishabh625 in https://github.com/platform9/vjailbreak/pull/942
 * Add support to display rdm disk and populate rdm disk details in UI by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/926
 * Refactor : VMwareMachine retrieval and validation in migration plan reconciliation by @rishabh625 in https://github.com/platform9/vjailbreak/pull/947
-* Custom header for a vjailbreak deployment through configmap by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/958
-* add creds requeue config to vjailbreak settings by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/965
+* Custom header for a vJailbreak deployment through configmap by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/958
+* add creds requeue config to vJailbreak settings by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/965
 * feat: Implement RDM disks validation and query integration in migration workflow by @rishabh625 in https://github.com/platform9/vjailbreak/pull/963
 * feat: Set owner reference for RDM disks to ensure proper deletion with VMwareCreds by @rishabh625 in https://github.com/platform9/vjailbreak/pull/967
 * feat: Enhance RDM validation to include configuration checks and improve error messaging by @rishabh625 in https://github.com/platform9/vjailbreak/pull/972
@@ -467,7 +467,7 @@ description: Archived Release Notes for vJailbreak
 * disabled log icon in ui (release) by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/986
 * disabled rdm config in UI (release) by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/987
 * enable k3s encryption at rest by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/990
-* Added htpasswd based authentification for ui by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/994
+* Added htpasswd based authentication for ui by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/994
 * cache cred info for UI by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/996
 * Removed secrets GET calls from UI by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/995
 * Added command line utility to change and manage the user credentials for UI  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1002
@@ -482,7 +482,7 @@ description: Archived Release Notes for vJailbreak
 * Updated default username from ubuntu to admin by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1023
 * added --no-restart to the utility to vjbctl by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1024
 * fixed count of selected vm by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1022
-* Custom title on browser tab for each vjailbreak VM deployment by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1026
+* Custom title on browser tab for each vJailbreak VM deployment by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1026
 
 ### New Contributors
 * @meghansh-pf9 made their first contribution in https://github.com/platform9/vjailbreak/pull/958
@@ -492,7 +492,7 @@ description: Archived Release Notes for vJailbreak
 
 ### What's Changed
 * fix - Migration only takes the first subnet while creating the ports  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1019
-* Bugfix: sync annotation from VMware to RDM disk openstack volume reference if changed by @rishabh625 in https://github.com/platform9/vjailbreak/pull/993
+* Bugfix: sync annotation from VMware to RDM disk OpenStack volume reference if changed by @rishabh625 in https://github.com/platform9/vjailbreak/pull/993
 * Added vjailbreak-settings ConfigMap and implement RDM owner VM validation toggle by @rishabh625 in https://github.com/platform9/vjailbreak/pull/953
 * bugfix: previous PR introduced a issue where importToCinder was not g… by @rishabh625 in https://github.com/platform9/vjailbreak/pull/1033
 * Fix - blocking port creation if dhcp is selected but VM doesn't have a valid IP by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1047
@@ -501,18 +501,18 @@ description: Archived Release Notes for vJailbreak
 * bugfix: fix ImportToCinder to true from migrationplan controller by @rishabh625 in https://github.com/platform9/vjailbreak/pull/1038
 * Added filter on migrations based on current status and current creation time  by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/944
 * Blocked migration of VM having unknown OS by @patil-pratik-87 in https://github.com/platform9/vjailbreak/pull/1042
-* Skip CopyingChagedBlocks phase when migration type is cold by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1055
-* fix: changing from patch to update while modifying importToCinder fieeld of RDM CR, adding idempotent guard and retry on conflict.. by @rishabh625 in https://github.com/platform9/vjailbreak/pull/1054
+* Skip CopyingChangedBlocks phase when migration type is cold by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1055
+* fix: changing from patch to update while modifying importToCinder field of RDM CR, adding idempotent guard and retry on conflict.. by @rishabh625 in https://github.com/platform9/vjailbreak/pull/1054
 * delete firstboot configmap when migration is deleted by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1071
 * Sv/issue 920/enhancements log collector bundle by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1063
 * added FQDN tooltip for better user guidance by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1069
 * bugfix: Handle VMware login failures gracefully without requeuing by @rijojohn85 in https://github.com/platform9/vjailbreak/pull/1061
 * Admin Cutover Periodic sync by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1056
-* fix - Delay in password expiration after creating the vjailbreak vm upon first login by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1076
+* fix - Delay in password expiration after creating the vJailbreak vm upon first login by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1076
 * Implement VM OS type validation in migration plan (release) by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1044
 * Cluster-Based VM Filtering in Migration Form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/964
 * fix(airgap): Pre-bake cert-manager images by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1087
-* Show tenant name in openstack cluster name by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1085
+* Show tenant name in OpenStack cluster name by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1085
 * Handle inconsistent types in Host API response by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1099
 * Separate Periodic Sync Interval Configuration for different migrations by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1083
 * Add DeepWiki badge to README by @roopakparikh in https://github.com/platform9/vjailbreak/pull/1107
@@ -532,7 +532,7 @@ description: Archived Release Notes for vJailbreak
 * 1017 assigned ip for all vms removed if we select os of one of the vms post assigning ip by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1128
 * Added a new option to enter Periodic Sync interval by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1126
 * add proxy env set by user in controller as well by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1135
-* do not wait for status after sumitting migrationform by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1132
+* do not wait for status after submitting migrationform by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1132
 * Fix - User should not be able to submit migration if OS is not selected during cold migration by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1136
 * powering on of cold migration vms fix by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1131
 * #1104 :: Bug :: Filter box for tenant search is going out of focus by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1138
@@ -561,7 +561,7 @@ description: Archived Release Notes for vJailbreak
 * In advanced option validation check only for granularoptions ignore rest by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1183
 * Fix sdk while adding logs and other details by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/1178
 * Added check to fallback to 5m if interval is less than 5m by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1187
-* #1181 :: UI: Move to folder cannot use anyother name, when clearing the vjailbreakedVMs it appears again by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1186
+* #1181 :: UI: Move to folder cannot use any other name, when clearing the vjailbreakedVMs it appears again by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1186
 * #1192 :: Bug: Migration Submit button is disabled when triggering admin cutover with periodic sync by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1197
 * Inject log_collector.sh into the VM by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1194
 * fix netplan upload for multi-disk VM by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1195
@@ -575,7 +575,7 @@ description: Archived Release Notes for vJailbreak
 
 ### What's Changed
 * fix - Periodic Sync Migration Fails on Transient Network Errors Instead of Retrying by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1204
-* Prebaked Openstack Cli inside the vjailbreak VM by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1211
+* Prebaked OpenStack Cli inside the vJailbreak VM by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1211
 * fix - Migration controller logs are being flooded by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1212
 * #1202 :: Bug :: Single migrationtemplate object should be created for one migrationplan (Use Dynamic Hotplug-Enabled Flavors is the advance option making post calls) by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1215
 * #1140 :: Enhancement :: Allow user input for IP's for any VM being migrated by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1217
@@ -598,15 +598,15 @@ description: Archived Release Notes for vJailbreak
 * reflect current default migration method in migration form by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1257
 * Fix batch script to properly write self-delete logic to the generated startup script by @Track2k in https://github.com/platform9/vjailbreak/pull/1213
 * add UI option to automatically run script to fix fstab entries during migration by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1258
-* feat: add a net pacakge with unit test cases by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/1160
+* feat: add a net package with unit test cases by @sharma-tapas in https://github.com/platform9/vjailbreak/pull/1160
 * Added script to check disks status in Windows post-migration by @amar-chand in https://github.com/platform9/vjailbreak/pull/1167
 * fix agents tenant and security groups by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1260
 * fix multiple migration succeeded events in amplitude by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1262
-* fix - Migration fails when port already exist on pcd side (DHCP=true) by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1279
+* fix - Migration fails when port already exist on PCD side (DHCP=true) by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1279
 * Setting up the default password for the agent nodes  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1281
 * Fixed default migration-method to cold and map with global settings by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1284
 * Updating CRDs for release by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1285
-* Populate metadata in extra specs in openstack creds by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1286
+* Populate metadata in extra specs in OpenStack creds by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1286
 
 ### New Contributors
 * @Track2k made their first contribution in https://github.com/platform9/vjailbreak/pull/1213
@@ -617,7 +617,7 @@ description: Archived Release Notes for vJailbreak
 ### What's Changed
 * Implement Session Timeout (18 hours inactivity) for UI  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1264
 * install vjbctl binary system wide by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1269
-* Make datacenter field as an optional entry in vmware creds form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1256
+* Make datacenter field as an optional entry in VMware creds form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1256
 * #1227, #1224 :: Create a Common Component Library for Consistent UI Across the Application by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1297
 * support additional machine states, optional set to PXE boot by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1301
 * fix - Agent Node not prompting to change password by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1310
@@ -627,18 +627,18 @@ description: Archived Release Notes for vJailbreak
 * Added advanced option in UI to select if the user wants to persist network interfaces by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1314
 * add script to check and bring the offline volumes online by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1309
 * Added a new state to show migrationplan validation failure in ui by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1298
-* fix - logs for persistance script showing errors by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1317
+* fix - logs for persistence script showing errors by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1317
 * Add endpoint to take proxy variable, update the cm and restart controller.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1316
 * Fix logs UI and updated CRDs by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1320
 * #1294 :: UI add proxy by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1322
 * #1294 :: UI: Add proxy with separate Http, Https field by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1325
 * added validationFailed to stop time elapsed by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1328
-* Refactored network persistance script by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1327
+* Refactored network persistence script by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1327
 * #1331 :: Show warning message on UI after saving proxy by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1332
 * no_proxy default values by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1335
-* Fixed migrationplan status based on all edge cases (combination of validationFailed, failed, suceeded, inprogress) by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1333
+* Fixed migrationplan status based on all edge cases (combination of validationFailed, failed, succeeded, inprogress) by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1333
 * Fix - Network persistence not working for older versions of ubuntu by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1338
-* Vmware tools fix by @amar-chand in https://github.com/platform9/vjailbreak/pull/1267
+* VMware tools fix by @amar-chand in https://github.com/platform9/vjailbreak/pull/1267
 * fix - Interfaces with no ip for ubuntu older versions getting default ip by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1340
 
 
@@ -670,11 +670,11 @@ description: Release Notes for v0.4.0
 * Added return to avoid segmentation fault or panic  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1387
 * VM Migrations stats and alerts on grafana dashboards by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1362
 * #1368, #1367 date time selection is not working for scheduled cutover and copy start time by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1384
-* feat: adding vddk upload status api by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1377
+* feat: adding VDDK upload status api by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1377
 * deterministic volume ordering during copy by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1389
 * UI: Create UI for storage accelerated copy.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1378
 * Added missing logs for better debugging by @geet-pf9 in https://github.com/platform9/vjailbreak/pull/1401
-* feat: adding vddk version in the api by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1397
+* feat: adding VDDK version in the api by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1397
 * #731 :: [UI] add prompts for missing VDDK, credentials  by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1372
 * Fix - windows 2022 not able to recognise the network interfaces by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1382
 * pass vminfo by reference and improve sync error handling by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1391
@@ -686,7 +686,7 @@ description: Release Notes for v0.4.0
 * feat: Adding netapp storage.go by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1399
 * Mark migrations ValidationFailed when RDM disk is not managed by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1406
 * Disabled hour-time-picker for scheduled cutover if minutes are disabled by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1415
-* Fix issues in vddk upload page by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1418
+* Fix issues in VDDK upload page by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1418
 * fix: added buildBackendToVolumeTypeMap function and cleanup logic by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1422
 * #1424 :: The screen flickers first time when clicking on other Global Settings tabs while the VDDK upload is in progress or uploaded by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1429
 * #1434 :: Add ESXi SSH Private Key Input Field to Storage Array Credentials Page by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1435
@@ -708,7 +708,7 @@ description: Release Notes for v0.4.1
 ---
 
 ### What's Changed
-* upgarde core components by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1458
+* upgrade core components by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1458
 * Network Persistence For Windows by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1408
 * increase QPS for kubernetes client in proxy pod by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1460
 * Fixed - v2v build failure by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1471
@@ -717,7 +717,7 @@ description: Release Notes for v0.4.1
 * Added option to migrate a vm without powering off the source vm by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1472
 * Fixed the variable issue in v2v helper by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1476
 * Added downloadable s3 url for qcow2 images by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1475
-* #1451 :: Remove data copy method and cutover options from adavance options when user selects storage accelerated copy by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1473
+* #1451 :: Remove data copy method and cutover options from advanced options when user selects storage accelerated copy by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1473
 * Install latest golang and libnbd-devel in Dockerfile by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1485
 * chore: upgrade grafana by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1483
 * user experience enhancements (download logs) by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1486
@@ -745,26 +745,26 @@ description: Release Notes for v0.4.1
 * Add ssh validate CR for key validation by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1505
 * Removed extra logs showing repeated 0% by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1536
 * Add necessary tools for easier debug ability  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1538
-* Cluster Conversion: fix the capacity check for esxi hosts by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1504
+* Cluster Conversion: fix the capacity check for ESXi hosts by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1504
 * #1506 :: Create New Page for ESXi SSH Key Management by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1539
 * fix - Firstboot script for nic recovery is not running and errors on specific windows versions by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1534
-* add esxi details by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1525
+* add ESXi details by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1525
 * Resolve UI synchronization lag during Admin Cutover by refining MigrationPlan predicates by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1542
 * Introduce warning error states during periodic sync so that customer can take necessary steps by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1497
 * Feature/option not to preserve ip and mac by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1511
 * Fixed retry mechanism by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1544
 * backend volume type validations by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1498
 * fix: scope VM validation to non-terminal states and harden post-migration actions by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1549
-* Create esxi ssh cr while configuring esxi ssh key.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1558
+* Create ESXi ssh cr while configuring ESXi ssh key.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1558
 * bake virtio 0.1.185 for windows server 2012 by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1425
-* script to remove log files regarding vmwaretools,vmware etc by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1547
-* Added advanced option to run vmware removal script with just a check in the migration form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1550
+* script to remove log files regarding vmwaretools,VMware etc by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1547
+* Added advanced option to run VMware removal script with just a check in the migration form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1550
 * user firstboot fix by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1569
 * #1545 : UI - Redirect to the first sub item upon clicking the Item in the sidebar by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1570
-* fix: adding a timestamp measure to ensure the latest version is fetched for vddk version by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1562
+* fix: adding a timestamp measure to ensure the latest version is fetched for VDDK version by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1562
 * skip deletion of vmwaremachine that was migrated and renamed by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1566
 * fix generate-mount-persistence invocation for multi-disk by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1564
-* Remove irrelevent filters on ESXi SSH Credentials page by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1567
+* Remove irrelevant filters on ESXi SSH Credentials page by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1567
 * #1510 :: UI Request option to NOT preserve the IP address and MAC address to allow migration to a different subnet by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1557
 * #1443 : Add Storage accelerated copy related information in migration details for storage mapping (currently showing NA) by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1571
 * UI: Fix rdm configure tab in migration form by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1576
@@ -780,7 +780,7 @@ description: Release Notes for v0.4.1
 * Include resourceVersion when updating ESXi SSH credentials by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1605
 * fix: adding dhcp search for no ip by @sanya-pf9 in https://github.com/platform9/vjailbreak/pull/1481
 * Revert fix generate-mount-persistence invocation for multi-disk by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1606
-* Continue after failure Firstboot Schduling for windows firstboot by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1604
+* Continue after failure Firstboot Scheduling for windows firstboot by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1604
 * Interface Name preservation by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1609
 * Disable github hook on pre-release commit by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1613
 * chore: Pre-release CRD generation for v0.4.1 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/1614
@@ -828,7 +828,7 @@ kubectl rollout restart deployment -n migration-system
 * fix: Wait for network IP and default route before installing K3s master and worker by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1644
 * metadata as input by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1639
 * Implement independent post-migration script execution for mixed OS plans by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1638
-* #1607 : Cancel button is not working during vddk upload by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1635
+* #1607 : Cancel button is not working during VDDK upload by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1635
 * #1575, #1577 : Start Migration is not getting disabled by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1637
 * Added checks for failure in user management vjbctl by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1659
 * Add exponential backoff auto-reconnect for migration pod log streams by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1657
@@ -836,8 +836,8 @@ kubectl rollout restart deployment -n migration-system
 * fix: Scale up agents on L2 network by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1654
 * Detect if target is L2 network if so ignore ip by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1666
 * Added failure checks in vjbctl by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1672
-* create seperate CI to create base image, use this base image to generate qcow2 by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1677
-* Revert "create seperate CI to create base image, use this base image to generate qcow2" by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1684
+* create separate CI to create base image, use this base image to generate qcow2 by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1677
+* Revert "create separate CI to create base image, use this base image to generate qcow2" by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1684
 * #1543 :  VM selection filter is not working properly by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1682
 * fix: Version lock ingress version by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1686
 * fix - Migrations failing with - failed to reserve ports for VM by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1688
@@ -959,7 +959,7 @@ kubectl rollout restart deployment -n migration-system
 
 ### What's Changed
 * Fix RDM configuration issue from UI by @geet-pf9 in https://github.com/platform9/vjailbreak/pull/1895
-* Bug: Fix unauthenticated error when doing vcenter operations after a long time.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1891
+* Bug: Fix unauthenticated error when doing vCenter operations after a long time.  by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1891
 * Fixed migration issue for shared rdm disk by @geet-pf9 in https://github.com/platform9/vjailbreak/pull/1902
 * chore: Pre-release CRD generation for v0.4.5 by @github-actions[bot] in https://github.com/platform9/vjailbreak/pull/1904
 
@@ -990,7 +990,7 @@ kubectl rollout restart deployment -n migration-system
 * [1933] Don't restart ui when listing users by @spai-p9 in https://github.com/platform9/vjailbreak/pull/1939
 * [1796] Optimising the copy changed blocks mechanism for faster sync by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/1934
 * #587: UI refactor migration by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1960
-* #1940: Block v2v pod creation or disable start migration if vddk is not uploaded  by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1969
+* #1940: Block v2v pod creation or disable start migration if VDDK is not uploaded  by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1969
 * #1873: Block security group selection during scaling L2 Agent by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/1962
 * [1803] fix: Added retry for transient API errors by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1958
 * [1961] fix: Handle transient vCenter errors during VM power-off by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1973
@@ -1035,7 +1035,7 @@ kubectl rollout restart deployment -n migration-system
 * [2007] Fix fstab rewrite incorrectly activating commented bind-mount entries by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2011
 * [1058] Configure NTP servers and system timezone for the vJailbreak VM directly from the UI by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1742
 * [1915] Added persist source network interfaces as a global setting by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2025
-* Detect if we are using virtio-scsi controller for windows and pass --blockdriver for conversion by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2027
+* Detect if we are using virtio-scsi controller for Windows and pass --blockdriver for conversion by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2027
 * [1812] Fix volume cleanup when CreateTargetInstance times out by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2026
 * [1975] Hot-Add Proxy VM UX improvements by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2023
 * [1996] upgrade core components with guest OS migration fixes by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2031
@@ -1043,21 +1043,21 @@ kubectl rollout restart deployment -n migration-system
 * [1979] VM selection refresh button now revalidates VMware credentials by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2034
 * [1872] Verify volume bootable state after SetBootable timeout by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2035
 * prebake proxy VM OVA into appliance image by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2038
-* Fix: Check hardware version and migration type only then check for cbt by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2037
+* Fix: Check hardware version and migration type only then check for CBT by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2037
 * [1980] Enhance user experience with new UI by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2040
 * UI side changes for Hot add proxy improvements by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2030
 * Rename Firstboot-Scheduler.ps1 to 0-Firstboot-Scheduler.ps1 by @noaboa97 in https://github.com/platform9/vjailbreak/pull/1994
 * fix(v2v-helper): repair broken build on main by @valentin-pf9 in https://github.com/platform9/vjailbreak/pull/1945
-* [1750] UI for edit and retry  by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2024
+* [1750] UI for edit and retry by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2024
 * [2044] Consolidate edit-and-retry into single Retry action by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2021
 * #2047 : Need UI enhancement in hot add proxy changes by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2048
 * [2050] Optimize retry flow and add bulk retry by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2049
-* [2052] Fix Windows firstboot loop  by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2056
+* [2052] Fix Windows firstboot loop by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2056
 * [1915] Added persist source network interfaces as a global setting by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2058
 * [2054] fix(retry): prefilled IP overrides not shown in Assign IP dialog on retry form by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2059
-* [2062] fix - ssh keypair name missmatch by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2060
+* [2062] fix - SSH keypair name mismatch by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2060
 * #2051: Converting disk shows copy disk inside the migration details page by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2063
-* #2067: Block/Grey out the already registered proxy vm, this could mismatch the secret by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2070
+* #2067: Block/Grey out the already registered proxy VM, this could mismatch the secret by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2070
 * [2079] Fix ProxyVM showing Ready status while SSH validation is failing by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2080
 * #2068 #2078 #2069: VM is in conversion state but it shows Hot add transfer in UI and stuck in validating state by @AbhijeetThakur in https://github.com/platform9/vjailbreak/pull/2074
 * [2077] Fix: Reset to Defaults must skip NTP server & timezone while migration running by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2084
@@ -1071,9 +1071,9 @@ kubectl rollout restart deployment -n migration-system
 * @valentin-pf9 made their first contribution in https://github.com/platform9/vjailbreak/pull/1945
 
 ### Highlights
-**Migration details page**: Added new page which shows in depth state monitoring for migration lifecycle. 
+**Migration details page**: Added a new page which shows in-depth state monitoring for migration lifecycle.
 
-**Vjailbreak Proxy**: 
+**vJailbreak Proxy**:
 * End-to-end UI for registering a Proxy VM (SSH key upload, validation status), selecting Hot-Add as the copy method in the migration form, and monitoring hot-add-specific migration phases
 * Verification now auto-installs missing dependencies on the Proxy VM during validation, eliminating the need for manual pre-configuration before registering
 
