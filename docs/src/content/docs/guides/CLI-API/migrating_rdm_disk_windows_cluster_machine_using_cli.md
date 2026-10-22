@@ -160,7 +160,9 @@ For each VM, go to **Edit Settings** and perform the following steps. _Note down
 1. Click on the cross icon near the RDM disks, and keep "Delete files from storage" **unchecked**.
 2. Remove the SCSI controller used by these disks (this will be in Physical sharing mode).
 
-Note: Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
+:::caution
+Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
+:::
 
 ![Detach RDM Disk in VMware](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-removing-rdm-disk.png)
 
@@ -183,10 +185,10 @@ Follow the detailed CLI steps here:
 
 [Migrating Using CLI and Kubectl](https://platform9.github.io/vjailbreak/guides/cli-api/migrating_using_cli_and_kubectl/)
 
-Note:
-
+:::note
 - While creating the migration plan, make sure the actual VM name is passed in `spec.virtualMachines` of the migrationplan and not the VM custom resource name.
 - Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy.
+:::
 
 ### 6. Wait for Disk to Become Available
 
@@ -215,14 +217,14 @@ If VM migrations fail, but RDM disks have been successfully managed by Cinder [S
 
 ### Rollback Plan - If Migration Fails
 
-### ⚠️ Caution:
-
+:::caution
 Once an RDM disk is managed in OpenStack or PCD, do not delete the corresponding volume from PCD/OpenStack during a rollback.
 Deleting the volume will also remove the associated LUN reference from the storage array, resulting in irreversible data loss.
 
 To unmanage an RDM disk safely, use the following command instead of deleting it directly:
 
 `openstack volume delete <volume-id> --remote`
+:::
 
 1. Delete VMs created in PCD or OpenStack.
 2. Remove the managed volume from OpenStack without deleting it from the SAN array:
@@ -231,7 +233,7 @@ To unmanage an RDM disk safely, use the following command instead of deleting it
    openstack volume delete <volume-id> --remote
    ```
 
-- [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete)
+   See [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete)
 
 3. Re-attach RDM disk in VMware to powered-off VMs:
 
@@ -242,6 +244,6 @@ To unmanage an RDM disk safely, use the following command instead of deleting it
 
    Repeat this process for all RDM disks.
 
-![Re-attach RDM disk on failure](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-adding-back-disk.png)
+   ![Re-attach RDM disk on failure](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-adding-back-disk.png)
 
 4. Power on all the VMs on VMware.

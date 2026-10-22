@@ -34,11 +34,15 @@ vjbctl user change-password <username>
 vjbctl user refresh
 ```
 
-> Tip: Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `change-password`) to defer applying changes. Then run `vjbctl user refresh` once to apply all pending changes for better efficiency.
+:::tip
+Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `change-password`) to defer applying changes. Then run `vjbctl user refresh` once to apply all pending changes for better efficiency.
+:::
 
 ## Usage
 
-> Note: After any user change (e.g., password updates or deletions), run `vjbctl user refresh` for the changes to be reflected.
+:::note
+`vjbctl user create`, `delete` and `change-password` restart the vJailbreak UI automatically, so the change takes effect right away. If you used `--no-restart`, run `vjbctl user refresh` to apply the pending changes.
+:::
 
 ### List users
 

@@ -3,8 +3,6 @@ title: Network Persistence
 description: Guide to Linux and Windows network interface persistence post-migration
 ---
 
-# Network Persistence Post-Migration
-
 This document details the mechanism for ensuring network interface persistence following a virtual machine migration for both Linux and Windows operating systems.
 
 ## Prerequisites

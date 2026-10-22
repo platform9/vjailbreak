@@ -84,8 +84,9 @@ To configure a post-migration firstboot script:
 ![img1](../../../../../public/images/firstboot-form-1.png)
 
 
-> **Note:**  
-> Untagged script blocks run on all selected VMs.
+:::note
+Untagged script blocks run on all selected VMs.
+:::
 
 ---
 

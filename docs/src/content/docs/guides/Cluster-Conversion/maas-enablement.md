@@ -26,7 +26,7 @@ This requires you to have a MAAS CLI. The MAAS CLI can be used to add any machin
 'deployed' state.
 
 ```
-$ maas $profile machines create deployed=true hostname=mymachine \   
+$ maas $profile machines create deployed=true hostname=mymachine \
 architecture=amd64 mac_addresses=00:16:3e:df:35:bb power_type=ipmi \
 power_parameters_power_address=<IPMI_IP> \
 power_parameters_power_user=<IPMI_USER> \

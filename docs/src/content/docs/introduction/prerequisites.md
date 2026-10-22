@@ -5,7 +5,7 @@ description: Prerequisites for vJailbreak
 
 For frequently asked questions, see [FAQ](../faq/).
 
-### VDDK requirements
+## VDDK requirements
 
 VDDK is required only if you plan to use the **Standard** storage copy method.
 **vJailbreak Accelerated Copy** and **Storage Accelerated Copy** do not require VDDK.
@@ -17,11 +17,11 @@ VDDK. As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot
 Storage Accelerated Copy supports cold migration only.
 :::
 
-### What access do I need for my vCenter user to be able to perform this migration?
+## What access do I need for my vCenter user to be able to perform this migration?
 
 The required privileges depend on which features you use. The base set below is required for all migrations. Additional privileges are listed separately for vJailbreak Accelerated Copy and OVA-based Proxy VM deployment.
 
-#### Base Privileges (all migrations)
+### Base Privileges (all migrations)
 
 | Privilege | Description |
 | --- | --- |
@@ -65,10 +65,9 @@ The required privileges depend on which features you use. The base set below is 
 | `Cryptographer.Access` | Base access to cryptographic operations on the VM |
 | `Cryptographer.Decrypt` | Decrypt the VM's disks for read access during migration |
 
+#### `VixDiskLib_Open` token-retrieval failure
 
-## Troubleshooting
-
-### `VixDiskLib_Open` token-retrieval failure
+A missing encryption privilege does not produce a permissions error. It shows up as the following failure.
 
 **Symptom**: Migration fails during disk open with:
 
@@ -81,7 +80,7 @@ Unable to locate appropriate transport mode
 
 **Fix**: Verify the account role includes both `Cryptographer.Access` and `Cryptographer.Decrypt`. Re-check with `govc permissions.ls` against the target VM.
 
-#### Additional Privileges: vJailbreak Accelerated Copy Migrations
+### Additional Privileges: vJailbreak Accelerated Copy Migrations
 
 Required when using the **vJailbreak Accelerated Copy** storage copy method (VMware hot-add). vJailbreak attaches snapshot disks from the source VM to a Proxy VM and detaches them after the NBD copy completes. The controller also automatically enables `disk.EnableUUID` on the Proxy VM if it is not already set.
 
@@ -91,7 +90,7 @@ Required when using the **vJailbreak Accelerated Copy** storage copy method (VMw
 | `Virtual machine.Config.RemoveDisk` | Allows removing a disk from a virtual machine — used to detach source disks from the Proxy VM after copy. |
 | `Virtual machine.Config.AdvancedConfig` | Allows modifying VM extra config parameters — used to set `disk.EnableUUID = TRUE` on the Proxy VM. |
 
-#### Additional Privileges: OVA-Based Proxy VM Deployment
+### Additional Privileges: OVA-Based Proxy VM Deployment
 
 Required only when using the **Deploy a new vJailbreak Proxy VM** option in the UI. These privileges are not needed if you register an existing VM as the Proxy VM.
 
@@ -105,11 +104,11 @@ Required only when using the **Deploy a new vJailbreak Proxy VM** option in the 
 | `Virtual machine.Inventory.Create` | Allows creating a virtual machine in the vCenter inventory — used to register the Proxy VM after OVA import. |
 | `Virtual machine.Config.AdvancedConfig` | Allows modifying VM extra config parameters — used to set `disk.EnableUUID = TRUE` on the newly deployed Proxy VM. |
 
-### Understanding VMware NFC Performance Limitations
+## Understanding VMware NFC Performance Limitations
 
 vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC (Network File Copy) protocol over port 902. It's important to understand the inherent performance characteristics and limitations of VMware's NFC protocol:
 
-#### NFC Protocol Characteristics
+### NFC Protocol Characteristics
 
 - **Per-VMDK throughput limit**: NFC is limited to approximately **1 Gbps per VMDK** due to VMware's internal implementation
 - **Single-threaded**: NFC operations are single-threaded, limiting performance to what a single thread can achieve
@@ -117,13 +116,13 @@ vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC 
 - **Synchronous operations**: NFC must complete READ/WRITE/CHECK operations sequentially before proceeding
 - **Latency-aware throttling**: NFC will automatically throttle when network latency increases
 
-#### Impact on vJailbreak Migrations
+### Impact on vJailbreak Migrations
 
 - **Per-disk transfer speed**: Each VMDK transfers at approximately 1 Gbps (125 MB/s), regardless of available network bandwidth
 - **Network saturation**: Multiple parallel VM migrations can saturate network links (e.g., a 10 Gbps link can theoretically support ~10 concurrent VM migrations)
 - **Migration time estimation**: Expect transfer times of approximately 8-9 minutes per 100 GB per VMDK
 
-#### Recommendations
+### Recommendations
 
 - Plan migration schedules accounting for the ~1 Gbps per-VMDK limitation
 - For VMs with large single disks, migration time will be constrained by NFC throughput rather than network capacity
@@ -136,7 +135,7 @@ vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC 
 - [Veeam Forum: 1Gbit/s per VMDK Limit](https://forums.veeam.com/vmware-vsphere-f24/1gbit-s-per-vmdk-limit-t66468.html)
 - [Broadcom KB: NFC Performance](https://knowledge.broadcom.com/external/article/307001/nfc-performance-is-slow.html)
 
-### What ports do I need to open for vJailbreak to work?
+## What ports do I need to open for vJailbreak to work?
 Please refer to the following table for the required ports:
 
 | Port | Protocol | Source | Destination | Purpose |
@@ -148,11 +147,11 @@ Please refer to the following table for the required ports:
 | 10809–11808 (default) | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel). As of v0.6.0, the range is configurable; see [vJailbreak Settings](../../guides/how-to/vjailbreak_settings/) |
 
 
-### What network connectivity do I need for vJailbreak?
+## What network connectivity do I need for vJailbreak?
 
 During normal migration operations, vJailbreak only requires connectivity to vCenter, ESXi hosts, and the OpenStack API. The additional endpoints listed below are needed only when **installing or upgrading vJailbreak** itself.
 
-#### Required for Migration (always)
+### Required for Migration (always)
 
 The vJailbreak VM and any helper nodes must be able to reach:
 
@@ -161,7 +160,7 @@ The vJailbreak VM and any helper nodes must be able to reach:
 - **ICMP (ping) access to guest VM IPs** — for post-migration connectivity verification (health checks)
 - **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports, if health checks are enabled
 
-#### Required for Installation and Upgrades Only
+### Required for Installation and Upgrades Only
 
 The following endpoints are accessed during first-time installation or when upgrading vJailbreak. They are **not** required during normal migration operations:
 
@@ -187,7 +186,7 @@ The following endpoints are accessed during first-time installation or when upgr
 
 
 
-### Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
+## Required Ingress Rules for Kubernetes Node with Kubelet, Metrics Server, and Prometheus
 
 | **Component**      | **Port**  | **Protocol** | **Source** | **Purpose** |
 |--------------------|----------|-------------|------------|-------------|
