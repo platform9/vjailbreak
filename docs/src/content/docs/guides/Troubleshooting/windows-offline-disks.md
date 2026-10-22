@@ -3,8 +3,6 @@ title: Windows Offline Disks After Migration
 description: Troubleshooting guide for Windows VMs with offline disks after migration from VMware to PCD
 ---
 
-# Windows Offline Disks After Migration
-
 ## Problem Description
 
 After migrating a Windows VM from VMware vCenter to PCD using vJailbreak, additional disks (beyond the primary C: drive) may not be visible inside the Windows operating system, even though they are successfully attached to the VM in PCD.
@@ -88,38 +86,19 @@ Check File Explorer - your drives (E:, F:, G:, etc.) should now be visible.
 
 ## Automated Solution
 
-vJailbreak provides automated scripts to detect and fix this issue during first boot after migration.
+vJailbreak fixes this issue automatically. During conversion, it adds a PowerShell script, `disk-online-fix.ps1`, to every converted Windows VM. The script runs on the VM's first boot after migration. You do not need to copy or paste anything into the migration form.
 
-### Available Scripts
+The script:
 
-Two BAT scripts are available in the `scripts/firstboot/windows/` directory. These scripts generate PowerShell scripts that run on first boot:
+- Scans all physical disks and reports their operational status (Online/Offline)
+- Lists partitions and drive letter assignments, and identifies disks without drive letters
+- Reports read-only disks and disks with health issues
+- **Brings all offline disks online**
+- Writes a detailed report of everything it found and did to `C:\DiskStatus_Report.txt` on the migrated VM
 
-1. **`check-disks.bat`** - Generates a diagnostic PowerShell script that only checks disk status
-2. **`disk-online-fix.bat`** - Generates an automated fix PowerShell script that brings offline disks online
-
-**Usage**: Copy the contents of either BAT file and paste it into the **Post Migration Script** field in the migration form. The script will execute automatically on first boot after migration.
-
-### Script 1: Check Disks (Diagnostic Only)
-
-The `check-disks.bat` script generates `check-disks.ps1` which performs a read-only analysis:
-
-- Scans all physical disks
-- Reports operational status (Online/Offline)
-- Lists partitions and drive letter assignments
-- Identifies disks without drive letters
-- Checks for read-only disks and health issues
-- Generates a detailed report at `C:\DiskStatus_Report.txt`
-
-
-### Script 2: Disk Online Fix (Automated Repair)
-
-The `disk-online-fix.bat` script generates and executes `check-disks-fix.ps1` which automatically fixes offline disk issues:
-
-- Performs all diagnostic checks from Script 1
-- **Automatically brings ALL offline disks online**
-- Logs all actions to `C:\DiskStatus_Report.txt`
-
-**Note**: The generated PowerShell script (`check-disks-fix.ps1`) is a separate file from the diagnostic-only `check-disks.ps1`. It includes all diagnostic functionality plus automated repair capabilities.
+:::note
+Older versions of this guide described two BAT scripts (`check-disks.bat` and `disk-online-fix.bat`) to paste into the post-migration script field. That is no longer needed: `disk-online-fix.ps1` runs automatically on every converted Windows VM.
+:::
 
 
 ## ⚠️ Important Warnings
@@ -144,10 +123,9 @@ The automated fix script uses a **blanket approach** to bring ALL offline disks 
 
 ### Recommendations
 
-- Review the diagnostic output from `check-disks.bat` before running the automated fix
+- Review the report at `C:\DiskStatus_Report.txt` on each migrated Windows VM
 - Document which disks should be online in your source environment
 - Test the migration process with a non-critical VM first
-- Review the log file at `C:\DiskStatus_Report.txt` after running the fix script
 - Manually verify that all expected drives are accessible after the fix
 
 ## Prevention
@@ -155,13 +133,13 @@ The automated fix script uses a **blanket approach** to bring ALL offline disks 
 To prevent this issue in future migrations, you can:
 
 1. **Pre-configure SAN Policy**: Before migration, set the SAN policy on the source VM to `OnlineAll`
-2. **Post-migration Automation**: Copy the contents of `disk-online-fix.bat` into the Post Migration Script field in the migration form
+2. **Post-migration Automation**: No action is needed. vJailbreak runs `disk-online-fix.ps1` automatically on the first boot of every converted Windows VM
 3. **Document Disk States**: Maintain documentation of which disks should be online/offline for each VM
 
 :::caution[LDM system volumes]
 The automated solution above relies on firstboot scripts, which `virt-v2v` installs
 during conversion. Windows VMs whose system volume is on a dynamic disk (LDM) skip
-conversion, so the Post Migration Script does not run for them — the SAN policy
+conversion, so `disk-online-fix.ps1` does not run for them — the SAN policy
 **must** be set on the source VM beforehand. Leaving a disk offline on these guests
 breaks the LDM volume set. See
 [Windows Dynamic Disk (LDM) Migration](../../how-to/windows-ldm-migration/).

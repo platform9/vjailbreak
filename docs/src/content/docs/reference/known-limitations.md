@@ -104,7 +104,7 @@ Only one **primary** IP address per network interface is allowed when Preserve I
 
 Additional addresses on the same NIC can be marked **Virtual IP**, regardless of whether Preserve IP is on or off. vJailbreak attaches these to the port as Neutron allowed-address-pairs instead of fixed IPs, so no post-migration manual step is needed.
 
-**Limitations**: For Virtual IPs to take effect on destination network, the port security shall be enabled on the Network along with port having atleast 1 security group. This also implies that virtual Ips are ignored on L2-only networks.
+**Limitations**: For Virtual IPs to take effect on the destination network, port security shall be enabled on the network along with the port having at least 1 security group. This also implies that virtual IPs are ignored on L2-only networks.
 
 ## VMware Tools Removal: Residual Artifacts
 
@@ -124,7 +124,7 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 vJailbreak does not support migrating Linux VMs with **LUKS-encrypted** disks or partitions. `virt-v2v` cannot inspect or convert the guest without the decryption key, and vJailbreak has no way to supply one, so conversion fails.
 
-This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/).
+This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/#additional-privileges-required-for-encrypted-vms).
 
 **Workaround**: Decrypt the LUKS volumes on the source VM before migration.
 
@@ -136,7 +136,9 @@ In such scenarios, we recommend upgrading to GRUB2.
 
 **Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2.
 
-NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::note
+On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::
 
 ## RHEL 7 Guests Missing GRUB Compatibility Symlink
 
@@ -193,7 +195,7 @@ Standard flavors without hotplug extra specs will not support live resize. The V
 
 ## PCI Slot Exhaustion When Attaching Disks with virtio-blk
 
-During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, Maximum 26 devices can be attached after which PCI slots will exhaust and volume attach fails with:
+During conversion, vJailbreak attaches the target volumes to the vJailbreak VM (or its agent VMs). If the vJailbreak image is uploaded without a disk bus setting, OpenStack uses the default **virtio-blk** bus, where every attached volume consumes its own PCI slot. Migrating VMs with many disks, or running many parallel migrations on one agent, can exhaust PCI slots: a maximum of 26 devices can be attached, after which volume attach fails with:
 
 ```text
 libvirt.libvirtError: internal error: No more available PCI slots
@@ -209,7 +211,7 @@ openstack image set \
 ```
 
 :::note
-The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale up use the same image, so set these properties before scaling up.
+The disk bus is fixed when the VM is created. If the vJailbreak VM is already deployed, recreate it from the updated image. Agent VMs created during scale-up use the same image, so set these properties before scaling up.
 :::
 
 See the full troubleshooting entry: [Disk attach fails during migration: No more available PCI slots](../../guides/troubleshooting/troubleshooting/#disk-attach-fails-during-migration-no-more-available-pci-slots).
@@ -237,10 +239,10 @@ vJailbreak **Hot migration** (**Copy live VMs, then power off**) relies on VMwar
 
 VMs on older hardware versions (for example, version 4) do not expose the CBT property at all, so Hot migration cannot track changed blocks for them.
 
-**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step. The reported error looks similar to:
+**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step, before any data is copied. The reported error looks similar to:
 
 ```
-CBT is not enabled on disk <id>
+CBT Failure: changed block tracking (CBT) is not supported on virtual hardware version 4 (requires version 7 or newer); please use cold migration for this VM
 ```
 
 **What to do** — choose one:
@@ -274,13 +276,13 @@ nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. E
 CBT is not enabled on disk <id>
 ```
 
-**What to do**: Use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
+**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
 
 | Storage copy method | Hot migration | Cold migration |
 |---|---|---|
 | Normal (Standard) | Not supported | Not supported (VDDK bug) |
 | vJailbreak Accelerated Copy | Not supported (needs CBT) | Supported |
-| Storage-Accelerated Copy | N/A — always runs cold internally | Supported |
+| Storage Accelerated Copy | N/A — always runs cold internally | Supported |
 
 ## vJailbreak Accelerated Copy
 
@@ -288,9 +290,11 @@ The limitations below are specific to [vJailbreak Accelerated Copy](../../concep
 
 ### Concurrent Disk Attach Can Fail
 
-When several migrations reach the disk-attach step at the same time on the same Proxy VM, vCenter does not always handle the simultaneous reconfigure tasks gracefully and rejects some attach requests, failing those migrations. This is a **transient race condition** — the migrations that attached first are unaffected and continue into the copy phase.
+**Fixed in v0.5.0.** As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time. A migration that finds another one attaching waits for its turn, checking every 10 seconds for up to 30 minutes, and fails only if its turn does not come within that time.
 
-**Workaround**: [Retry](../../guides/how-to/retry_failed_migration/) the failed migrations once the others have moved into the copy phase. To reduce the chance of the race, stagger migration start times or distribute migrations across additional Proxy VMs.
+Before v0.5.0, when several migrations reached the disk-attach step at the same time on the same Proxy VM, vCenter did not always handle the simultaneous reconfigure tasks gracefully and rejected some attach requests, failing those migrations. This was a **transient race condition** — the migrations that attached first were unaffected and continued into the copy phase.
+
+**Workaround**: Upgrade to v0.5.0 or later. On any version, [retry](../../guides/how-to/retry_failed_migration/) a failed migration once the others have moved into the copy phase. To avoid failures or long waits, stagger migration start times or distribute migrations across additional Proxy VMs.
 
 See [Proxy VM disk attach fails when several migrations start together](../../guides/troubleshooting/troubleshooting/#proxy-vm-disk-attach-fails-when-several-migrations-start-together).
 

@@ -34,8 +34,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `false` | `true`, `false` |
 | `AUTO_PXE_BOOT_ON_CONVERSION` | Automatically configure PXE boot during conversion | `false` | `true`, `false` |
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks during hot migration | `20` | Any positive integer |
-| `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically cleanup OpenStack ports after migration failure | `false` | `true`, `false` |
-| `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically cleanup OpenStack volumes after conversion failure | `false` | `true`, `false` |
+| `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically clean up OpenStack ports after migration failure | `false` | `true`, `false` |
+| `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically clean up OpenStack volumes after conversion failure | `false` | `true`, `false` |
 | `DEFAULT_MIGRATION_METHOD` | Default method for VM migration | `cold` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
 | `DEPLOYMENT_NAME` | Name of the vJailbreak deployment | `vJailbreak` | Any string |
 | `NTP_SERVERS` | NTP servers the appliance synchronizes against. | Empty (default public pools) | Space-separated hostnames or IPv4 addresses (e.g., `ntp1.corp.local ntp2.corp.local`) |
@@ -58,7 +58,7 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
 | `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
 | `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
-| `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vjailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
+| `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vJailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |
 
@@ -72,7 +72,7 @@ You can modify the ConfigMap to change settings using one of the following metho
 kubectl edit configmap vjailbreak-settings -n migration-system
 ```
 
-Then add or modify the data values as needed:
+Then add or modify the data values as needed. As of v0.5.0, the appliance ships with these values:
 
 ```yaml
 apiVersion: v1
@@ -81,23 +81,36 @@ metadata:
   name: vjailbreak-settings
   namespace: migration-system
 data:
-  AUTO_FSTAB_UPDATE: "false"
+  AUTO_FSTAB_UPDATE: "true"
   AUTO_PXE_BOOT_ON_CONVERSION: "false"
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "30"
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "20"
   CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: "false"
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false"
   DEFAULT_MIGRATION_METHOD: "cold"
+  DEFAULT_NETWORK_PERSISTENCE: "false"
   DEPLOYMENT_NAME: "vJailbreak"
+  HTTP_TIMEOUT_SECONDS: "30"
+  LOG_RETENTION_HOURS: "24"
+  NTP_SERVERS: ""
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60"
   PERIODIC_SYNC_INTERVAL: "1h"
   PERIODIC_SYNC_MAX_RETRIES: "3"
   PERIODIC_SYNC_RETRY_CAP: "3h"
   POPULATE_VMWARE_MACHINE_FLAVORS: "true"
+  PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+  TIMEZONE: ""
+  V2V_HELPER_POD_CPU_LIMIT: "2000m"
+  V2V_HELPER_POD_CPU_REQUEST: "1000m"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: "3Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: "3Gi"
+  V2V_HELPER_POD_MEMORY_LIMIT: "5Gi"
+  V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"
   VALIDATE_RDM_OWNER_VMS: "true"
   VCENTER_LOGIN_RETRY_LIMIT: "5"
-  VCENTER_SCAN_CONCURRENCY_LIMIT: "150"
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "30"
-  VM_ACTIVE_WAIT_RETRY_LIMIT: "20"
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "10"
+  VDDK_REQUIRED: "false"
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "20"
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "15"
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60"
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: "10"
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: "15"
@@ -113,7 +126,11 @@ kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p 
 
 ### Method 3: From a file
 
-Create a file with your settings:
+:::caution
+The appliance creates this ConfigMap with `kubectl apply`, so applying a file that leaves out any of the shipped keys removes those keys from the ConfigMap. Each removed setting then falls back to its built-in default, which can differ from the value the appliance ships with (for example, the v2v-helper memory request and limit). Always include **every** setting in the file. Check your current values first with `kubectl get configmap vjailbreak-settings -n migration-system -o yaml`, so you don't revert settings changed earlier, for example on the **Global Settings** page.
+:::
+
+Create a file that contains every setting, then change the values you need. As of v0.5.0, the appliance ships with these settings:
 
 ```bash
 cat > vjailbreak-settings.yaml << EOF
@@ -123,23 +140,36 @@ metadata:
   name: vjailbreak-settings
   namespace: migration-system
 data:
-  AUTO_FSTAB_UPDATE: "false"
+  AUTO_FSTAB_UPDATE: "true"
   AUTO_PXE_BOOT_ON_CONVERSION: "false"
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "30"
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "20"
   CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: "false"
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false"
   DEFAULT_MIGRATION_METHOD: "cold"
+  DEFAULT_NETWORK_PERSISTENCE: "false"
   DEPLOYMENT_NAME: "vJailbreak"
+  HTTP_TIMEOUT_SECONDS: "30"
+  LOG_RETENTION_HOURS: "24"
+  NTP_SERVERS: ""
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60"
   PERIODIC_SYNC_INTERVAL: "1h"
   PERIODIC_SYNC_MAX_RETRIES: "3"
   PERIODIC_SYNC_RETRY_CAP: "3h"
   POPULATE_VMWARE_MACHINE_FLAVORS: "true"
+  PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+  TIMEZONE: ""
+  V2V_HELPER_POD_CPU_LIMIT: "2000m"
+  V2V_HELPER_POD_CPU_REQUEST: "1000m"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: "3Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: "3Gi"
+  V2V_HELPER_POD_MEMORY_LIMIT: "5Gi"
+  V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"
   VALIDATE_RDM_OWNER_VMS: "true"
   VCENTER_LOGIN_RETRY_LIMIT: "5"
-  VCENTER_SCAN_CONCURRENCY_LIMIT: "150"
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "30"
-  VM_ACTIVE_WAIT_RETRY_LIMIT: "20"
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "10"
+  VDDK_REQUIRED: "false"
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "20"
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "15"
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60"
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: "10"
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: "15"
@@ -186,13 +216,15 @@ This configures the system to sync every 30 minutes, with a maximum of 5 retries
 
 ### Enabling Automatic Cleanup After Failures
 
-To automatically cleanup resources after migration failures:
+To automatically clean up resources after migration failures:
 
 ```bash
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"CLEANUP_PORTS_AFTER_MIGRATION_FAILURE":"true","CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE":"true"}}'
 ```
 
-> **Note:** Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::note
+Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::
 
 ### Adjusting Volume Availability Wait Parameters
 
@@ -218,7 +250,9 @@ To disable the validation that requires all VMs linked to an RDM disk to be migr
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"VALIDATE_RDM_OWNER_VMS":"false"}}'
 ```
 
-> **Note:** When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::note
+When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::
 
 ### Setting Default Migration Method
 
@@ -284,7 +318,7 @@ All other settings are read dynamically at runtime and do not require a restart:
 
 ### When Changes Take Effect
 
-For settings that don't require restart:
+For settings that don't require a restart:
 
 - **On-demand access**: Values are read from the ConfigMap when they are needed for an operation
 - **New operations**: Changes affect only new operations that start after the ConfigMap is updated
@@ -309,4 +343,6 @@ Typically, your changes will be effective within seconds for any new operations 
 - After changing settings, monitor system behavior to ensure the changes produce the expected results.
 - Use vJailbreak logs to verify that settings are being correctly applied.
 
-> **Important:** Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::caution
+Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::
