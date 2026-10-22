@@ -222,7 +222,9 @@ To automatically clean up resources after migration failures:
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"CLEANUP_PORTS_AFTER_MIGRATION_FAILURE":"true","CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE":"true"}}'
 ```
 
-> **Note:** Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::note
+Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::
 
 ### Adjusting Volume Availability Wait Parameters
 
@@ -248,7 +250,9 @@ To disable the validation that requires all VMs linked to an RDM disk to be migr
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"VALIDATE_RDM_OWNER_VMS":"false"}}'
 ```
 
-> **Note:** When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::note
+When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::
 
 ### Setting Default Migration Method
 
@@ -339,4 +343,6 @@ Typically, your changes will be effective within seconds for any new operations 
 - After changing settings, monitor system behavior to ensure the changes produce the expected results.
 - Use vJailbreak logs to verify that settings are being correctly applied.
 
-> **Important:** Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::caution
+Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::

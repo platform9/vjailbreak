@@ -336,7 +336,7 @@ If not already done:
 
 ### Step 2: Configure Storage Array Credentials
 
-1. Navigate to **Storage Management**
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
 2. You'll see auto-discovered entries for each PCD storage backend:
    - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
    - **Vendor**: Auto-identified from driver type
@@ -345,18 +345,18 @@ If not already done:
    - **Source**: "Auto-discovered"
    - **Credentials**: "Pending" (requires your input)
 
-3. Click the **Edit** icon for a storage array entry
+3. Click the **Edit credentials** icon for a storage array entry
 
-![Storage Array Credentials Edit](../../../assets/credsedit.png)
+   ![Storage Array Credentials Edit](../../../assets/credsedit.png)
 
-4. Fill in the storage array credentials:
-   - **Hostname/IP**: Storage array management IP address
+4. Fill in the storage array credentials in the **Edit Array Credentials** drawer:
+   - **Management Endpoint**: Storage array management IP address or hostname
    - **Username**: Array administrator username
    - **Password**: Array administrator password
-   - **Skip SSL Verification**: Enable for testing environments (disable in production)
+   - **Allow insecure connection**: Skips TLS certificate verification. Enable for testing environments (disable in production)
    - **NetApp only**: SVM and FlexVol where LUNs will be created
    - **Hitachi Vantara only**: optional Pool ID and REST Port (see [Hitachi Vantara](#hitachi-vantara))
-5. Click **Save**
+5. Click **Update**
 6. The system will:
    - Validate the credentials
    - Connect to the storage array
@@ -374,7 +374,7 @@ If not already done:
 
 1. When creating a migration plan, select **Storage Accelerated Copy** as the storage copy method
 
-![Storage Accelerated Copy](../../../assets/trigger-mig.png)
+   ![Storage Accelerated Copy](../../../assets/trigger-mig.png)
 
 2. The UI will automatically map datastores to ArrayCreds if everything is configured correctly
 3. Start the migration - it will use array-level XCOPY for data transfer
@@ -418,7 +418,7 @@ When Storage Accelerated Copy is enabled, the migration follows this workflow:
 │                                                                 │
 │  5. Convert Volumes (same as normal migration)                  │
 │                                                                 │
-│  6. Create Target VM in PCD                               │
+│  6. Create Target VM in PCD                                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```

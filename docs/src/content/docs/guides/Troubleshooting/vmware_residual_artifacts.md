@@ -6,7 +6,7 @@ description: Residual VMware artifacts
 In v0.4.4, the following artifacts remain on the Windows VMs after selecting the "Remove VMware Tools" option:
 
 
-### 1. VMware Driver Files
+## 1. VMware Driver Files
 
 | Driver File Path | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
@@ -32,7 +32,7 @@ In v0.4.4, the following artifacts remain on the Windows VMs after selecting the
 | C:\Windows\System32\drivers\vms3cap.sys | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 | C:\Windows\System32\drivers\vmstorfl.sys | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 
-### 2. VMware Registry Keys
+## 2. VMware Registry Keys
 
 | Registry Key Path | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
@@ -61,7 +61,7 @@ In v0.4.4, the following artifacts remain on the Windows VMs after selecting the
 | HKLM:\SYSTEM\CurrentControlSet\Services\VMwareCAFManagementAgentHost | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 | HKLM:\SYSTEM\CurrentControlSet\Services\vnetWFP | **Present** | Not Found | Not Found | Not Found | Not Found | Not Found |
 
-### 3. VMware Folders
+## 3. VMware Folders
 
 | Folder Path | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
@@ -74,13 +74,13 @@ In v0.4.4, the following artifacts remain on the Windows VMs after selecting the
 | C:\Users\Administrator\AppData\Roaming\VMware | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 | C:\ProgramData\Microsoft\Windows\Start Menu\Programs\VMware | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 
-### 4. Startup Entries
+## 4. Startup Entries
 
 | Startup Entry | 2012 | 2016 | 2019 | 2022 | 2025 | Win11 |
 |---|---|---|---|---|---|---|
 | vmtoolsd (HKLM:\Software\Microsoft\Windows\CurrentVersion\Run) | Not Found | Not Found | Not Found | Not Found | Not Found | Not Found |
 
-### 5. VMware Devices (Device Manager)
+## 5. VMware Devices (Device Manager)
 
 Devices with **Error** status indicate a residual device entry whose driver was removed with VMware Tools.
 
@@ -90,7 +90,7 @@ Devices with **Error** status indicate a residual device entry whose driver was 
 | VMware Pointing Device | Error | Error | Error | Not Found | Not Found | Error |
 | **Total devices found** | **2** | **2** | **2** | **0** | **0** | **1** |
 
-### 6. Impact of Remaining Artifacts
+## 6. Impact of Remaining Artifacts
 
 | Artifact | Versions | Impact |
 |---|---|---|
