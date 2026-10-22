@@ -6,11 +6,11 @@ description: Usage
 vJailbreak works by running itself as a VM on the target OpenStack cloud. It connects remotely
 to the VMware vSphere environment to perform the migration. vJailbreak supports multiple storage
 copy methods: the **Standard** copy method uses the VMware VDDK library, while **vJailbreak
-Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK. These are
+Accelerated Copy** and **Storage Accelerated Copy** do not require VDDK. These are
 the recommended methods when VDDK is unavailable.
 
 It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
-provisioning operations including creation of volumes, VMs.
+provisioning operations, including creation of volumes and VMs.
 
 ### Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
@@ -55,10 +55,10 @@ wget https://vjailbreak.s3.us-west-2.amazonaws.com/releases/<version>/vjailbreak
 
 These will download the vJailbreak qcow2 image locally in the same directory named `vjailbreak.qcow2`.
 
-Note: This direct download method is supported starting from v0.3.2 and later versions.
+Note: This direct download method is supported in v0.3.2 and later versions.
 
 ### Upload image to OpenStack
-These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9 hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
+These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9-hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
 - Follow the instructions in _Private Cloud Director > Images > Import with CLI_ to upload the image from the command line.
 - Upload the vJailbreak qcow2 image to your image library.
 ```shell
@@ -71,7 +71,7 @@ openstack image set --property hw_disk_bus=scsi --property hw_scsi_model=virtio-
 ```
 
 ### Create vJailbreak VM
-- Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use larger flavor for larger VM migration).
+- Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use a larger flavor for larger VM migrations).
 - Choose a network that can reach your VMware vCenter environment.
 - Assign a network security group that allows inbound and outbound traffic.
 
@@ -93,8 +93,9 @@ When the vJailbreak VM starts in an L2-only network, the installation script det
 
 1. The VM boots and initializes basic services
 2. The script sets a default password for the `ubuntu` user
-3. K3s master setup begins but pauses waiting for network availability
-4. The console displays repeated messages indicating it is waiting for network configuration
+3. The script installs the time settings (NTP/timezone) apply script
+4. K3s master setup begins but pauses waiting for network availability
+5. The console displays repeated messages indicating it is waiting for network configuration
 
 **Console output during wait state:**
 ```
@@ -104,6 +105,8 @@ When the vJailbreak VM starts in an L2-only network, the installation script det
 [2026-03-17 10:07:59] INSTALL_K3S_EXEC: server --secrets-encryption
 [2026-03-17 10:07:59] Setting default password for ubuntu user...
 [2026-03-17 10:07:59] Default password set for ubuntu user. User will need to change it on first login
+[2026-03-17 10:07:59] Installing vJailbreak time settings apply script (NTP/timezone)...
+[2026-03-17 10:07:59] Time settings apply script installed.
 [2026-03-17 10:07:59] Setting up K3s Master...
 [2026-03-17 10:07:59] Waiting for network availability...
 [2026-03-17 10:07:59] Waiting for network: missing default route and global IPv4 address...
@@ -180,21 +183,29 @@ You will see the script transition from waiting to active installation:
 [2026-03-17 11:09:09] K3s is ready.
 [2026-03-17 11:09:10] Loading all the images in /etc/pf9/images...
 [2026-03-17 11:10:38] Applying kube-prometheus manifests...
-[2026-03-17 11:10:50] K3s master setup completed
-[2026-03-17 11:10:51] Rsync daemon started successfully.
-[2026-03-17 11:10:51] Config map created successfully.
-[2026-03-17 11:10:51] Installing cert-manager
-[2026-03-17 11:10:53] Waiting for cert-manager deployments to become available
-[2026-03-17 11:11:04] removing the cron job
+[2026-03-17 11:10:50] vjailbreak-ai admin key generated and stored in secret
+[2026-03-17 11:10:50] Installing cert-manager
+[2026-03-17 11:10:52] Waiting for cert-manager deployments to become available
+[2026-03-17 11:11:03] K3s master setup completed
+[2026-03-17 11:11:04] Rsync daemon started successfully.
+[2026-03-17 11:11:04] Config map created successfully.
+[2026-03-17 11:11:04] Waiting for VolumeImageProfile CRD to be Established
+[2026-03-17 11:11:05] Seeding default VolumeImageProfile resources
+[2026-03-17 11:11:06] removing the cron job
 ```
 
 The installation performs the following steps automatically:
 1. **K3s Initialization** - Kubernetes cluster setup completes
 2. **Image Loading** - Container images are loaded from `/etc/pf9/images`
-3. **Prometheus Setup** - Monitoring stack is deployed
-4. **Rsync Daemon** - File synchronization service starts
-5. **Cert-Manager** - TLS certificate management is installed
-6. **Cleanup** - Temporary cron jobs are removed
+3. **Ingress Controller** - The NGINX ingress controller that serves the vJailbreak UI is installed
+4. **Prometheus Setup** - Monitoring stack is deployed
+5. **AI Analysis Key** - An admin key for the AI analysis service is generated and stored in a secret
+6. **Cert-Manager** - TLS certificate management is installed
+7. **vJailbreak Components** - The vJailbreak manifests are applied
+8. **Rsync Daemon** - File synchronization service starts
+9. **Environment ConfigMap** - The `pf9-env` ConfigMap is created from `/etc/pf9/env`
+10. **Default Profiles** - The default volume image profiles are created
+11. **Cleanup** - Temporary cron jobs are removed
 
 #### Step 4: Access vJailbreak
 
@@ -225,9 +236,9 @@ ip route | grep default
 
 ### Configure VM with cloud-init
 
-Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or CLI.
+Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or the CLI.
 
-**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password." After the first login, you will be prompted to change the password and if the password is set using cloud-init you will not be prompted to change the password at first login.
+**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
 
 #### Networks with DHCP
 
@@ -314,14 +325,14 @@ runcmd:
 ### Copy VDDK Libraries (Standard Copy Only)
 
 VDDK is required only if you plan to use the **Standard** storage copy method. If you are using
-**vJailbreak Accelerated Copy** or **Storage-Accelerated Copy**, skip this step; neither method
+**vJailbreak Accelerated Copy** or **Storage Accelerated Copy**, skip this step; neither method
 requires VDDK.
 
 :::caution[VDDK currently unavailable]
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
-package, use **vJailbreak Accelerated Copy** or **Storage-Accelerated Copy** instead. Both work
-without VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only** (source VM
-must be powered off before copy).
+package, use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead. Both work
+without VDDK. As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot)
+migration. Storage Accelerated Copy supports cold migration only.
 :::
 
 If you have a VDDK 8.0.x package, copy it into `/home/ubuntu` of the vJailbreak VM and untar it
@@ -349,7 +360,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
   sudo sh -c 'echo "192.168.1.101 esxi01.example.com esxi01" >> /etc/hosts'
   sudo sh -c 'echo "192.168.1.102 esxi02.example.com esxi02" >> /etc/hosts'
   ```
-  Once the `/etc/hosts` file is modified execute below commands to apply the changes.
+  Once the `/etc/hosts` file is modified, execute the command below to apply the changes.
   ```
   kubectl -n migration-system rollout restart deployment migration-controller-manager
   ```
@@ -374,7 +385,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
  
 ### Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
-- Add VMware and OpenStack credentials. See more here [Credential Management](../../concepts/credential-management/).
+- Add VMware and OpenStack credentials. See more in [Credential Management](../../concepts/credential-management/).
 - Select the VMs you wish to migrate and complete the rest of the migration form.
 - Migrate your VMs.
 

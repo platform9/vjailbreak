@@ -1,6 +1,6 @@
 ---
 title: "Migrating RDM Disk"
-description: "A guide on how to migrate a Virtual Machine with RDM disks using the vjailbreak CLI."
+description: "A guide on how to migrate a Virtual Machine with RDM disks using the vJailbreak CLI."
 ---
 
 
@@ -17,18 +17,18 @@ RDM disk migration is only supported for **PCD version >= July 2025 (2025.7)** a
 Before you begin, ensure the following:
 
 1. **RDM disk is attached** to the Windows machine.
-2. **vjailbreak** is deployed in your cluster.
+2. **vJailbreak** is deployed in your cluster.
 3. **PCD Requirements**:
    - Minimum version: **July 2025 (2025.7)**.
    - For multipath support (connecting to SAN array): **October 2025 (2025.10)** - includes patched libvirt and QEMU packages.
    - **Volume type must have multi-attach support enabled** in OpenStack.
 4. All required fields (like `cinderBackendPool` and `volumeType`) are available from your `OpenstackCreds`.
-5. Source Details are added on RDM VMs in VMware described [here](#on-vmware)
-6. Storage array configured in PCD is same as the one configured in VMware. Usually SAN arrays have logical pools/isolation, that must be same as well.
+5. Source details are added on RDM VMs in VMware as described [here](#on-vmware).
+6. The storage array configured in PCD is the same as the one configured in VMware. Usually, SAN arrays have logical pools/isolation that must be the same as well.
 
 You can fetch `cinderBackendPool` and `volumeType` values using:
 
-By describing the OpenStack credentials in vjailbreak:
+By describing the OpenStack credentials in vJailbreak:
 
 ```bash
 kubectl describe openstackcreds <openstackcredsname> -n migration-system
@@ -36,7 +36,7 @@ kubectl describe openstackcreds <openstackcredsname> -n migration-system
 
 After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
 
-**Alternatively** you can also gather details using openstack cli
+**Alternatively**, you can also gather details using the OpenStack CLI:
 
 ```bash
 openstack volume backend pool list
@@ -45,16 +45,16 @@ openstack volume type list
 
 Please refer to the following documents for commands to fetch volume backend pool and volume type lists:
 
-opnestack cli version >= 6.2.1
+OpenStack CLI version >= 6.2.1
 
 - [Volume Type List](https://docs.openstack.org/python-openstackclient/queens/cli/command-objects/volume-type.html#volume-type-list)
 - [Volume Backend Pool List](https://docs.openstack.org/python-openstackclient/latest/cli/command-objects/volume-backend.html#volume-backend-pool-list)
 
 ## RDM Validation settings
 
-In vjailbreak setting configmap we have a setting called `VALIDATE_RDM_OWNER_VMS` whose default value is `true`.
+In the vJailbreak settings ConfigMap, we have a setting called `VALIDATE_RDM_OWNER_VMS` whose default value is `true`.
 
-This setting manadates all VM linked to RDM disk must be migrated in a single migration plan, to disable it set `VALIDATE_RDM_OWNER_VMS` to false
+This setting mandates that all VMs linked to an RDM disk be migrated in a single migration plan. To disable it, set `VALIDATE_RDM_OWNER_VMS` to false.
 
 ## On VMware
 
@@ -63,24 +63,24 @@ Perform the following steps on each VM from the cluster you are planning to migr
 - Add the following annotation to the VMware Notes field for the VM:
 
   ```
-  VJB_RDM:{Name of Hardisk}:volumeRef:source-name=abac111
+  VJB_RDM:{Name of Hard disk}:volumeRef:source-name=abac111
   ```
 
   - VJB_RDM – Key prefix indicating this entry is an RDM (Raw Device Mapping) LUN reference.
-  - {Name of Hardisk} - Name of the RDM disk attached to the VM. Replace this placeholder with the actual disk name.
-    Disk Name is case sensitive.
+  - {Name of Hard disk} - Name of the RDM disk attached to the VM. Replace this placeholder with the actual disk name.
+    The disk name is case-sensitive.
   - volumeRef – Denotes the reference section for the volume configuration.
     source-name=abac111 – Specifies the LUN reference.
     The key can be either source-id or source-name.
 
     The value is the LUN identifier (ID or Name) used to map the disk.
-    To obtain the source details ie `source-id`, `source-name`, you can run the following command against the SAN Array:
+    To obtain the source details, i.e., `source-id` and `source-name`, you can run the following command against the SAN array:
 
     ```bash
     openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
     ```
 
-**Note: Not all SAN arrays are supported by the OpenStack block storage client, in such cases above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
+**Note: Not all SAN arrays are supported by the OpenStack block storage client; in such cases, the above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
 
 RDM disk migration has been tested with two storage arrays:
 
@@ -101,19 +101,19 @@ Check if the **RDM disk resource** is created in Kubernetes:
 kubectl get rdmdisk <vml-id> -n migration-system
 ```
 
-Ensure the added annotations `source-name` or `source-id` are reflected in the vjailbreak RDM disk custom resource. Use the VML ID of the RDM disk from VMware.
+Ensure the added annotations `source-name` or `source-id` are reflected in the vJailbreak RDM disk custom resource. Use the VML ID of the RDM disk from VMware.
 
-If source details are not correct, edit the Notes section of VMware VM for correct value and wait for reconcilation ( few minutes ), to get source details updated.
+If the source details are not correct, edit the Notes section of the VMware VM with the correct value and wait for reconciliation (a few minutes) to get the source details updated.
 
 ### 2. Ensure RDM disk reference is correctly populated in vmwaremachine
 
-For each VM's to be migrated, list vm details on vjailbreak using below command:
+For each VM to be migrated, list the VM details on vJailbreak using the command below:
 
 ```bash
 kubectl describe vmwaremachine <vm-name> -n migration-system
 ```
 
-Ensure vml id of all RDM disks to be migrated appear in the vmwaremachine custom resource.
+Ensure the VML IDs of all RDM disks to be migrated appear in the vmwaremachine custom resource.
 
 ### 3. Detach the RDM Disk and Power Off the VM in VMware
 
@@ -122,16 +122,16 @@ Since VMware does not allow snapshots of a VM with attached RDM disks, you must:
 - **Power off** the VM to be migrated.
 - **Detach the RDM disk** from the VM (steps are mentioned below).
 
-Optional: Once the RDM disk is detached,you can list the vmwaremachine custom resource and ensure the VML ID of all RDM disks to be migrated appear in rdmDisk section of vmwaremachine custom resource in vjailbreak.
+Optional: Once the RDM disk is detached, you can list the vmwaremachine custom resource and ensure the VML IDs of all RDM disks to be migrated appear in the rdmDisk section of the vmwaremachine custom resource in vJailbreak.
 
 ```bash
 kubectl describe vmwaremachine <vm-name> -n migration-system
 ```
 
-**Note:** Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually
+**Note:** Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually.
 <br>
 
-Delete the `vmwaremachine` and `rdmdisk` custom resources on vjailbreak. After deletion wait for the configured reconciliation time, and re ensure that deleted resources are recreated by vjailbreak.
+Delete the `vmwaremachine` and `rdmdisk` custom resources on vJailbreak. After deletion, wait for the configured reconciliation time, and re-ensure that the deleted resources are recreated by vJailbreak.
 
 **Commands to delete VMware machine and RDM disk:**
 
@@ -143,7 +143,7 @@ kubectl delete vmwaremachine <vm-name> -n migration-system
 kubectl delete rdmdisk <rdm-vml-id> -n migration-system
 ```
 
-**Commands to verify VMware machine and RDM disk are recreated**
+**Commands to verify VMware machine and RDM disk are recreated:**
 
 ```bash
 kubectl describe vmwaremachine <vm-name> -n migration-system
@@ -155,7 +155,7 @@ kubectl describe rdmdisk <vml-id> -n migration-system
 
 **Steps to detach RDM disks in VMware:**
 
-For each VM, go to **Edit Settings** and perform following steps. _Note down the details as you might need them in case you have to revert the migration._
+For each VM, go to **Edit Settings** and perform the following steps. _Note down the details as you might need them in case you have to revert the migration._
 
 1. Click on the cross icon near the RDM disks, and keep "Delete files from storage" **unchecked**.
 2. Remove the SCSI controller used by these disks (this will be in Physical sharing mode).
@@ -185,12 +185,12 @@ Follow the detailed CLI steps here:
 
 Note:
 
-- While creating migration plan , make sure actual VM name is passed in `spec.virtualMachines` of migrationplan and not vm custom resource name.
-- Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy
+- While creating the migration plan, make sure the actual VM name is passed in `spec.virtualMachines` of the migrationplan and not the VM custom resource name.
+- Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy.
 
 ### 6. Wait for Disk to Become Available
 
-Confirm that the rdm disk is in **Available** state:
+Confirm that the RDM disk is in the **Available** state:
 
 ```bash
 kubectl get rdmdisk <disk-id> -n migration-system -o yaml
@@ -211,7 +211,7 @@ status:
 
 ### 8. Retrying failed migrations
 
-If VM migrations fails, but RDM disks have been successfully managed by Cinder [Step 6](#6-wait-for-disk-to-become-available), migration can be retried.
+If VM migrations fail, but RDM disks have been successfully managed by Cinder [Step 6](#6-wait-for-disk-to-become-available), migration can be retried.
 
 ### Rollback Plan - If Migration Fails
 

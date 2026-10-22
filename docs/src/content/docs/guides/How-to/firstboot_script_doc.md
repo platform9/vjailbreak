@@ -5,7 +5,7 @@ description: Guide on using firstboot scripts during VM migration
 
 
 ## Overview
-The Firstboot Script feature allows users to run custom scripts automatically on virtual machines (VMs) immediately after they are migrated to Platform9 Cloud Director (PCD) or OpenStack environments. This capability is essential for automating post-migration configurations, installations, and other setup tasks that need to be performed on the VM upon its first boot.
+The Firstboot Script feature allows users to run custom scripts automatically on virtual machines (VMs) immediately after they are migrated to Platform9 Private Cloud Director (PCD) or OpenStack environments. This capability is essential for automating post-migration configurations, installations, and other setup tasks that need to be performed on the VM upon its first boot.
 
 Following are some use cases for Firstboot Scripts:
 1. Installing or updating required software
@@ -21,8 +21,8 @@ The feature supports **multiple script blocks**, **OS-specific targeting**, and 
 
 User-provided script content depends on the guest operating system.
 
-1. **WindowsGuests**: `Powershell` (.ps1)
-2. **LinuxGuests**: `sh`, `bash` (.sh)
+1. **Windows guests**: `PowerShell` (.ps1)
+2. **Linux guests**: `sh`, `bash` (.sh)
 
 ---
 
@@ -106,7 +106,7 @@ To configure a post-migration firstboot script:
 | Linux   | Scripts are embedded into a generated wrapper |
 | Windows | Scripts are converted into PowerShell parts and executed through a scheduler |
 
-8. When the migrated VM boots for the first time, the prepared scripts execute automatically but needs multiple reboots to complete.
+8. When the migrated VM boots for the first time, the prepared scripts execute automatically but need multiple reboots to complete.
 
 :::caution[Not available for LDM system volumes]
 As step 5 shows, firstboot scripts are prepared **during conversion**. Windows VMs
@@ -200,5 +200,5 @@ This log contains:
 - Warnings for failed script blocks
 
 ## Link to Readily Available Firstboot Scripts
-1. [Windows VMware tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware tools/Drivers from Windows VMs
+1. **VMware Tools removal** - You do not need your own script to remove VMware Tools. Leave the **Remove VMware Tools** option enabled in the migration form (it is on by default), and vJailbreak runs its own removal script on the migrated VM's first boot
 2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1

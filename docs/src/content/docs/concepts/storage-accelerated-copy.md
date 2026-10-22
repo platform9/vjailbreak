@@ -1,12 +1,12 @@
 ---
 title: Storage Accelerated Copy
-description: High-performance VM migration using storage array level XCOPY operations
+description: High-performance VM migration using storage array-level XCOPY operations
 ---
 
-Storage Accelerated Copy is an advanced data copy method that leverages storage array level XCOPY operations to dramatically improve migration performance. Instead of copying data over the network via the traditional NBD/NFC protocol, this method offloads the data copy to the storage array itself, achieving significantly faster transfer speeds.
+Storage Accelerated Copy is an advanced data copy method that leverages storage array-level XCOPY operations to dramatically improve migration performance. Instead of copying data over the network via the traditional NBD/NFC protocol, this method offloads the data copy to the storage array itself, achieving significantly faster transfer speeds.
 
 :::note[VDDK not required]
-Storage-Accelerated Copy does not require VDDK at any stage. Disk data is copied directly by the
+Storage Accelerated Copy does not require VDDK at any stage. Disk data is copied directly by the
 storage array via `vmkfstools` XCOPY. VDDK is never used. This method is unaffected by VDDK
 availability.
 :::
@@ -17,7 +17,7 @@ availability.
 
 Traditional vJailbreak migrations copy VM disk data from VMware ESXi hosts to PCD Cinder volumes over the network using the NFC (Network File Copy) protocol. This approach is limited to approximately **1 Gbps per VMDK** due to VMware's NFC protocol constraints.
 
-Storage-Accelerated Copy bypasses this limitation by:
+Storage Accelerated Copy bypasses this limitation by:
 
 1. Creating a target volume directly on the storage array
 2. Importing the volume into PCD Cinder
@@ -53,7 +53,7 @@ Additional storage vendors may be added in future releases. The storage SDK is d
 
 ## Prerequisites
 
-Before using Storage-Accelerated Copy, ensure the following prerequisites are met:
+Before using Storage Accelerated Copy, ensure the following prerequisites are met:
 
 ### 1. Storage Array Configuration
 
@@ -64,7 +64,7 @@ Before using Storage-Accelerated Copy, ensure the following prerequisites are me
 
 ### 2. ESXi SSH Access
 
-Storage-Accelerated Copy requires SSH access to ESXi hosts to execute `vmkfstools` commands. Follow these steps to set up SSH access:
+Storage Accelerated Copy requires SSH access to ESXi hosts to execute `vmkfstools` commands. Follow these steps to set up SSH access:
 
 #### Step 1: Enable SSH on ESXi Hosts
 
@@ -80,7 +80,7 @@ Storage-Accelerated Copy requires SSH access to ESXi hosts to execute `vmkfstool
 
 **Option B: Using ESXi Host Client (Direct)**
 
-1. Log in to the ESXi host directly via web browser: `https://<esxi-host-ip>`
+1. Log in to the ESXi host directly via a web browser: `https://<esxi-host-ip>`
 2. Navigate to **Host** → **Actions** → **Services** → **Enable Secure Shell (SSH)**
 
 **Option C: Using ESXi Shell (Console)**
@@ -156,19 +156,23 @@ ssh -i ~/.ssh/esxi_migration_key root@<esxi-host-ip>
 
 ```
 
-If successful, you should be able to login to esxi.
+If successful, you should be able to log in to ESXi.
 #### Step 5: Configure SSH Key in vJailbreak
 
-1. Navigate to **Storage Management** page
-2. At the top, find the **ESXi SSH Key** section
-3. Click **Configure**
+1. In the left sidebar, navigate to **Credentials** → **ESXi SSH**
+2. Click **Configure SSH Key** (or **Edit SSH Key** if a key is already configured). The **Add ESXi SSH Key** (or **Edit ESXi SSH Key**) drawer opens
+3. Locate the **SSH Private Key** field
 4. Get your private key contents:
    ```bash
    cat ~/.ssh/esxi_migration_key
    ```
 5. Copy the entire output (including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`)
-6. Paste into the UI textarea
+6. Paste it into the **SSH Private Key** field
 7. Click **Save**
+
+:::tip
+If no ESXi SSH key is configured, the **Storage Array** page shows a warning banner. Click **Configure Now** in the banner to go to the **ESXi SSH** page.
+:::
 
 #### Step 6: Repeat for All ESXi Hosts
 
@@ -195,7 +199,7 @@ done
 :::note
 **Troubleshooting SSH Issues:**
 
-If SSH connection fails:
+If the SSH connection fails:
 1. Verify SSH service is running: `ssh root@<esxi-host> "/etc/init.d/ssh status"`
 2. Check firewall rules: ESXi firewall must allow SSH (port 22)
 3. Verify authorized_keys permissions: Should be `600` or `400`
@@ -302,7 +306,7 @@ Only storage backends with supported vendors (Pure Storage, NetApp, and Hitachi 
 
 ## Hitachi Vantara
 
-Hitachi Vantara VSP arrays are supported for Storage-Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
+Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
 
 ### Hitachi-specific fields
 
@@ -321,7 +325,7 @@ When you edit a Hitachi Vantara entry, an extra **Hitachi Vantara Target** secti
 
 ## Using the UI
 
-Storage-Accelerated Copy can be configured entirely through the vJailbreak UI with automatic backend discovery:
+Storage Accelerated Copy can be configured entirely through the vJailbreak UI with automatic backend discovery:
 
 ### Step 1: Add PCD Credentials
 
@@ -361,14 +365,14 @@ If not already done:
 
 ### Step 3: Configure ESXi SSH Key
 
-1. At the top of the Storage Management page, find the **ESXi SSH Key** section
-2. Click **Configure** if not already configured
-3. Paste your ESXi SSH private key (see [ESXi SSH Access](#2-esxi-ssh-access) section for key generation steps)
+1. In the left sidebar, navigate to **Credentials** → **ESXi SSH**
+2. Click **Configure SSH Key** if no key is configured yet (or **Edit SSH Key** to replace it)
+3. Paste your ESXi SSH private key into the **SSH Private Key** field (see the [ESXi SSH Access](#2-esxi-ssh-access) section for key generation steps)
 4. Click **Save**
 
-### Step 4: Create Migration with Storage-Accelerated Copy
+### Step 4: Create Migration with Storage Accelerated Copy
 
-1. When creating a migration plan, select **Storage-Accelerated Copy** as the storage copy method
+1. When creating a migration plan, select **Storage Accelerated Copy** as the storage copy method
 
 ![Storage Accelerated Copy](../../../assets/trigger-mig.png)
 
@@ -386,11 +390,11 @@ If not already done:
 
 ## Migration Workflow
 
-When Storage-Accelerated Copy is enabled, the migration follows this workflow:
+When Storage Accelerated Copy is enabled, the migration follows this workflow:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Storage-Accelerated Copy Flow                │
+│                    Storage Accelerated Copy Flow                │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. Validate Prerequisites                                      │
@@ -421,7 +425,7 @@ When Storage-Accelerated Copy is enabled, the migration follows this workflow:
 
 ## Migration Phases
 
-When using Storage-Accelerated Copy, you'll see these additional migration phases:
+When using Storage Accelerated Copy, you'll see these additional migration phases:
 
 | Phase | Description |
 |-------|-------------|
@@ -438,7 +442,7 @@ When using Storage-Accelerated Copy, you'll see these additional migration phase
 - **Cold migration only**: VMs must be powered off during the copy operation (no live migration support)
 - **Shared storage required**: Source and destination must be on the same storage array
 - **VMFS datastores only**: NFS datastores are not supported
-- **No CBT support**: Change Block Tracking is not used; full disk copy is performed
+- **No CBT support**: Changed Block Tracking is not used; a full disk copy is performed
 - **Single array per datastore**: Each datastore can only be mapped to one ArrayCreds
 
 ## Troubleshooting
@@ -488,7 +492,7 @@ Error: timeout waiting for device naa.624a9370... to appear on ESXi host
 
 **Solutions:**
 1. Verify iSCSI initiator is configured on ESXi:
-   - Log into ESXi via SSH
+   - Log in to ESXi via SSH
    - Run: `esxcli iscsi adapter list`
    - Ensure iSCSI software adapter is enabled
 
@@ -614,7 +618,7 @@ failed to create target volume vjb-<vm-name>-<disk-name>: failed to create volum
 
 **Cause:**
 
-When a Storage Accelerated Copy migration fails, vJailbreak deletes the target volume it created on the array (named `vjb-<vm-name>-<disk-name>`). Many arrays do not remove a deleted volume immediately. They keep it in a trash or recovery queue for a retention period and continue to reserve its name. A retry creates a volume with the same name, so it fails until the deleted volume is purged. How long the volume is retained, and how to purge it, depends on the array.
+When a Storage Accelerated Copy migration fails, vJailbreak deletes the target volume it created on the array (named `vjb-<vm-name>-<disk-name>`). Many arrays do not remove a deleted volume immediately. They keep it in a trash or recovery queue for a retention period and continue to reserve its name. A retry creates a volume with the same name, so it fails until the deleted volume is purged. How long the volume is retained, and how to purge it, depend on the array.
 
 **Resolution:**
 

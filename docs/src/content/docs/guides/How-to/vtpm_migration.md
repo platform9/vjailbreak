@@ -5,16 +5,16 @@ description: Guide for migrating Windows VMs with vTPM and Virtualization Based 
 
 ## Overview
 
-While Virtualization Based Security (VBS) and Virtual Trusted Platform Module (vTPM) provide important security protections for the VM, V2V helpers and guestfs require proper read and write access to the VM's disks. Temporarily disabling these features ensures that migration and disk operations can proceed reliably.
+While Virtualization Based Security (VBS) and Virtual Trusted Platform Module (vTPM) provide important security protections for the VM, V2V helpers and libguestfs require proper read and write access to the VM's disks. Temporarily disabling these features ensures that migration and disk operations can proceed reliably.
 
 :::caution
-Windows 11 with vTPM requires an account for login to the VM. Users may need to reset their PIN after disabling vTPM. Ensure you have a **backup email configured** to reset the PIN or recover the password post migration.
+Windows 11 with vTPM requires an account for login to the VM. Users may need to reset their PIN after disabling vTPM. Ensure you have a **backup email configured** to reset the PIN or recover the password post-migration.
 :::
 
 ## Prerequisites
 
 - **VMware Native Key Provider** (default vCenter-level key provider) must be configured for enabling vTPM on the source VM.
-- On PCD, use `tpm_version: 2.0` and `tpm_provider: tpm-crb` as extra metadata specs on the VM flavor to enable vTPM post migration.
+- On PCD, use `tpm_version: 2.0` and `tpm_provider: tpm-crb` as extra metadata specs on the VM flavor to enable vTPM post-migration.
 
 ![vCenter Key Provider configuration](../../../../../public/images/vtpm-key-provider.png)
 

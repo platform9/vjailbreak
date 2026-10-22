@@ -1,6 +1,6 @@
 ---
 title: Prerequisites
-description: prerequisites for vJailbreak
+description: Prerequisites for vJailbreak
 ---
 
 For frequently asked questions, see [FAQ](../faq/).
@@ -8,12 +8,13 @@ For frequently asked questions, see [FAQ](../faq/).
 ### VDDK requirements
 
 VDDK is required only if you plan to use the **Standard** storage copy method.
-**vJailbreak Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK.
+**vJailbreak Accelerated Copy** and **Storage Accelerated Copy** do not require VDDK.
 
 :::note
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
-package, use vJailbreak Accelerated Copy or Storage-Accelerated Copy instead. Both work without
-VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only**.
+package, use vJailbreak Accelerated Copy or Storage Accelerated Copy instead. Both work without
+VDDK. As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot) migration.
+Storage Accelerated Copy supports cold migration only.
 :::
 
 ### What access do I need for my vCenter user to be able to perform this migration?
@@ -29,7 +30,7 @@ The required privileges depend on which features you use. The base set below is 
 | `Virtual machine.Interaction.Power On` | Allows powering on a powered-off virtual machine and resuming a suspended virtual machine. |
 | `Virtual machine.Config.ChangeTracking`| Allows enabling or disabling change tracking on a virtual machine. |
 | `Virtual machine.Guest operating system management by VIX API` | Allows managing a virtual machine by the VMware VIX API. |
-| `Virtual machine.Provisioning` | Note: All `Virtual machine.Provisioning` privileges are required.  |
+| `Virtual machine.Provisioning` | Note: All `Virtual machine.Provisioning` privileges are required. |
 | `Virtual machine.Provisioning.Allow disk access` | Allows opening a disk on a virtual machine for random read and write access. Used mostly for remote disk mounting. |
 | `Virtual machine.Provisioning.Allow file access` | Allows operations on files associated with a virtual machine, including VMX, disks, logs, and NVRAM. |
 | `Virtual machine.Provisioning.Allow read-only disk access` | Allows opening a disk on a virtual machine for random read access. Used mostly for remote disk mounting. |
@@ -136,7 +137,7 @@ vJailbreak uses nbdkit to transfer disk data from VMware ESXi hosts via the NFC 
 - [Broadcom KB: NFC Performance](https://knowledge.broadcom.com/external/article/307001/nfc-performance-is-slow.html)
 
 ### What ports do I need to open for vJailbreak to work?
-Please refer the following table for the required ports:
+Please refer to the following table for the required ports:
 
 | Port | Protocol | Source | Destination | Purpose |
 | --- | --- | --- | --- | --- |
@@ -195,4 +196,4 @@ The following endpoints are accessed during first-time installation or when upgr
 | **Metrics Server** | 4443    | TCP         | Internal Cluster | K8s resource metrics (`kubectl top`) |
 | **Prometheus**     | 9090    | TCP         | Internal Cluster / Monitoring Server | Prometheus UI and API |
 | **Node Exporter** (if used) | 9100 | TCP | Prometheus | Node-level metrics |
-| **Cadvisor (Optional)** | 4194 | TCP | Internal Cluster / Prometheus | Container metrics collection |
+| **cAdvisor (Optional)** | 4194 | TCP | Internal Cluster / Prometheus | Container metrics collection |

@@ -19,13 +19,13 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 
 
 
-* **NetworkMapping**: Defines how source VMware networks map to destination OpenStack networks. Required for configuring network interfaces for VM's during migration.
+* **NetworkMapping**: Defines how source VMware networks map to destination OpenStack networks. Required for configuring network interfaces for VMs during migration.
 * **StorageMapping**: Maps source VMware datastores to OpenStack storage backends.
-* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VM's) from VMware to OpenStack.
-* **MigrationPlan**: MigrationPlan contains the VM's to be migrated, provides reference to migration template which needs to be followed, and also specifies the way VM's have to be migrated. A migration plan can be used for migrating multiple VM's in batches.
+* **MigrationTemplate**: It defines a reusable set of configurations for migrating virtual machines (VMs) from VMware to OpenStack.
+* **MigrationPlan**: MigrationPlan contains the VMs to be migrated, provides reference to migration template which needs to be followed, and also specifies the way VMs have to be migrated. A migration plan can be used for migrating multiple VMs in batches.
 * **Migration**: For each VM, there is an individual migration custom resource, which provides reference to the migration plan to be followed and the pod which is going to execute the migration. Migration custom resource is maintained by the vJailbreak controller itself.
-* **Job**: With migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
-* **v2v-helper pods**: Based on the definition of the job created by vJailbreak controller, kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, driver injection, guest customization, transfer, and creation of OpenStack resources.
+* **Job**: With the migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
+* **v2v-helper pods**: Based on the definition of the job created by the vJailbreak controller, Kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, driver injection, guest customization, transfer, and creation of OpenStack resources.
 
 **Note**: `NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
 
@@ -37,7 +37,7 @@ Now that we have a basic understanding of the resources that will be useful duri
 
 ### What are we going to do?
 
-First, we will gather some configuration details. We will use those pieces of configuration details together to create some custom resources, which will be then picked by the Migration Controller, and the migration will take place accordingly. While migration takes place, we will check various resources to monitor the progress of the migration.
+First, we will gather some configuration details. We will use those pieces of configuration details together to create some custom resources, which will then be picked up by the Migration Controller, and the migration will take place accordingly. While migration takes place, we will check various resources to monitor the progress of the migration.
 
 * [Gather Information](#gather-information)
     * [Gather the credentials to VMware vCenter and OpenStack](#gather-the-credentials-to-vmware-vcenter-and-openstack)
@@ -81,7 +81,7 @@ kubectl get vmwarecreds -n <namespace>
 
 **Note**: The default namespace for vJailbreak ecosystem is `migration-system`.
 
-Copy the name of the `VMwareCreds` resource that refers to the vCenter hosting the VM you want to migrate. This will be used when creating the MigrationTemplate. For example, if following is the output of the above command:
+Copy the name of the `VMwareCreds` resource that refers to the vCenter hosting the VM you want to migrate. This will be used when creating the MigrationTemplate. For example, if the following is the output of the above command:
 
 ```
 $ kubectl get vmwarecreds -n migration-system
@@ -100,7 +100,7 @@ kubectl get openstackcreds -n <namespace>
 
 Copy the name of the `OpenstackCreds` resource that refers to the OpenStack where you want to migrate the VM. This will also be used when creating the MigrationTemplate.
 
-For example, if following is the output of the above command:
+For example, if the following is the output of the above command:
 
 ```
 $ kubectl get openstackcreds -n migration-system
@@ -108,12 +108,12 @@ NAME            STATUS
 openstack-a     Succeeded
 ```
 
-Then the name of the `OpenStackcreds` would be `openstack-a`.
+Then the name of the `OpenstackCreds` would be `openstack-a`.
 
 
 #### Gather the details of the VM to be migrated
 
-Get the details of the VM using `VMwareMachine` resource and details are correct:
+Get the details of the VM using the `VMwareMachine` resource and verify that the details are correct:
 ```
 kubectl get vmwaremachine -n <namespace> <vm-name> -o yaml
 ```
@@ -125,21 +125,21 @@ From the YAML, note down the following:
 * (Optional) Get the Operating System type under `spec.vms.osFamily`. The reason for keeping it optional is that vJailbreak can auto-detect the OS most of the time, if the VM is turned on in VMware. For cold migration or migration of a VM that is in powered off state, this field will be required.
 * (Optional) Note the VM's `spec.vms.cpu` and `spec.vms.memory`. If you don't explicitly choose a target flavor (see [Explicitly select the target OpenStack flavor](#optional-explicitly-select-the-target-openstack-flavor) below), vJailbreak uses these values to auto-select the closest matching OpenStack flavor at migration time.
 
-For example, if following is the output of the above command: 
+For example, if the following is the output of the above command: 
 
 ```
 $ kubectl get vmwaremachines -n migration-system vm-1 -o yaml
 
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: VmwareMachine
+kind: VMwareMachine
 metadata:
   name: vm-1
   namespace: migration-system
   creationTimestamp: "2025-05-27T09:27:34Z"
   generation: 1
   labels:
-    pcd-vm-openstack-a: d3f3d5c7-f6d8-410e-bb9f-a7afe4j8nhg
-    vmwarecreds.k8s.pf9.io-vcenter-a: "true"
+    vjailbreak.k8s.pf9.io/vmwarecreds: vcenter-a
+    vjailbreak.k8s.pf9.io/vmwarecreds-vcenter-a: "true"
 spec:
   vms:
     clusterName: cluster-1
@@ -182,7 +182,7 @@ From the YAML, note down the following:
 * List of the networks available on OpenStack at `status.openstack.networks`
 * List of volume types available on OpenStack at `status.openstack.volumeTypes`
 
-For example, if following is the output of the above command:
+For example, if the following is the output of the above command:
 
 ```
 $ kubectl get openstackcreds -n migration-system openstack-a -o yaml
@@ -207,7 +207,7 @@ status:
 ```
 
 Then:
-* VMware networks `network-1` and `network-2` can be translated to OpenStack networks  `vlan1`/`vlan2`/`vlan3`
+* VMware networks `network-1` and `network-2` can be translated to OpenStack networks `vlan1`/`vlan2`/`vlan3`
 * VMware datastores `datastore-1` and `datastore-2` can be translated to OpenStack volume types `lvm`/`lvm-class-2`/`lvm-class-3`
 
 We will see these translations in action when we create NetworkMapping and StorageMapping resources in the next section, respectively.
@@ -220,7 +220,7 @@ Now that we have gathered the information that we required, let’s start creati
 
 #### Create the StorageMapping custom resource
 
-Let’s create the `StorageMapping` custom resource to ensure that virtual disks are placed correctly in the destination environment. Below is how its manifest would look like:
+Let’s create the `StorageMapping` custom resource to ensure that virtual disks are placed correctly in the destination environment. Below is what its manifest would look like:
 
 
 ##### Manifest
@@ -253,7 +253,7 @@ Read more about `StorageMapping` in [the CRDs reference document](https://platfo
 
 #### Create the NetworkMapping custom resource
 
-Now, let’s create a `NetworkMapping` custom resource to define how networks will be translated from VMware to OpenStack. Below is how its Kubernetes manifest would look like.
+Now, let’s create a `NetworkMapping` custom resource to define how networks will be translated from VMware to OpenStack. Below is what its Kubernetes manifest would look like.
 
 
 ##### Manifest
@@ -366,7 +366,7 @@ Read more about `MigrationTemplate` in [the CRDs reference document](https://pla
 
 #### Create the MigrationPlan custom resource
 
-After creating the `MigrationTemplate`, we need to create the `MigrationPlan` to configure how migration will be executed. Whether it will be a hot migration, or cold migration? When will the cutover happen? Will the cutover happen automatically or manually? etc. Let’s create a `MigrationPlan` resource.
+After creating the `MigrationTemplate`, we need to create the `MigrationPlan` to configure how migration will be executed. Will it be a hot migration or a cold migration? When will the cutover happen? Will the cutover happen automatically or manually? etc. Let’s create a `MigrationPlan` resource.
 
 
 ##### Manifest
@@ -391,7 +391,7 @@ spec:
     - - vm-1
 ```
 
-To know more about all the supported fields for advanced use-cases, refer to the [MigrationPlan section of the CRD reference document](https://platform9.github.io/vjailbreak/reference/reference/#migrationplan).
+To know more about all the supported fields for advanced use cases, refer to the [MigrationPlan section of the CRD reference document](https://platform9.github.io/vjailbreak/reference/reference/#migrationplan).
 
 ##### Optional MigrationPlan Fields
 
@@ -400,9 +400,6 @@ The example above shows the minimum required fields. The following optional fiel
 ```yaml
 spec:
   migrationTemplate: migrationtemplate
-
-  # Retry the migration automatically if it fails
-  retry: false
 
   # Shell script executed on first boot of the destination VM
   firstBootScript: |
@@ -445,7 +442,7 @@ spec:
 kubectl apply -f migration-plan.yaml
 ```
 
-Now that we have created all the required resources, let’s see what are the additional resources being created in the background, how do they interconnect, how to find out where the migration of a particular VM is happening, and how to check its progress.
+Now that we have created all the required resources, let’s see what additional resources are being created in the background, how they interconnect, how to find out where the migration of a particular VM is happening, and how to check its progress.
 
 
 ### Monitor the progress
@@ -453,7 +450,7 @@ Now that we have created all the required resources, let’s see what are the ad
 
 #### Migration (custom resource)
 
-Whenever a `MigrationPlan` is created, vJailbreak controller creates a `Migration` custom resource for individual VM's mentioned in the `MigrationPlan`. 
+Whenever a `MigrationPlan` is created, vJailbreak controller creates a `Migration` custom resource for individual VMs mentioned in the `MigrationPlan`. 
 
 
 ##### Check the Migration custom resource
@@ -484,7 +481,7 @@ Migration Job is a Kubernetes Job responsible for migrating one VM from VMware t
 
 #### v2v-helper pod
 
-v2v-helper pod is the Kubernetes Pod created by Migration Job. It is the runtime unit that performs the actual VM migration, including disk extraction, transformation, and transfer from vSphere to OpenStack. It is the execution engine for migrating one VM. It runs the v2v-helper utility to perform these actions.
+The v2v-helper pod is the Kubernetes Pod created by the Migration Job. It is the runtime unit that performs the actual VM migration, including disk extraction, transformation, and transfer from vSphere to OpenStack. It is the execution engine for migrating one VM. It runs the v2v-helper utility to perform these actions.
 
 
 ##### Check the v2v-helper pod logs
@@ -499,4 +496,4 @@ kubectl logs -n <namespace> <pod-name>
 
 * To tail the live logs, we can use the `-f` flag.
 
-This way, we can automate the migration for n numbers of Virtual Machines, from VMware to OpenStack, using vJailbreak via kubectl.
+This way, we can automate the migration for n number of Virtual Machines, from VMware to OpenStack, using vJailbreak via kubectl.

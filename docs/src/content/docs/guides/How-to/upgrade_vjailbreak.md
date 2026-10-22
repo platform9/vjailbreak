@@ -3,7 +3,7 @@ title: Upgrade vJailbreak
 description: How to upgrade vJailbreak to a later version
 ---
 
-vJailbreak supports an in-place upgrade feature to go from one version to other higher version. This feature is supported starting from v0.4.0 as the base to subsequent versions. 
+vJailbreak supports an in-place upgrade feature to go from one version to another higher version. This feature is supported starting from v0.4.0 as the base to subsequent versions.
 
 During the upgrade, only container images, ConfigMaps, and Custom Resource Definitions (CRDs) are modified. We currently do not support the upgrade of the base vJailbreak image or existing Custom Resources (CRs). Therefore, a pre-upgrade cleanup of these resources is required.
 
@@ -23,10 +23,10 @@ Before upgrading, vJailbreak requires a cleanup of existing resources to ensure 
 - Delete PCD credentials
 - Delete Custom Resources
 
-Click the **Cleanup** button to initiate this process. Wait for all items to show a green checkmark and the "Cleanup completed successfully" message to appear.
+Click the **Cleanup** button to initiate this process. As of v0.5.0, a **Clean up before upgrade?** confirmation dialog opens first, because cleanup deletes all custom resources in the appliance and cannot be undone. Click **Yes, clean up** to continue. Wait for all items to show a green checkmark and the "Cleanup completed successfully" message to appear. If cleanup has already run, the button reads **Re-run Cleanup**.
 
 ![Pre-Upgrade Cleanup](../../../../../public/images/cleaning_up_resources.png)
-![Cleanup completed successfully ](../../../../../public/images/cleaned_up_sucessfully.png)
+![Cleanup completed successfully](../../../../../public/images/cleaned_up_sucessfully.png)
 
 ### 3. Select Version
 Once the cleanup is successful, click the **Select a version...** dropdown and choose the target version you wish to upgrade to (e.g., `v0.4.1`).
@@ -53,7 +53,7 @@ For safety, it is highly advised to perform a **hard refresh** of your browser b
 Do not close or refresh your browser window while the upgrade is in progress, as this may interrupt the operation.
 :::
 
-## Check for update before scheduled interval
+## Check for updates before the scheduled interval
 
 If you do not want to wait for the next scheduled check, you can manually trigger the `vjailbreak-version-checker` CronJob to detect if a newer version (e.g., v0.4.1) is available.
 
