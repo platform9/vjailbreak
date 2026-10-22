@@ -8,7 +8,7 @@ vJailbreak Accelerated Copy is an advanced data copy method that attaches source
 > **Underlying feature:** vJailbreak Accelerated Copy is powered by VMware's **hot-add** disk transport mechanism to attach source disks to the Proxy VM.
 
 :::note[Hot and cold migration both supported]
-As of v0.5.0, vJailbreak Accelerated Copy supports both Data Copy Method options — see
+As of v0.5.0, vJailbreak Accelerated Copy supports both cold and hot for the **Data copy method** option — see
 [Migration Options](../migration-options/#data-copy-method) for what cold and hot mean. Hot
 migration reads changed blocks over the hot-add NBD path via the Proxy VM instead of VDDK.
 :::
@@ -38,17 +38,17 @@ This describes the **cold** data copy path; see the note above for hot migration
 ### Benefits
 
 - **Faster migrations**: Direct block-device access avoids NFC protocol overhead
-- **No shared storage required**: Works with any datastore — NFS, VMFS, vSAN
+- **No storage array integration required**: Works with VMFS, NFS and vSAN datastores that the Proxy VM's ESXi host can access
 - **Lower ESXi host load**: Data is streamed from the Proxy VM, not the ESXi NFC daemon
 
 ### Requirements
 
 - **Proxy VM**: A Linux VM running in the same vCenter with `qemu-nbd` and `openssh-server` installed
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
-- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
-- **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
+- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM and any agent VMs on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
+- **disk.EnableUUID**: Must be `TRUE` on the Proxy VM. vJailbreak sets it automatically during onboarding and reboots the Proxy VM; you can also set it yourself beforehand
 - **PVSCSI controller**: At least one SCSI controller on the Proxy VM must be **VMware Paravirtual (PVSCSI)** — vJailbreak auto-adds one during onboarding if a free controller slot is available
-- **Datastore accessibility**: The HotAdd proxy must have access to the same datastore as the target virtual machine, and the VMFS version and data block sizes for the target VM must be the same as the datastore where the HotAdd proxy resides.
+- **Datastore accessibility**: The Proxy VM's ESXi host must have access to every datastore that holds the source VM's disks, because vJailbreak attaches those disks to the Proxy VM by datastore path. VMware's hot-add rules also require the same VMFS version and block size.
 - **vCenter permissions**: Sufficient permissions to snapshot VMs and attach/detach disks
 
 ## Prerequisites
@@ -66,11 +66,11 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 
 ### 2. vCenter Requirements
 
-- The Proxy VM must have **disk.EnableUUID = TRUE** set in vCenter VM settings
+- The Proxy VM needs **disk.EnableUUID = TRUE**. vJailbreak sets it during onboarding if it is missing (this needs the `Virtual machine.Config.AdvancedConfig` privilege)
 - The Proxy VM must have (or have room to add) at least one **VMware Paravirtual (PVSCSI)** SCSI controller — see [Configure the SCSI Controller Type](#configure-the-scsi-controller-type-on-the-proxy-vm)
 - vCenter must allow disk attach/detach operations on the Proxy VM
 - The Proxy VM must be powered on and reachable over SSH
-- The Proxy VM must be on the same datastore as the source VM's disks, with a matching VMFS version and block size (see **Datastore accessibility** under [Requirements](#requirements))
+- The Proxy VM's ESXi host must have access to the source VM's datastores (see **Datastore accessibility** under [Requirements](#requirements))
 
 
 ## Setting Up the Proxy VM
@@ -134,7 +134,7 @@ Root access is required for SSH and for running `qemu-nbd` commands on the Proxy
 
 ### Configure disk.EnableUUID on the Proxy VM
 
-This setting is required for vJailbreak to match attached disks to their block devices inside the Proxy VM:
+This setting is required for vJailbreak to match attached disks to their block devices inside the Proxy VM. vJailbreak sets it automatically during onboarding and reboots the Proxy VM. To set it yourself instead, for example to avoid that reboot:
 
 1. In vSphere Client, right-click the Proxy VM and select **Edit Settings**
 2. Click **VM Options** → **Advanced** → **Edit Configuration**
@@ -255,18 +255,18 @@ If verification fails, address the reported issue (e.g., install missing utiliti
 
 ### Step 1: Create a Migration
 
-1. Navigate to the **Migrations** page and click **New Migration**
+1. Navigate to the **Migrations** page and click **Start Migration**
 2. Fill out the migration form with source VM and target configuration
-3. For the **Data Copy Method**, select **vJailbreak Accelerated Copy**
+3. In **Map Networks And Storage**, select **vJailbreak Accelerated Copy** as the copy method for storage migration
 
 ### Step 2: Select Proxy VM
 
-4. A **Proxy VM** dropdown appears — select a Proxy VM in **Ready** state
+4. A **vJailbreak Proxy VM** dropdown appears — select a Proxy VM in **Ready** state
 5. The UI will only show Proxy VMs that are verified and ready
 
 ### Step 3: Start the Migration
 
-6. Review **Advanced Options** if needed (network/storage mappings)
+6. Review the remaining sections, such as **Migration Options**, if needed
 7. Click **Start Migration**
 
 :::note
@@ -279,7 +279,7 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                vJailbreak Accelerated Copy Flow                 │
+│        vJailbreak Accelerated Copy Flow (cold migration)        │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
 │  1. Validate Prerequisites                                      │
@@ -309,6 +309,8 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+For hot migration (**Copy live VMs, then power off**, as of v0.5.0), vJailbreak enables Changed Block Tracking (CBT) and takes the snapshot while the source VM keeps running. The first full copy and the later changed-block passes all read through the Proxy VM over NBD, and the source VM is powered off only before the final pass.
 
 ### Component Diagram
 
@@ -380,7 +382,8 @@ sequenceDiagram
     Note over Admin,OS: Migration — vJailbreak Accelerated Copy
     Admin->>Ctrl: Create MigrationPlan (StorageCopyMethod=HotAdd)
     Ctrl->>Pod: Launch v2v-helper (Proxy VM IP + SSH secret)
-    Pod->>vC: Power off source VM, take snapshot
+    Pod->>vC: Cold: power off source VM, then take snapshot
+    Note over vC,Pod: Hot: CBT is enabled and the snapshot is taken while the VM runs.<br/>Changed blocks are copied in later passes, and the VM is<br/>powered off only before the final pass.
     Pod->>vC: Hot-add frozen VMDKs to Proxy VM
     Pod->>Proxy: SSH — match disk WWID to block device
     Pod->>Proxy: SSH — start qemu-nbd per disk
@@ -411,7 +414,7 @@ sequenceDiagram
 |-------|-----------|
 | VM not found in vCenter | Verify the VM name exactly matches the vCenter inventory name |
 | Guest IP not available | Ensure VMware Tools is installed and running on the Proxy VM |
-| `disk.EnableUUID` not set | Set `disk.EnableUUID = TRUE` in VM advanced settings and reboot |
+| `failed to set disk.EnableUUID` | vJailbreak could not set it automatically. Check that the VMware credentials have `Virtual machine.Config.AdvancedConfig`, or set `disk.EnableUUID = TRUE` in VM advanced settings and reboot |
 | SSH connection refused | Verify `sshd` is running and port 22 is reachable from vJailbreak |
 | `qemu-nbd` not found | Install `qemu-utils` (Ubuntu) or `qemu-nbd` (Alpine) on the Proxy VM |
 

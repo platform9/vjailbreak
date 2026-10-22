@@ -27,27 +27,30 @@ If you receive an error that the ConfigMap doesn't exist, please upgrade your vJ
 
 ## Available Settings
 
-The vjailbreak-settings ConfigMap supports the following settings:
+The vjailbreak-settings ConfigMap supports the following settings. **Default Value** is the value the appliance ships with. If a key is missing from the ConfigMap, vJailbreak falls back to a built-in value, which differs for `AUTO_FSTAB_UPDATE` (`false`), `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` (`true`), `VCENTER_SCAN_CONCURRENCY_LIMIT` (`100`), `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS` (`5`), `V2V_HELPER_POD_MEMORY_REQUEST` (`1Gi`) and `V2V_HELPER_POD_MEMORY_LIMIT` (`3Gi`).
 
 | Setting | Description | Default Value | Example Values |
 |---------|-------------|---------------|---------------|
-| `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `false` | `true`, `false` |
+| `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `true` | `true`, `false` |
 | `AUTO_PXE_BOOT_ON_CONVERSION` | Automatically configure PXE boot during conversion | `false` | `true`, `false` |
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks during hot migration | `20` | Any positive integer |
 | `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically clean up OpenStack ports after migration failure | `false` | `true`, `false` |
 | `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically clean up OpenStack volumes after conversion failure | `false` | `true`, `false` |
 | `DEFAULT_MIGRATION_METHOD` | Default method for VM migration | `cold` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
+| `DEFAULT_NETWORK_PERSISTENCE` | Default for the **Persist source network interfaces** option, set on the **Global Settings** page | `false` | `true`, `false` |
 | `DEPLOYMENT_NAME` | Name of the vJailbreak deployment | `vJailbreak` | Any string |
 | `NTP_SERVERS` | NTP servers the appliance synchronizes against. | Empty (default public pools) | Space-separated hostnames or IPv4 addresses (e.g., `ntp1.corp.local ntp2.corp.local`) |
 | `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue OpenStack credentials validation | `60` | Any positive integer |
 | `PERIODIC_SYNC_INTERVAL` | Interval for periodic sync during admin cutover | `1h` | Duration format (e.g., `30m`, `1h`, `2h`) |
 | `PERIODIC_SYNC_MAX_RETRIES` | Maximum number of retries for periodic sync | `3` | Any positive integer |
 | `PERIODIC_SYNC_RETRY_CAP` | Maximum duration to retry periodic sync | `3h` | Duration format (e.g., `1h`, `3h`, `6h`) |
+| `PROXY_VM_OVA_URL` | OVA that vJailbreak downloads and uses when you deploy a new vJailbreak Proxy VM | The Platform9-hosted `ha-proxy-vm.ova` | Any reachable HTTP(S) URL |
 | `POPULATE_VMWARE_MACHINE_FLAVORS` | Automatically populate flavor recommendations for VMware machines | `true` | `true`, `false` |
 | `TIMEZONE` | System time zone of the vJailbreak appliance. | Empty (UTC) | IANA time zone (e.g., `Asia/Calcutta`, `America/New_York`) |
 | `VALIDATE_RDM_OWNER_VMS` | Validates that all VMs linked to an RDM disk are migrated in a single migration plan | `true` | `true`, `false` |
 | `VCENTER_LOGIN_RETRY_LIMIT` | Number of retries for vCenter login attempts | `5` | Any positive integer |
 | `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
+| `VDDK_REQUIRED` | If `true`, the UI sends users to the VDDK upload page until VDDK is present. If `false`, VDDK is optional | `false` | `true`, `false` |
 | `VM_ACTIVE_WAIT_INTERVAL_SECONDS` | Interval to wait for VM to become active (in seconds) | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_RETRY_LIMIT` | Number of retries to wait for VM to become active | `15` | Any positive integer |
 | `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue VMware credentials validation | `60` | Any positive integer |
@@ -56,8 +59,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `HTTP_TIMEOUT_SECONDS` | Timeout in seconds for HTTP requests made by the controller | `30` | Any positive integer |
 | `V2V_HELPER_POD_CPU_REQUEST` | CPU request for v2v-helper migration pods | `1000m` | Kubernetes CPU quantity (e.g., `500m`, `2000m`) |
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
-| `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
-| `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
+| `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `2Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
+| `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `5Gi` | Kubernetes memory quantity |
 | `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vJailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |

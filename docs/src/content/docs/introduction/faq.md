@@ -28,13 +28,18 @@ To enable this behavior, select **Persist source network interfaces** in the mig
 Read more in [Migration Options](../../concepts/migration-options/#persist-source-network-interfaces).
 
 ## What OS versions are supported?
-We internally use virt-v2v, so all operating systems supported for conversion by virt-v2v are supported by vJailbreak. You can find a detailed list of them [here](https://libguestfs.org/virt-v2v-support.1.html#guests).
+vJailbreak converts guests with `virt-v2v-in-place`, so the guest OS must be one that virt-v2v can convert. You can find a detailed list of them [here](https://libguestfs.org/virt-v2v-support.1.html#guests). In addition:
+
+- vJailbreak migrates only VMs whose OS family is Windows or Linux. The OS family comes from vCenter; if vCenter does not report one, you can assign Windows or Linux to the VM in the migration form. VMs with any other OS family are not migrated.
+- 32-bit operating systems are not supported.
+
+See [Compatibility](../../reference/compatibility/) for the versions that have been tested.
 
 ## Do I need to perform any manual steps to remove VMware Tools?
-No, vJailbreak will remove them for you, with the help of virt-v2v. The process that virt-v2v uses along with alternative approaches can be found [here](https://libguestfs.org/virt-v2v.1.html#converting-a-windows-guest).
+No. Leave the **Remove VMware Tools** option enabled in the migration form (it is on by default). vJailbreak adds its own removal script during conversion, and the script runs on the migrated VM's first boot. Some artifacts can remain afterwards; see [VMware Residual Artifacts](../../guides/troubleshooting/vmware_residual_artifacts/).
 
 ## Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
-No, vJailbreak will install them for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, e.g., Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
+No, vJailbreak will install them for you. For Windows, the appliance ships with the VirtIO driver ISOs, and Windows Server 2012 and 2012 R2 guests automatically get the bundled virtio-win 0.1.185 ISO. To use a different driver version, see [Inject VirtIO Windows Driver](../../guides/how-to/virtio_doc/).
 
 ## Why does the conversion step take time?
 The delay is typically not because a single script is slow. The overall conversion process includes OS-level changes that take time, such as installing VirtIO drivers, removing old hypervisor drivers, and (for Windows guests) performing registry changes.
@@ -79,19 +84,7 @@ If no flavor is explicitly chosen, vJailbreak automatically selects the most app
 
 vJailbreak supports migrating VMs to OpenStack flavors that have **hotplug** CPU and RAM enabled. Hotplug allows live resize of vCPUs and memory without powering off the VM after migration.
 
-To use hotplug after migration:
-
-1. **On Platform9 Private Cloud Director (PCD)**: a hotplug base flavor named `hotplug` is available by default. While triggering the migration, simply select the `hotplug` flavor for the VMs that should support live resize.
-
-2. **On other OpenStack environments**: ask your administrator to create or identify a flavor with hotplug-enabled extra specs, and select it in the migration form. Example:
-
-   ```bash
-   openstack flavor set <flavor-name> \
-     --property hw:cpu_policy=mixed \
-     --property hw:cpu_max_vcpus=<max-vcpus>
-   ```
-
-3. After migration completes, resize the VM to add or remove vCPUs and RAM without a reboot.
+vJailbreak treats any flavor with **0 vCPUs and 0 RAM** as a hotplug base flavor. On Platform9 Private Cloud Director (PCD), a hotplug base flavor named `hotplug` is available by default: select it in the migration form for the VMs that should support live resize. For other OpenStack environments, see [Known Limitations: Hotplug Flavor Requirements](../../reference/known-limitations/#hotplug-flavor-requirements).
 
 When a hotplug base flavor (0 vCPU, 0 RAM — such as PCD's default `hotplug` flavor) is assigned, vJailbreak sets the VM's hotplug metadata at creation time: the current values (`HOTPLUG_CPU`, `HOTPLUG_MEMORY`) match the source VM, and the maximum values (`HOTPLUG_CPU_MAX`, `HOTPLUG_MEMORY_MAX`) are set to **twice** the source VM's vCPU and memory. This gives every migrated VM room to live-resize up to 2x its original size. Hotplug metadata cannot be changed after the VM is created.
 
@@ -122,7 +115,7 @@ Users must take appropriate precautions for Docker Swarm, such as draining nodes
 
 GPO settings can block driver injection and registry changes that vJailbreak performs during conversion. The migration may succeed but produce a VM that fails to boot or has missing drivers.
 
-See the [GPO Migration Guide](../../guides/how-to/gpo_migration/) for steps to temporarily disable or scope down GPO before migration.
+See the [GPO Migration Guide](../../guides/how-to/gpo_migration/) for steps to disable the restrictive device installation policies, or remove local Group Policy, before migration.
 
 ## How do I migrate a VM with vTPM (Virtual Trusted Platform Module) enabled?
 

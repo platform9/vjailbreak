@@ -3,7 +3,7 @@ title: Migration Options
 description: Overview of Different Migration Options
 ---
 
-vJailbreak provides a number of options to optimize and control the migration process. These options are available in the migration wizard under "Migration Options".
+vJailbreak provides a number of options to optimize and control the migration process. Most of these options are in the **Migration Options** section of the migration form. The storage copy method is chosen in the **Map Networks And Storage** section.
 
 ## Copy options
 There are several options available to control how data is copied during migration.
@@ -13,9 +13,9 @@ Determines how the data copy is done.
 
 * **Copy live VMs, then power off** - This option copies the data from the live VMs to the OpenStack/PCD volumes. vJailbreak uses CBT (Changed Block Tracking) to copy the data that is dirtied. Then, the VMs are powered off and the remaining changed blocks are copied to the OpenStack/PCD volumes (see cutover options below).
 
-* **Power off VMs, then copy** - This option powers off the VMs and then copies the data to the OpenStack/PCD volumes. There is no CBT involved in this case; it will be the faster option, but will impact the uptime of the application. Powered-off VMs are supported but may need user input to provide the IP address and operating system type during migration.
+* **Power off live VMs, then copy** - This option powers off the VMs and then copies the data to the OpenStack/PCD volumes. There is no CBT involved in this case; it will be the faster option, but will impact the uptime of the application. Powered-off VMs are supported but may need user input to provide the IP address and operating system type during migration.
 
-* **Do not turn off the source VM (mock)** - This option copies the data exactly as "Copy live VMs, then power off" does, using CBT, but never powers off the source VM. The source VM keeps running in VMware while the migrated VM is created in OpenStack/PCD, so both copies run at the same time.
+* **Do not Turn off the source VM** (mock) - This option copies the data exactly as "Copy live VMs, then power off" does, using CBT, but never powers off the source VM. The source VM keeps running in VMware while the migrated VM is created in OpenStack/PCD, so both copies run at the same time.
 
 :::caution[Mock migrations can cause IP and MAC address conflicts]
 Because the source VM is never powered off, it keeps its IP and MAC addresses while the migrated VM
@@ -24,9 +24,9 @@ You must acknowledge this risk in the migration form before starting a mock migr
 :::
 
 ### Storage copy method
-Determines the underlying mechanism used to transfer disk data.
+Determines the underlying mechanism used to transfer disk data. It is chosen in the **Map Networks And Storage** section of the migration form.
 
-* **Normal** - Uses the traditional network-based copy via VMware's NFC protocol. Data is transferred from ESXi hosts to OpenStack Cinder volumes over the network. This method is limited to approximately 1 Gbps per VMDK due to NFC protocol constraints. **Requires VDDK.**
+* **Standard Copy** - Uses the traditional network-based copy via VMware's NFC protocol. Data is transferred from ESXi hosts to OpenStack Cinder volumes over the network. This method is limited to approximately 1 Gbps per VMDK due to NFC protocol constraints. **Requires VDDK.**
 
 * **Storage Accelerated Copy** - Leverages storage array-level XCOPY operations for dramatically faster migrations. Instead of copying data over the network, this method offloads the copy to the storage array itself. **Does not require VDDK.** Requires:
   - Supported storage array (Pure Storage, NetApp, or Hitachi Vantara)
@@ -41,12 +41,12 @@ Determines the underlying mechanism used to transfer disk data.
 
 :::tip[Running without VDDK?]
 If VMware's public VDDK download pages are unavailable, use **vJailbreak Accelerated Copy** or
-**Storage Accelerated Copy**; neither method requires VDDK. **Normal (Standard) copy** is the
+**Storage Accelerated Copy**; neither method requires VDDK. **Standard Copy** is the
 only method that requires VDDK.
 :::
 
 :::tip
-Storage Accelerated Copy can be 10-100x faster than normal copy for large VMs. For a 1 TB disk, normal copy takes ~2.5 hours while Storage Accelerated Copy can complete in 5-30 minutes.
+Storage Accelerated Copy can be 10-100x faster than Standard Copy for large VMs. For a 1 TB disk, Standard Copy takes ~2.5 hours while Storage Accelerated Copy can complete in 5-30 minutes.
 :::
 
 See [vJailbreak Accelerated Copy](../vjailbreak-accelerated-copy/) for configuration instructions.
@@ -73,22 +73,15 @@ There are 3 options available:
 
 ## Data Copy Method Workflows
 
-### 1. Power off Live VM, then Copy
+### 1. Power off Live VMs, then Copy
 
-#### Immediate Cutover
-The VM is powered off on the source before the initial copy begins. Once the initial copy completes, the migration immediately performs the final sync and powers on the VM at the destination.
-
-#### Cutover During Time Window
-The VM is powered off on the source before the initial copy begins. After the initial copy completes, the migration waits for the specified time window. When the time window arrives, it performs the final sync and powers on the VM at the destination.
-
-#### Admin Initiated Cutover
-The VM is powered off on the source before the initial copy begins. After the initial copy completes, the migration waits for manual intervention. When the admin initiates cutover, the migration performs the final sync and powers on the VM at the destination.
+The VM is powered off on the source before the copy begins, and each disk is copied once in full. Because the VM is already off, there are no changed blocks and no final sync.
 
 :::note
 When **Power off live VMs, then copy** is selected, the cutover options (immediate, time window, or admin-initiated) are disabled in the UI. Cutover happens automatically after the data copy completes.
 :::
 
-### 2. Copy Live VM, then Power off
+### 2. Copy Live VMs, then Power off
 
 #### Immediate Cutover
 The initial copy is performed while the VM remains running on the source. Once the initial copy completes, the VM is powered off on the source, and the migration immediately performs the final sync and powers on the VM at the destination.

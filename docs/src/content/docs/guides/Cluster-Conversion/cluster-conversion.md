@@ -22,7 +22,7 @@ Before starting the RollingConversion process, ensure the following checks are c
 * Only Ubuntu 22.04 is currently supported for PCD hosts within the Private Cloud Director (PCD).
 * Ensure that the appropriate PXE image is configured based on requirements; a standard Ubuntu 22 image is recommended.
 * It is presumed that the ESXi hosts are pre-configured as "Machines" in the "Allocated or Deployed" state within MAAS.
-* **IMPORTANT**: All ESXi hosts added to MAAS must have IPMI details configured. vJailbreak uses IPMI to control the power state and boot order of the ESXi hosts during the conversion process. Verify the accuracy of the IPMI configuration for all the MAAS machines before starting the rolling conversion.
+* **IMPORTANT**: All ESXi hosts added to MAAS must have IPMI details configured. MAAS uses the IPMI details to power the hosts on when it deploys them, and vJailbreak uses them to switch a host to PXE boot when `AUTO_PXE_BOOT_ON_CONVERSION` is `true` (it is `false` by default; see [vJailbreak Settings](../../how-to/vjailbreak_settings/)). Verify the accuracy of the IPMI configuration for all the MAAS machines before starting the rolling conversion.
 4. Backup current configurations and data related to vCenter.
 5. Ensure vMotion is configured correctly on vCenter
 * I.e., if an ESXi is put in maintenance mode, VMs should be able to move off that ESXi
@@ -75,7 +75,7 @@ After you submit the rolling conversion form, vJailbreak will take the following
    3. Once the ESXi is empty, vJailbreak starts the process of converting it to a PCD host  
       1. Fetch list of all available **“Machines”** in MAAS  
       2. Find the correct **“Machine”** for the current ESXi, by checking the **hardwareUUID** received both from vCenter API and MAAS API. If no machine matches by hardware UUID, vJailbreak falls back to matching the MAC addresses of the ESXi host's physical NICs against the machines' MAC addresses  
-      3. Once Machine is found, we fetch its **IPMI configuration** from MAAS, and use it to set this machine to **PXE (net) boot**  
+      3. Once Machine is found, if `AUTO_PXE_BOOT_ON_CONVERSION` is `true`, we use its **IPMI configuration** in MAAS to set this machine to **PXE (net) boot**. With the default (`false`), this step is skipped and the host must network-boot on its own  
       4. **Release** the machine in MAAS  
       5. **Deploy** the machine via MAAS, using the special cloud-init created in earlier steps  
    4. Now vJailbreak waits for MAAS to boot that machine to an **Ubuntu image** and run the **cloud-init** that we provided.  

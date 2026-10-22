@@ -21,7 +21,7 @@ The following limitations apply when the system volume is on LDM:
 
 | Limitation | Detail |
 |---|---|
-| Conversion-time features do not run | **VMware Tools removal**, **network persistence** and **user firstboot scripts** are all performed by `virt-v2v` during conversion. Conversion is skipped, so these must be handled manually inside the guest. |
+| Conversion-time features do not run | **VMware Tools removal**, **network persistence** and **user firstboot scripts** are all set up by vJailbreak during the conversion step. Conversion is skipped, so these must be handled manually inside the guest. |
 | VirtIO drivers must be pre-installed | Drivers cannot be injected offline into an LDM volume. Install the VirtIO guest tools on the **source** VM before migrating. |
 | The SAN policy must be set beforehand | Without `san policy=onlineall`, Windows brings the migrated disks up offline and the LDM volume set is left broken. |
 | The migration requires manual intervention | The migration pauses at **LDM Boot Verification** until you confirm the VM booted. There is no timeout, so the migration will not complete unattended. |
@@ -108,7 +108,7 @@ Additional addresses on the same NIC can be marked **Virtual IP**, regardless of
 
 ## VMware Tools Removal: Residual Artifacts
 
-The VMware Tools removal process performed by `virt-v2v` during migration may leave behind residual files and registry entries on the destination VM.
+vJailbreak's VMware Tools removal script, which runs on the migrated VM's first boot when the **Remove VMware Tools** option is enabled, may leave behind residual files and registry entries on the destination VM.
 
 These artifacts are typically harmless but may appear in application logs or security scans.
 
@@ -247,7 +247,7 @@ CBT Failure: changed block tracking (CBT) is not supported on virtual hardware v
 
 **What to do** — choose one:
 
-1. **Use cold migration** (**Power off VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
+1. **Use cold migration** (**Power off live VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
 2. **Upgrade the VM's virtual hardware version** to 7 or newer in vCenter, then use Hot migration if you need minimal downtime. Upgrading the hardware version requires a VM power-off and cannot be reversed — review VMware's documentation before proceeding.
 
 | VM virtual hardware version | Hot migration | Cold migration |
@@ -259,11 +259,11 @@ CBT Failure: changed block tracking (CBT) is not supported on virtual hardware v
 To check a VM's hardware version in vCenter, select the VM and look at **VM Hardware → Compatibility** (shown as "ESXi X.X and later (VM version N)").
 :::
 
-## Independent Disks: Normal Copy Always Fails, Hot Migration Always Fails
+## Independent Disks: Standard Copy Always Fails, Hot Migration Always Fails
 
 VMware **Independent** disks (Independent - Persistent or Independent - Nonpersistent) are excluded from a VM's snapshot lifecycle. Two separate vJailbreak mechanisms can't handle them, for two different reasons:
 
-- **Normal (Standard) storage copy** uses VMware VDDK, which has a known bug (VDDK ≥ 7) that cannot open independent-mode disks at all — regardless of Hot or Cold migration. See the [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html).
+- **Standard Copy** uses VMware VDDK, which has a known bug (VDDK ≥ 7) that cannot open independent-mode disks at all — regardless of Hot or Cold migration. See the [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html).
 - **Hot migration** (**Copy live VMs, then power off**), on any storage copy method, needs a CBT change ID for every disk. Independent disks never get one — with or without CBT enabled on the VM.
 
 **Symptoms**:
@@ -276,13 +276,13 @@ nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. E
 CBT is not enabled on disk <id>
 ```
 
-**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
+**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off live VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
 
 | Storage copy method | Hot migration | Cold migration |
 |---|---|---|
-| Normal (Standard) | Not supported | Not supported (VDDK bug) |
+| Standard Copy | Not supported | Not supported (VDDK bug) |
 | vJailbreak Accelerated Copy | Not supported (needs CBT) | Supported |
-| Storage Accelerated Copy | N/A — always runs cold internally | Supported |
+| Storage Accelerated Copy | N/A — cold only | Supported |
 
 ## vJailbreak Accelerated Copy
 
@@ -308,7 +308,7 @@ See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbre
 
 ## Application Reboot During Migration
 
-Cold migration (**Power off VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.
+Cold migration (**Power off live VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.
 
 Hot migration (**Copy live VMs, then power off**) minimizes downtime but still requires a brief power-off during the final cutover phase to synchronize the last changed blocks. Applications should be tested for graceful handling of this cutover reboot.
 

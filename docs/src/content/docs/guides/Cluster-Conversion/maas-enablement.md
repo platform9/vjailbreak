@@ -9,7 +9,7 @@ assumed to be 'empty' and available for deployment. The machines are managed by 
 
 ## Prerequisites
 
-**IMPORTANT**: Before adding ESXi hosts to MAAS, ensure that IPMI (Intelligent Platform Management Interface) is configured and accessible for each ESXi host. vJailbreak requires IPMI access to control the power state and boot order of the ESXi hosts during the rolling conversion process. Without proper IPMI configuration, the conversion process will fail.
+**IMPORTANT**: Before adding ESXi hosts to MAAS, ensure that IPMI (Intelligent Platform Management Interface) is configured and accessible for each ESXi host. MAAS uses each machine's power settings to power it on when it deploys the host. vJailbreak also uses IPMI to switch the host to PXE boot, but only when `AUTO_PXE_BOOT_ON_CONVERSION` is set to `true` in [vJailbreak Settings](../../how-to/vjailbreak_settings/) (it is `false` by default). With the default, make sure each host network-boots (PXE) when MAAS deploys it.
 
 Verify the following:
 * IPMI is enabled on each ESXi host
@@ -33,4 +33,4 @@ power_parameters_power_user=<IPMI_USER> \
 power_parameters_power_pass=<IPMI_PASSWORD>
 ```
 
-**Note**: Replace `power_type=manual` with the appropriate IPMI power type and include IPMI credentials as shown above.
+**Note**: The example uses `power_type=ipmi`. Use the power type that matches your hardware, and include its credentials as shown above.

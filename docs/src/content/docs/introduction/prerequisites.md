@@ -54,16 +54,15 @@ The required privileges depend on which features you use. The base set below is 
 | `Datastore.Low level file operations` | Allows performing low-level file operations - read, write, delete, and rename - in a datastore. |
 | `Sessions` privileges: |     |
 | `Sessions.Validate session` | Allows verification of the validity of a session. |
-| `Cryptographic` privileges: |     |
-| `Cryptographic.Decrypt` | Allows decryption of an encrypted virtual machine. |
-| `Cryptographic.Direct access` | Allows access to encrypted resources. |
 
 ### Additional privileges required for encrypted VMs
 
-| Privilege | Purpose |
-|---|---|
-| `Cryptographer.Access` | Base access to cryptographic operations on the VM |
-| `Cryptographer.Decrypt` | Decrypt the VM's disks for read access during migration |
+Required only when the source VM uses vSphere VM Encryption.
+
+| Privilege | Name in the vSphere Client | Purpose |
+|---|---|---|
+| `Cryptographer.Access` | **Cryptographic operations > Direct Access** | Access to encrypted resources, including NFC access to the VM's disks |
+| `Cryptographer.Decrypt` | **Cryptographic operations > Decrypt** | Decrypt the VM's disks for read access during migration |
 
 #### `VixDiskLib_Open` token-retrieval failure
 
@@ -140,22 +139,28 @@ Please refer to the following table for the required ports:
 
 | Port | Protocol | Source | Destination | Purpose |
 | --- | --- | --- | --- | --- |
-| 443 | TCP | PCD nodes | VMware vCenter API endpoint | VMware provider inventory<br><br>Disk transfer authentication |
-| 443 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer authentication |
-| 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy via NFC protocol (see NFC limitations above) |
-| 22 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
-| 10809–11808 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel) |
+| 443 | TCP | vJailbreak VM and agent VMs | VMware vCenter API endpoint | VMware provider inventory<br><br>Disk transfer authentication |
+| 443 | TCP | vJailbreak VM and agent VMs | VMware ESXi hosts | Standard Copy only: disk transfer authentication |
+| 902 | TCP | vJailbreak VM and agent VMs | VMware ESXi hosts | Standard Copy only: disk transfer data copy via NFC protocol (see NFC limitations above) |
+| 22 | TCP | vJailbreak VM and agent VMs | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
+| 10809–11808 | TCP | vJailbreak VM and agent VMs | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel) |
+| 22 | TCP | vJailbreak VM and agent VMs | VMware ESXi hosts | Storage Accelerated Copy only: SSH to run the array-offloaded clone on the host |
+| 443 | TCP | vJailbreak VM and agent VMs | Storage array management endpoint | Storage Accelerated Copy only: storage array REST API (Hitachi Vantara: the configured REST port, 443 by default) |
+
+Migrations run in pods that use the host network of the node they are scheduled on, so traffic can come from the vJailbreak VM or from any agent VM added by [scaling](../../guides/how-to/scaling/).
 
 
 ## What network connectivity do I need for vJailbreak?
 
-During normal migration operations, vJailbreak only requires connectivity to vCenter, ESXi hosts, and the OpenStack API. The additional endpoints listed below are needed only when **installing or upgrading vJailbreak** itself.
+During normal migration operations, vJailbreak requires connectivity to vCenter, ESXi hosts and the OpenStack API, plus the Proxy VM or the storage array when you use vJailbreak Accelerated Copy or Storage Accelerated Copy. The additional endpoints listed below are needed only when **installing or upgrading vJailbreak** itself.
 
 ### Required for Migration (always)
 
 The vJailbreak VM and any helper nodes must be able to reach:
 
 - **vCenter and ESXi hosts** — for VM inventory, disk transfer authentication, and NFC data copy (ports 443 and 902)
+- **Proxy VM** (vJailbreak Accelerated Copy only) — SSH (port 22) and `qemu-nbd` (ports 10809–11808)
+- **ESXi hosts over SSH and the storage array management endpoint** (Storage Accelerated Copy only) — ports 22 and 443
 - **OpenStack API endpoints** — for creating volumes, networks, and VM resources at the destination
 - **ICMP (ping) access to guest VM IPs** — for post-migration connectivity verification (health checks)
 - **Health-check endpoints on migrated guest VMs** — over user-defined HTTP/HTTPS ports, if health checks are enabled

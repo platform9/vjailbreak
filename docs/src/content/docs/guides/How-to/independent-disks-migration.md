@@ -27,15 +27,15 @@ There isn't a single "independent disks don't work" rule — it depends on which
 
 | Storage copy method | Data copy method | Result | Why |
 |---|---|---|---|
-| **Normal (Standard)** | Copy live VMs, then power off (Hot) | ❌ Fails | Needs CBT — see below |
-| **Normal (Standard)** | Power off VMs, then copy (Cold) | ❌ Fails | VDDK cannot open the disk at all — see below |
+| **Standard Copy** | Copy live VMs, then power off (Hot) | ❌ Fails | Needs CBT — see below |
+| **Standard Copy** | Power off live VMs, then copy (Cold) | ❌ Fails | VDDK cannot open the disk at all — see below |
 | **vJailbreak Accelerated Copy** *(default)* | Copy live VMs, then power off (Hot) | ❌ Fails | Needs CBT — see below |
-| **vJailbreak Accelerated Copy** *(default)* | Power off VMs, then copy (Cold) | ✅ Works | No CBT, no VDDK — reads the disk's file directly |
-| **Storage Accelerated Copy** | Either | ✅ Works | No CBT, no VDDK, array-level copy; always runs cold internally |
+| **vJailbreak Accelerated Copy** *(default)* | Power off live VMs, then copy (Cold) | ✅ Works | No CBT, no VDDK — reads the disk's file directly |
+| **Storage Accelerated Copy** | Not selectable (cold only) | ✅ Works | No CBT, no VDDK, array-level copy; the VM is always powered off for the copy |
 
-### Normal (Standard) copy: a VDDK bug, not just CBT
+### Standard Copy: a VDDK bug, not just CBT
 
-The **Normal** storage copy method uses VMware VDDK to open and read the source disk. This is a known VDDK defect, not something vJailbreak can work around:
+The **Standard Copy** storage copy method uses VMware VDDK to open and read the source disk. This is a known VDDK defect, not something vJailbreak can work around:
 
 > "If the Disk Mode is 'Independent-Persistent' or 'Independent-Nonpersistent', then VDDK ≥ 7 has a bug where it cannot open these disks."
 > — [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html)
@@ -46,7 +46,7 @@ The **Normal** storage copy method uses VMware VDDK to open and read the source 
 nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. Error occurred when obtaining the file name for scsi0:0.
 ```
 
-This happens regardless of Hot or Cold — VDDK fails to open the disk before the copy even starts, so Normal copy cannot migrate a VM with an independent disk in either mode. Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead — neither uses VDDK. (VMware's man page also lists downgrading to VDDK 6.7 or earlier as an alternative, but switching storage copy method is simpler and doesn't require managing a different VDDK version.)
+This happens regardless of Hot or Cold — VDDK fails to open the disk before the copy even starts, so Standard Copy cannot migrate a VM with an independent disk in either mode. Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead — neither uses VDDK. (VMware's man page also lists downgrading to VDDK 6.7 or earlier as an alternative, but switching storage copy method is simpler and doesn't require managing a different VDDK version.)
 
 ### Hot migration (any storage copy method): needs CBT
 
@@ -60,7 +60,7 @@ CBT is not enabled on disk <id>
 
 This applies even when using **vJailbreak Accelerated Copy** with Hot migration selected — Hot migration always depends on CBT, independent of which storage copy method is transporting the bytes.
 
-**Cold migration** (**Power off VMs, then copy**) never uses CBT or change IDs — it copies each disk once, in full, while the VM is off.
+**Cold migration** (**Power off live VMs, then copy**) never uses CBT or change IDs — it copies each disk once, in full, while the VM is off.
 
 ## Identify independent disks before you migrate
 
@@ -82,7 +82,7 @@ Get-VM <vm-name> | Get-HardDisk | Select-Object Name, Persistence
 
 ## Migrating the VM
 
-Use **vJailbreak Accelerated Copy** (the default storage copy method) or **Storage Accelerated Copy**, with **Power off VMs, then copy** (Cold) as the data copy method. This is the only combination that requires no changes to the source VM and correctly copies the disk regardless of its mode.
+Use **vJailbreak Accelerated Copy** (the default storage copy method) or **Storage Accelerated Copy**, with **Power off live VMs, then copy** (Cold) as the data copy method. This is the only combination that requires no changes to the source VM and correctly copies the disk regardless of its mode.
 
 ### If you need Hot migration for minimal downtime
 
@@ -91,7 +91,7 @@ Change the independent disk back to normal (dependent) mode on the source VM fir
 1. Power off the source VM.
 2. **Edit Settings** → select the disk → **Disk Mode** → change to **Dependent**.
 3. Power the VM back on.
-4. Proceed with Hot migration, using **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** (not Normal — see the VDDK bug above, which is independent of Hot/Cold).
+4. Proceed with Hot migration, using **vJailbreak Accelerated Copy**. Storage Accelerated Copy is cold only, and Standard Copy hits the VDDK bug above, which is independent of Hot/Cold.
 
 :::caution
 Changing a disk's mode away from independent restores normal snapshot behavior for it on the **source** VM going forward — a snapshot revert will now roll this disk back along with the others. Only do this if that trade-off is acceptable for the disk in question (for example, don't do this for a disk that's independent specifically so a database's transaction log survives OS-disk reverts).

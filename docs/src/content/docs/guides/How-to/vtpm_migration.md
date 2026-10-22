@@ -14,7 +14,7 @@ Windows 11 with vTPM requires an account for login to the VM. Users may need to 
 ## Prerequisites
 
 - **VMware Native Key Provider** (default vCenter-level key provider) must be configured for enabling vTPM on the source VM.
-- On PCD, use `tpm_version: 2.0` and `tpm_provider: tpm-crb` as extra metadata specs on the VM flavor to enable vTPM post-migration.
+- On PCD, add the `hw:tpm_version: 2.0` and `hw:tpm_model: tpm-crb` extra specs to the VM flavor to enable vTPM post-migration (see [Step 2](#step-2-create-a-new-flavor-with-tpm-metadata)).
 
 ![vCenter Key Provider configuration](../../../../../public/images/vtpm-key-provider.png)
 

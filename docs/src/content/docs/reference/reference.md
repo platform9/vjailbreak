@@ -212,7 +212,7 @@ spec:
   - `vmCutoverStart`: Optional. ISO 8601 timestamp indicating when to start VM cutover.
   - `vmCutoverEnd`: Optional. ISO 8601 timestamp indicating the latest time by when VM cutover can start. If this time has been passed before the cutover can start, migration will fail.
   - `adminInitiatedCutOver`: Set to true if you wish to manually trigger the cutover process. Default: `false`
-  - `performHealthChecks`: Set to false if you want to disable Ping and HTTP GET health check. Failing these checks does not clean up the targeted VM. Default: `false`
+  - `performHealthChecks`: Set to true to run ping and HTTP GET health checks against the migrated VM. vJailbreak retries them up to 10 times, 60 seconds apart, and only logs the result: failing these checks does not fail the migration or clean up the targeted VM. Default: `false`
   - `healthCheckPort`: Port to run the HTTP GET health check against. Default: "443"
 - `virtualMachines`: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or in parallel within a plan.
 
