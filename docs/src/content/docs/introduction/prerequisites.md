@@ -13,7 +13,8 @@ VDDK is required only if you plan to use the **Standard** storage copy method.
 :::note
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
 package, use vJailbreak Accelerated Copy or Storage Accelerated Copy instead. Both work without
-VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only**.
+VDDK. As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot) migration.
+Storage Accelerated Copy supports cold migration only.
 :::
 
 ### What access do I need for my vCenter user to be able to perform this migration?

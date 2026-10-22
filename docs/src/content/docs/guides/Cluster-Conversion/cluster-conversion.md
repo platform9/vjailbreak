@@ -72,7 +72,7 @@ After you submit the rolling conversion form, vJailbreak will take the following
    2. Wait for all VMs on that ESXi to move off of this ESXi to other hosts **(by DRS/vMotion)**  
    3. Once the ESXi is empty, vJailbreak starts the process of converting it to a PCD host  
       1. Fetch list of all available **“Machines”** in MAAS  
-      2. Find the correct **“Machine”** for the current ESXi, by checking the **hardwareUUID** received both from vCenter API and MAAS API  
+      2. Find the correct **“Machine”** for the current ESXi, by checking the **hardwareUUID** received both from vCenter API and MAAS API. If no machine matches by hardware UUID, vJailbreak falls back to matching the MAC addresses of the ESXi host's physical NICs against the machines' MAC addresses  
       3. Once Machine is found, we fetch its **IPMI configuration** from MAAS, and use it to set this machine to **PXE (net) boot**  
       4. **Release** the machine in MAAS  
       5. **Deploy** the machine via MAAS, using the special cloud-init created in earlier steps  

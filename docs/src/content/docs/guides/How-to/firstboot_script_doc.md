@@ -200,5 +200,5 @@ This log contains:
 - Warnings for failed script blocks
 
 ## Link to Readily Available Firstboot Scripts
-1. [Windows VMware Tools Removal Script](https://github.com/platform9/vjailbreak/blob/main/scripts/firstboot/windows/vmware-tools-deletion.bat) - A script to remove VMware Tools/drivers from Windows VMs
+1. **VMware Tools removal** - You do not need your own script to remove VMware Tools. Leave the **Remove VMware Tools** option enabled in the migration form (it is on by default), and vJailbreak runs its own removal script on the migrated VM's first boot
 2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1

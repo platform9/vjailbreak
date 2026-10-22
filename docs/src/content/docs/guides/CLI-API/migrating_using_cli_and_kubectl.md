@@ -131,15 +131,15 @@ For example, if the following is the output of the above command:
 $ kubectl get vmwaremachines -n migration-system vm-1 -o yaml
 
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
-kind: VmwareMachine
+kind: VMwareMachine
 metadata:
   name: vm-1
   namespace: migration-system
   creationTimestamp: "2025-05-27T09:27:34Z"
   generation: 1
   labels:
-    pcd-vm-openstack-a: d3f3d5c7-f6d8-410e-bb9f-a7afe4j8nhg
-    vmwarecreds.k8s.pf9.io-vcenter-a: "true"
+    vjailbreak.k8s.pf9.io/vmwarecreds: vcenter-a
+    vjailbreak.k8s.pf9.io/vmwarecreds-vcenter-a: "true"
 spec:
   vms:
     clusterName: cluster-1
@@ -400,9 +400,6 @@ The example above shows the minimum required fields. The following optional fiel
 ```yaml
 spec:
   migrationTemplate: migrationtemplate
-
-  # Retry the migration automatically if it fails
-  retry: false
 
   # Shell script executed on first boot of the destination VM
   firstBootScript: |

@@ -159,16 +159,20 @@ ssh -i ~/.ssh/esxi_migration_key root@<esxi-host-ip>
 If successful, you should be able to log in to ESXi.
 #### Step 5: Configure SSH Key in vJailbreak
 
-1. Navigate to the **Storage Management** page
-2. At the top, find the **ESXi SSH Key** section
-3. Click **Configure**
+1. In the left sidebar, navigate to **Credentials** → **ESXi SSH**
+2. Click **Configure SSH Key** (or **Edit SSH Key** if a key is already configured). The **Add ESXi SSH Key** (or **Edit ESXi SSH Key**) drawer opens
+3. Locate the **SSH Private Key** field
 4. Get your private key contents:
    ```bash
    cat ~/.ssh/esxi_migration_key
    ```
 5. Copy the entire output (including `-----BEGIN OPENSSH PRIVATE KEY-----` and `-----END OPENSSH PRIVATE KEY-----`)
-6. Paste into the UI textarea
+6. Paste it into the **SSH Private Key** field
 7. Click **Save**
+
+:::tip
+If no ESXi SSH key is configured, the **Storage Array** page shows a warning banner. Click **Configure Now** in the banner to go to the **ESXi SSH** page.
+:::
 
 #### Step 6: Repeat for All ESXi Hosts
 
@@ -361,9 +365,9 @@ If not already done:
 
 ### Step 3: Configure ESXi SSH Key
 
-1. At the top of the Storage Management page, find the **ESXi SSH Key** section
-2. Click **Configure** if not already configured
-3. Paste your ESXi SSH private key (see the [ESXi SSH Access](#2-esxi-ssh-access) section for key generation steps)
+1. In the left sidebar, navigate to **Credentials** → **ESXi SSH**
+2. Click **Configure SSH Key** if no key is configured yet (or **Edit SSH Key** to replace it)
+3. Paste your ESXi SSH private key into the **SSH Private Key** field (see the [ESXi SSH Access](#2-esxi-ssh-access) section for key generation steps)
 4. Click **Save**
 
 ### Step 4: Create Migration with Storage Accelerated Copy

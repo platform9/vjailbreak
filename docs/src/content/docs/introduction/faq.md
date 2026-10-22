@@ -12,8 +12,8 @@ VMware's public VDDK download pages are currently unavailable. VDDK is only requ
 used immediately:
 
 - [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/): works with any
-  datastore; **cold migration only** (source VM must be powered off before copy begins, live/hot
-  migration is not supported)
+  datastore; supports cold and, as of v0.5.0, live (hot) migration. Live migration uses Changed
+  Block Tracking (CBT) on the source VM
 - [Storage Accelerated Copy](../../concepts/storage-accelerated-copy/): requires a supported
   storage array (Pure Storage, NetApp, or Hitachi Vantara); cold migration only
 
@@ -48,8 +48,10 @@ If this issue is seen, most of the time it is a DNS/name-resolution problem. Deb
 
 Error signature:
 ```text
-failed to run nbdcopy: exec: already started
+failed to run nbdcopy: <reason>: ...
 ```
+
+As of v0.4.8, the reason from the disk-copy debug log is included in the error, for example `Name or service not known` or `Host address lookup for server ... failed` for a DNS problem. Before v0.4.8, the error reads only `failed to run nbdcopy: exec: already started`. See [nbdcopy fails during disk copy](../../guides/troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
 
 See: [Debug Logs](../../guides/troubleshooting/debuglogs/).
 
