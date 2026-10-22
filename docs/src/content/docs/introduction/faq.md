@@ -1,6 +1,6 @@
 ---
 title: FAQ
-description: frequently asked questions
+description: Frequently asked questions
 ---
 
 ### What should I do if I cannot download VDDK?
@@ -8,13 +8,13 @@ description: frequently asked questions
 VMware's public VDDK download pages are currently unavailable. VDDK is only required for the
 **Standard** storage copy method.
 
-**vJailbreak Accelerated Copy** and **Storage-Accelerated Copy** do not require VDDK and can be
+**vJailbreak Accelerated Copy** and **Storage Accelerated Copy** do not require VDDK and can be
 used immediately:
 
 - [vJailbreak Accelerated Copy](../../concepts/vjailbreak-accelerated-copy/): works with any
   datastore; **cold migration only** (source VM must be powered off before copy begins, live/hot
   migration is not supported)
-- [Storage-Accelerated Copy](../../concepts/storage-accelerated-copy/): requires a supported
+- [Storage Accelerated Copy](../../concepts/storage-accelerated-copy/): requires a supported
   storage array (Pure Storage, NetApp, or Hitachi Vantara); cold migration only
 
 ### Are IPs and MAC addresses persisted?
@@ -34,7 +34,7 @@ We internally use virt-v2v, so all operating systems supported for conversion by
 No, vJailbreak will remove them for you, with the help of virt-v2v. The process that virt-v2v uses along with alternative approaches can be found [here](https://libguestfs.org/virt-v2v.1.html#converting-a-windows-guest).
 
 ### Do I need to perform any manual steps to install drivers for Linux and Windows VMs?
-No, vJailbreak will install it for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, eg. Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
+No, vJailbreak will install them for you. For Windows, we allow you to specify a URL for a specific version of virtio drivers. This is useful for older Windows versions, e.g., Windows Server 2012, which specifically need [v0.1.189](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.189-1/virtio-win-0.1.189.iso) in order to work.
 
 ### Why does the conversion step take time?
 The delay is typically not because a single script is slow. The overall conversion process includes OS-level changes that take time, such as installing VirtIO drivers, removing old hypervisor drivers, and (for Windows guests) performing registry changes.
@@ -55,7 +55,7 @@ See: [Debug Logs](../../guides/troubleshooting/debuglogs/).
 
 See the troubleshooting guide: [nbdcopy fails during disk copy (often DNS resolution)](../../guides/troubleshooting/nbdcopy-fails-after-vm-moved-esxi-host/).
 
-### What do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
+### What to do when virt-v2v fails with `rename: /sysroot/etc/resolv.conf ... Operation not permitted`?
 
 The conversion fails because `/etc/resolv.conf` is marked **immutable** inside the source VM. `virt-v2v` cannot rename or replace immutable files during guest filesystem conversion.
 
@@ -65,13 +65,13 @@ The conversion fails because `/etc/resolv.conf` is marked **immutable** inside t
 chattr -i /etc/resolv.conf
 ```
 
-For the full symptom description, root cause analysis, and verification steps, see: [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](../../guides/troubleshooting/troubleshooting/#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
+For the full symptom description, root cause analysis, and verification steps, see: [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](../../guides/troubleshooting/troubleshooting/#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted).
 
-### How does Vjailbreak handle flavors of the vm in the target openstack environment?
+### How does vJailbreak handle flavors of the VM in the target OpenStack environment?
 
 vJailbreak provides users the flexibility to assign desired OpenStack flavors to virtual machines during the migration setup. If the user specifies a flavor in the migration form, vJailbreak will honor that choice during provisioning on the target OpenStack environment. When migrating via CLI/kubectl, the same explicit choice can be made by setting `spec.targetFlavorId` on the VM's `VMwareMachine` custom resource — see [Explicitly select the target OpenStack flavor](../../guides/CLI-API/migrating_using_cli_and_kubectl/#optional-explicitly-select-the-target-openstack-flavor).
 
-If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (We always try to find the exact match if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
+If no flavor is explicitly chosen, vJailbreak automatically selects the most appropriate flavor based on the VM's resource requirements (we always try to find the exact match, if not the next best match). In cases where no suitable flavor is found, the UI will display a warning. If the user proceeds despite the warning, the migration will fail with a clear error message indicating that a compatible flavor could not be found.
 
 #### Hotplug Flavor Support
 
@@ -103,7 +103,7 @@ Yes, vJailbreak can migrate VMs running Docker Engine without any issues. vJailb
 ### Can vJailbreak migrate VMs that are part of a Kubernetes cluster?
 Yes, you can migrate VMs that are part of a Kubernetes cluster. However, it's important to understand that vJailbreak operates purely as a VM migration tool and has no awareness of Kubernetes components or distributed applications running on the VM.
 
-Users are responsible for taking necessary steps to ensure no disruption to applications and the distributed architecture of Kubernetes. This may include draining nodes, managing pod scheduling, and coordinating the migration with cluster operations. vJailbreak is not responsible for managing any workload-specific concerns.
+Users are responsible for taking the necessary steps to ensure no disruption to applications and the distributed architecture of Kubernetes. This may include draining nodes, managing pod scheduling, and coordinating the migration with cluster operations. vJailbreak is not responsible for managing any workload-specific concerns.
 
 ### Can vJailbreak migrate Kubernetes Persistent Volume Claims (PVCs)?
 No, vJailbreak does not migrate PVCs. PVCs are Kubernetes constructs managed by CSI drivers and storage backends. vJailbreak has no visibility into these workload-level abstractions.
@@ -124,6 +124,6 @@ See the [GPO Migration Guide](../../guides/how-to/gpo_migration/) for steps to t
 
 ### How do I migrate a VM with vTPM (Virtual Trusted Platform Module) enabled?
 
-VMs with vTPM and Virtualization Based Security (VBS) enabled require special handling. You must temporarily disable vTPM on the source VM before migration, then re-enable it on the destination VM post-migration.
+VMs with vTPM and Virtualization-Based Security (VBS) enabled require special handling. You must temporarily disable vTPM on the source VM before migration, then re-enable it on the destination VM post-migration.
 
 See the [vTPM Migration Guide](../../guides/how-to/vtpm_migration/) for step-by-step instructions.

@@ -19,14 +19,14 @@ The Linux network persistence mechanism operates on the first boot post-migratio
 
 - **Statically Configured Interfaces**: The original names of network interfaces that were statically configured before migration are preserved.
 - **DHCP Configured Interfaces**: Interfaces configured via DHCP may be renamed to a consistent pattern: `vjb<random_number>`.
-- **Interface with No Configuration**: Interfaces that had no configuration (e.g., were left unconfigured) will remain untouched but the name may change.
+- **Interfaces with No Configuration**: Interfaces that had no configuration (e.g., were left unconfigured) will remain untouched, but the name may change.
 
 ### Supported Distributions
 
 | Distribution | Expected | Verified |
 | --- | --- | --- |
 |   Ubuntu       | Supported | Yes |
-|   OpenSuse     | Supported | Yes |
+|   openSUSE     | Supported | Yes |
 |   RHEL         | Supported | Yes |
 |   CentOS       | Supported | Yes |
 |   Rocky        | Supported | No |
@@ -39,7 +39,7 @@ The Windows network persistence mechanism operates on the first boot post-migrat
 
 The network persistence script runs on the first boot post-migration. Its primary function is to restore the network configuration to its pre-migration state by performing the following actions:
 
-- **Windows Server 2016 and Above**:
+- **Windows Server 2016 and above**:
   - **Statically Configured Interfaces**: The original interface name, IP address, and gateway from the source are persisted on the destination, ensuring continuous network connectivity.
   - **DHCP Configured Interfaces**: Interfaces configured via DHCP are renamed to a consistent pattern: `vjb_<random_number>`.
 
@@ -78,7 +78,7 @@ The Windows Virtual Machine (VM) will undergo multiple reboots during the instal
 :::caution
 **Important: Routing Considerations**
 
-If a VM has multiple interfaces on the same subnet and has asymmetric routing table, the destination openstack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing is having port-security enabled.
+If a VM has multiple interfaces on the same subnet and has an asymmetric routing table, the destination OpenStack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing has port security enabled.
 
 **Recommendation:**
 - To avoid asymmetric routing, ensure each interface is on a unique subnet or consolidate multiple IPs onto a single port, as multiple interfaces on the same subnet will cause connectivity issues.

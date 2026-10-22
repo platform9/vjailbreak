@@ -1,11 +1,11 @@
 ---
-title: Scale vJailbreak 
+title: Scale vJailbreak
 description: You can scale up vJailbreak to perform more parallel migrations
 ---
 
 vJailbreak can be scaled to perform multiple migrations in parallel by deploying additional `agents`, enabling greater efficiency and workload distribution.
 
-Additional agents can be created in the Agents tab of the vJailbreak dashboard using the "Scale Up" button. You will need to choose the destination OpenStack credentials, the size of the agent VM(s), and the number of agent nodes up to a maximum of 5 per scale up. Additional agent nodes can be scaled up in batches of 5, providing the flexibility to change agent VM sizes to help with throttling network traffic.
+Additional agents can be created in the Agents tab of the vJailbreak dashboard using the "Scale Up" button. You will need to choose the destination OpenStack credentials, the size of the agent VM(s), and the number of agent nodes up to a maximum of 5 per scale-up. Additional agent nodes can be scaled up in batches of 5, providing the flexibility to change agent VM sizes to help with throttling network traffic.
 
 :::caution
 It is entirely possible to fully saturate a 10Gb network with many parallel migrations!
@@ -13,7 +13,7 @@ It is entirely possible to fully saturate a 10Gb network with many parallel migr
 
 ## Identifying Agent VMs in OpenStack/PCD
 
- As of v0.5.0, an agent's OpenStack/PCD instance name is derived from the primary vJailbreak VM's name — `<primary-vm-name>-vjailbreak-agent-<hash>` — so an agent VM can be traced back to its primary vJailbreak VM directly from the OpenStack/PCD console. This name is set automatically and is not user-editable.
+As of v0.5.0, an agent's OpenStack/PCD instance name is derived from the primary vJailbreak VM's name — `<primary-vm-name>-vjailbreak-agent-<hash>` — so an agent VM can be traced back to its primary vJailbreak VM directly from the OpenStack/PCD console. This name is set automatically and is not user-editable.
 
 ## Agent Node Sizing and Migration Capacity
 
@@ -43,7 +43,7 @@ For safe capacity planning, use the **limits-based calculation** to ensure migra
 
 ### Recommended Agent Flavors
 
-Below are recommended OpenStack flavors for agent nodes based on desired migration capacity. Reserve approximately **20-25% of resources** for system overhead (OS, K3s, monitoring, etc.):
+Below are recommended OpenStack flavors for agent nodes based on desired migration capacity. Reserve approximately **20-25% of resources** for system overhead (OS, k3s, monitoring, etc.):
 
 | Agent Flavor | vCPUs | RAM | Storage | Concurrent Migrations (per agent) | Use Case |
 |--------------|-------|-----|---------|-----------------------------------|----------|
@@ -91,7 +91,7 @@ If an agent stays in `VMCreated` and never becomes `Ready`, the guest most likel
 Agent VMs use the same login process as the primary vJailbreak VM:
 - **Username**: `ubuntu`
 - **Default Password**: `password`
-- On first login, you will be prompted to change the password immediately. 
+- On first login, you will be prompted to change the password immediately.
 
 :::note
 VDDK libraries are automatically synced from the primary vJailbreak VM to all agent nodes. You only need to upload VDDK to the primary vJailbreak VM.

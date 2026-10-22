@@ -9,7 +9,7 @@ up on an emulated SATA controller first and lets you move it to virtio once you 
 confirmed it boots.
 
 vJailbreak detects this automatically during the migration, but you have to prepare the source VM for such VMs. There is nothing to select in the migration form.
-form.
+
 
 :::note[Only the system volume matters]
 If just the **data disks** are dynamic, none of this applies. The VM migrates
@@ -125,7 +125,7 @@ storage miniport is not a reliable signal here — check for the device, as abov
 
 If you re-run the same commands after the cutover, expect different output.
 
-Once above is verified, you will have 3 cutover options:
+Once the above is verified, you will have 3 cutover options:
 
 | Cutover option | What the checks show afterwards |
 | --- | --- |
