@@ -45,7 +45,7 @@ This describes the **cold** data copy path; see the note above for hot migration
 
 - **Proxy VM**: A Linux VM running in the same vCenter with `qemu-nbd` and `openssh-server` installed
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
-- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and **10809–11808** (`qemu-nbd`, one port per disk copied in parallel)
+- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and the `qemu-nbd` port range, **10809–11808** by default (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
 - **disk.EnableUUID**: Must be set to `TRUE` on the Proxy VM in vCenter
 - **PVSCSI controller**: At least one SCSI controller on the Proxy VM must be **VMware Paravirtual (PVSCSI)** — vJailbreak auto-adds one during onboarding if a free controller slot is available
 - **Datastore accessibility**: The HotAdd proxy must have access to the same datastore as the target virtual machine, and the VMFS version and data block sizes for the target VM must be the same as the datastore where the HotAdd proxy resides.
@@ -79,14 +79,16 @@ The Proxy VM must be a **Linux-based OS** (recommended: Ubuntu, Alpine, or Debia
 
 vJailbreak can deploy and register the Proxy VM in a single step directly from the UI:
 
-1. Navigate to **vJailbreak Accelerated Copy** in the left sidebar
-2. Click **Add Proxy VM** and select **Deploy a new vJailbreak Proxy VM**
-3. Select your VMware credentials and fill in the deployment target (datacenter, datastore, network, and optionally a cluster or host)
-4. Enter a unique VM name and click **Deploy & Register VM**
+1. In the left sidebar, navigate to **Migrations** → **vJailbreak Proxy VMs**
+2. Click **Add vJailbreak Proxy VM** and select **Deploy a new vJailbreak Proxy VM**
+3. Select your **VMware Credentials** and enter a unique **VM Name**
+4. Under **Deployment Target**, select the **Datacenter**, **Datastore** and **Network**, and optionally a **Cluster / Host**
+5. Under **VM Network Configuration** (as of v0.6.0), leave **Configure a static IP** off to use DHCP, or turn it on to set a static IP (see **Networks without DHCP** below)
+6. Click **Deploy & Register VM**
 
 vJailbreak will import the pre-configured OVA into vCenter, power the VM on, generate and inject an SSH key pair automatically, and register the Proxy VM — no manual key setup required. The VM appears in the list with status **Deploying** and transitions to **Ready** once verification completes (typically 3–5 minutes).
 
-**Networks without DHCP:** In the proxy VM deploy form, turn ON **Configure a static IP** and enter the IP address, subnet mask, and optionally a gateway. Without a gateway, the VM is reachable only from its own subnet. DNS is not configured. Leave the toggle off to use DHCP.
+**Networks without DHCP:** In the proxy VM deploy form, turn ON **Configure a static IP** and enter the IP address, subnet mask, and optionally a gateway. Without a gateway, the VM is reachable only from its own subnet. DNS is not configured. Leave the toggle off to use DHCP. The static IP is applied with cloud-init at first boot, so a custom OVA set with `PROXY_VM_OVA_URL` must include cloud-init and open-vm-tools.
 
 :::caution
 The OVA image uses default credentials (`root` / `password`) for the initial SSH key injection step. Change the root password on the VM after deployment in production environments.
@@ -168,16 +170,16 @@ When registering an existing VM, vJailbreak needs SSH access to the Proxy VM. Th
 
 ### Sub-option 1: Let vJailbreak Generate the Key Pair
 
-1. In the **Add Proxy VM** drawer, select **Register an existing VM**
-2. Select your VMware credentials and the VM
-3. Under **SSH Access**, choose **Generate Key Pair** and click **Generate**
-4. The UI displays the public key — copy it and add it to the Proxy VM's `authorized_keys`:
+1. In the **Add vJailbreak Proxy VM** drawer, select **Register an existing VM**
+2. Select your **VMware Credentials** and the **Proxy VM**
+3. Under **SSH Access**, choose **Generate Key Pair** and click the **Generate Key Pair** button
+4. The UI displays the public key — copy it and add it to `/root/.ssh/authorized_keys` on the Proxy VM:
    ```bash
    # On the Proxy VM (as root)
    echo "<paste public key here>" >> ~/.ssh/authorized_keys
    chmod 600 ~/.ssh/authorized_keys
    ```
-5. Click **Register**
+5. Click **Register vJailbreak Proxy VM**
 
 vJailbreak stores the generated private key as a Kubernetes secret automatically.
 
@@ -188,7 +190,7 @@ If you have an existing key pair already configured on the VM:
 1. Under **SSH Access**, choose **Upload Private Key**
 2. Upload the private key file or paste its contents into the text area
 3. Confirm the corresponding public key is already in the VM's `authorized_keys`
-4. Click **Register**
+4. Click **Register vJailbreak Proxy VM**
 
 vJailbreak stores the uploaded private key as a Kubernetes secret and uses it during verification and migration.
 
@@ -232,14 +234,13 @@ ssh-copy-id -i proxy_vm_key.pub root@<proxy-vm-ip>
 
 Once the Proxy VM is set up and the SSH key is ready:
 
-1. In the vJailbreak UI, navigate to **vJailbreak Accelerated Copy** in the left sidebar
-2. Click **Add Proxy VM**
+1. In the vJailbreak UI, navigate to **Migrations** → **vJailbreak Proxy VMs** in the left sidebar
+2. Click **Add vJailbreak Proxy VM** and choose **Register an existing VM**
 3. Fill in the form:
-   - **Name**: A unique identifier for this Proxy VM
-   - **VM Name**: The exact VM name as it appears in vCenter
    - **VMware Credentials**: Select the VMware credentials that can see this VM
-   - **SSH Private Key**: Paste the contents of your private key file (e.g., `~/.ssh/proxy_vm_key`)
-4. Click **Add**
+   - **Proxy VM**: Select the VM from the vCenter inventory. The Proxy VM takes its name from this VM
+   - **SSH Access**: Choose **Generate Key Pair** or **Upload Private Key**, as described in [SSH Key Configuration](#ssh-key-configuration)
+4. Click **Register vJailbreak Proxy VM**
 
 vJailbreak will verify the Proxy VM by:
 - Confirming the VM exists in vCenter
@@ -265,7 +266,7 @@ If verification fails, address the reported issue (e.g., install missing utiliti
 ### Step 2: Select Proxy VM
 
 4. A **Proxy VM** dropdown appears — select a Proxy VM in **Ready** state
-5. The UI will only show Proxy VMs that are verified and ready
+5. The list shows only Proxy VMs in **Ready** state. As of v0.6.0, it shows only those whose ESXi host can access the datastores of every selected VM, because one Proxy VM is used for the whole migration
 
 ### Step 3: Start the Migration
 
@@ -393,7 +394,7 @@ sequenceDiagram
 - **Same vCenter**: Proxy VM and source VM must be managed by the same vCenter instance
 - **VMware Tools required**: The Proxy VM must have VMware Tools running so vJailbreak can retrieve its guest IP
 - **PVSCSI controller required**: Disk identification only works through a **VMware Paravirtual (PVSCSI)** controller. vJailbreak auto-adds one during onboarding, best-effort, when a free controller slot exists; onboarding fails only if no PVSCSI controller is present and none can be added (all 4 SCSI controller slots are legacy). See [Configure the SCSI Controller Type](#configure-the-scsi-controller-type-on-the-proxy-vm).
-- **Concurrent disk attach can fail**: When several migrations reach the disk-attach step at the same time on the same Proxy VM, vCenter may reject some of the simultaneous reconfigure tasks and those migrations fail. This is a transient race — the migrations that attached first continue normally, and the failed ones succeed on retry. Stagger migration start times or spread migrations across multiple Proxy VMs to reduce the chance of it happening.
+- **Disk attaches to a shared Proxy VM run one at a time**: As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time. A migration that finds another one attaching waits for its turn for up to 30 minutes and fails only if its turn does not come within that time. Before v0.5.0, simultaneous attaches could race and fail some migrations. Stagger migration start times or spread migrations across multiple Proxy VMs to avoid long waits.
 - **Maximum 60 disks per Proxy VM (including its own boot disk)**: vSphere allows at most **60** virtual disks per VM (4 SCSI controllers × 15 disks). The Proxy VM's own boot disk counts toward this total, so the constraint is **Proxy VM boot disk + attached source disks ≤ 60** — a Proxy VM with a single boot disk can have up to **59** source disks attached at any one time. This is a shared ceiling across **all** migrations using the same Proxy VM concurrently, not a per-migration limit. To migrate more disks in parallel, register additional Proxy VMs and distribute migrations across them.
 
 ## Troubleshooting
@@ -421,7 +422,7 @@ Error: failed to connect to NBD endpoint on proxy VM
 **Resolution:**
 1. Verify the Proxy VM is still running and SSH is accessible
 2. Check that `qemu-nbd` started successfully — review v2v-helper logs
-3. Ensure the NBD ports (TCP **10809–11808**, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and vJailbreak
+3. Ensure the NBD ports (the **Proxy VM Port Range**, TCP **10809–11808** by default, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and vJailbreak
 4. Confirm the Proxy VM's guest IP is correct (VMware Tools must be running)
 
 ### Block Device Not Found in Proxy VM
@@ -439,14 +440,16 @@ Error: could not identify block device for disk <uuid>
 
 ### Disk Attach Fails When Several Migrations Start Together
 
-**Symptoms:** A batch of migrations is started at once and some of them fail early with a vCenter error while attaching disks to the Proxy VM. The remaining migrations proceed into the copy phase normally.
+As of v0.5.0, this race no longer occurs: migrations that share a Proxy VM attach their disks one at a time. A waiting migration logs `Migration <migration-name> is currently attaching disks to Proxy VM <proxy-vm>, waiting for turn...`, checks again every 10 seconds, and fails only if its turn does not come within 30 minutes (`timed out after 30m0s waiting for turn to attach disks to Proxy VM <proxy-vm>`).
+
+**Symptoms (before v0.5.0):** A batch of migrations is started at once and some of them fail early with a vCenter error while attaching disks to the Proxy VM. The remaining migrations proceed into the copy phase normally.
 
 **Cause:** vCenter does not always handle simultaneous VM reconfigure (disk attach) tasks on the same Proxy VM gracefully, so some attach requests are rejected. This is a transient race condition, not a misconfiguration.
 
 **Resolution:**
-1. Wait until the surviving migrations have entered the copy phase
-2. [Retry](../../guides/how-to/retry_failed_migration/) the failed migrations — they normally succeed on the second attempt
-3. To reduce the chance of the race, stagger migration start times instead of starting a large batch at once, or register additional Proxy VMs and distribute migrations across them
+1. Upgrade to v0.5.0 or later, where disk attaches to a shared Proxy VM are serialized
+2. On any version, wait until the other migrations have entered the copy phase, then [retry](../../guides/how-to/retry_failed_migration/) the failed migrations
+3. To avoid failures or long waits, stagger migration start times instead of starting a large batch at once, or register additional Proxy VMs and distribute migrations across them
 
 ### Snapshot Creation Failed
 
@@ -456,7 +459,7 @@ Error: failed to create snapshot on source VM
 
 **Resolution:**
 1. Verify the VMware credentials have snapshot creation permissions
-2. Check if a snapshot with the same name already exists on the source VM — remove stale `vjailbreak-*` snapshots
+2. A leftover `vjailbreak-hotadd-snap` snapshot from an earlier attempt is removed automatically before a new one is taken. If the logs show `failed to remove pre-existing snapshot 'vjailbreak-hotadd-snap'`, remove that snapshot manually in vCenter and retry
 3. Ensure the source VM's datastore has sufficient free space for the snapshot delta files
 
 ### Migration Stuck After Snapshot

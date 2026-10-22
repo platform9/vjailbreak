@@ -53,6 +53,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue VMware credentials validation | `60` | Any positive integer |
 | `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS` | Interval to wait for volume to become available (in seconds) | `10` | Any positive integer |
 | `VOLUME_AVAILABLE_WAIT_RETRY_LIMIT` | Number of retries to wait for volume to become available | `15` | Any positive integer |
+| `HOT_ADD_PORT_RANGE_START` | As of v0.6.0, the first TCP port (inclusive) that `qemu-nbd` may use on the vJailbreak Proxy VM. Also set in the UI as **Proxy VM Port Range** on the **Advanced** tab of **Global Settings** | `10809` | 1024–65535 |
+| `HOT_ADD_PORT_RANGE_END` | As of v0.6.0, the last TCP port (inclusive) that `qemu-nbd` may use on the vJailbreak Proxy VM. The range must span at least 100 ports | `11808` | 1024–65535, not lower than the start port |
 | `HTTP_TIMEOUT_SECONDS` | Timeout in seconds for HTTP requests made by the controller | `30` | Any positive integer |
 | `V2V_HELPER_POD_CPU_REQUEST` | CPU request for v2v-helper migration pods | `1000m` | Kubernetes CPU quantity (e.g., `500m`, `2000m`) |
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
@@ -72,7 +74,7 @@ You can modify the ConfigMap to change settings using one of the following metho
 kubectl edit configmap vjailbreak-settings -n migration-system
 ```
 
-Then add or modify the data values as needed:
+Then add or modify the data values as needed. As of v0.6.0, the appliance ships with these values:
 
 ```yaml
 apiVersion: v1
@@ -81,23 +83,38 @@ metadata:
   name: vjailbreak-settings
   namespace: migration-system
 data:
-  AUTO_FSTAB_UPDATE: "false"
+  AUTO_FSTAB_UPDATE: "true"
   AUTO_PXE_BOOT_ON_CONVERSION: "false"
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "30"
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "20"
   CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: "false"
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false"
   DEFAULT_MIGRATION_METHOD: "cold"
+  DEFAULT_NETWORK_PERSISTENCE: "false"
   DEPLOYMENT_NAME: "vJailbreak"
+  HOT_ADD_PORT_RANGE_END: "11808"
+  HOT_ADD_PORT_RANGE_START: "10809"
+  HTTP_TIMEOUT_SECONDS: "30"
+  LOG_RETENTION_HOURS: "24"
+  NTP_SERVERS: ""
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60"
   PERIODIC_SYNC_INTERVAL: "1h"
   PERIODIC_SYNC_MAX_RETRIES: "3"
   PERIODIC_SYNC_RETRY_CAP: "3h"
   POPULATE_VMWARE_MACHINE_FLAVORS: "true"
+  PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+  TIMEZONE: ""
+  V2V_HELPER_POD_CPU_LIMIT: "2000m"
+  V2V_HELPER_POD_CPU_REQUEST: "1000m"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: "3Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: "3Gi"
+  V2V_HELPER_POD_MEMORY_LIMIT: "5Gi"
+  V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"
   VALIDATE_RDM_OWNER_VMS: "true"
   VCENTER_LOGIN_RETRY_LIMIT: "5"
-  VCENTER_SCAN_CONCURRENCY_LIMIT: "150"
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "30"
-  VM_ACTIVE_WAIT_RETRY_LIMIT: "20"
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "10"
+  VDDK_REQUIRED: "false"
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "20"
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "15"
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60"
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: "10"
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: "15"
@@ -113,7 +130,11 @@ kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p 
 
 ### Method 3: From a file
 
-Create a file with your settings:
+:::caution
+The appliance creates this ConfigMap with `kubectl apply`, so applying a file that leaves out any of the shipped keys removes those keys from the ConfigMap. Each removed setting then falls back to its built-in default, which can differ from the value the appliance ships with (for example, the v2v-helper memory request and limit). Always include **every** setting in the file. Check your current values first with `kubectl get configmap vjailbreak-settings -n migration-system -o yaml`, so you don't revert settings changed earlier, for example on the **Global Settings** page.
+:::
+
+Create a file that contains every setting, then change the values you need. As of v0.6.0, the appliance ships with these settings:
 
 ```bash
 cat > vjailbreak-settings.yaml << EOF
@@ -123,23 +144,38 @@ metadata:
   name: vjailbreak-settings
   namespace: migration-system
 data:
-  AUTO_FSTAB_UPDATE: "false"
+  AUTO_FSTAB_UPDATE: "true"
   AUTO_PXE_BOOT_ON_CONVERSION: "false"
-  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "30"
+  CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD: "20"
   CLEANUP_PORTS_AFTER_MIGRATION_FAILURE: "false"
   CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE: "false"
   DEFAULT_MIGRATION_METHOD: "cold"
+  DEFAULT_NETWORK_PERSISTENCE: "false"
   DEPLOYMENT_NAME: "vJailbreak"
+  HOT_ADD_PORT_RANGE_END: "11808"
+  HOT_ADD_PORT_RANGE_START: "10809"
+  HTTP_TIMEOUT_SECONDS: "30"
+  LOG_RETENTION_HOURS: "24"
+  NTP_SERVERS: ""
   OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES: "60"
   PERIODIC_SYNC_INTERVAL: "1h"
   PERIODIC_SYNC_MAX_RETRIES: "3"
   PERIODIC_SYNC_RETRY_CAP: "3h"
   POPULATE_VMWARE_MACHINE_FLAVORS: "true"
+  PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova"
+  TIMEZONE: ""
+  V2V_HELPER_POD_CPU_LIMIT: "2000m"
+  V2V_HELPER_POD_CPU_REQUEST: "1000m"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT: "3Gi"
+  V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST: "3Gi"
+  V2V_HELPER_POD_MEMORY_LIMIT: "5Gi"
+  V2V_HELPER_POD_MEMORY_REQUEST: "2Gi"
   VALIDATE_RDM_OWNER_VMS: "true"
   VCENTER_LOGIN_RETRY_LIMIT: "5"
-  VCENTER_SCAN_CONCURRENCY_LIMIT: "150"
-  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "30"
-  VM_ACTIVE_WAIT_RETRY_LIMIT: "20"
+  VCENTER_SCAN_CONCURRENCY_LIMIT: "10"
+  VDDK_REQUIRED: "false"
+  VM_ACTIVE_WAIT_INTERVAL_SECONDS: "20"
+  VM_ACTIVE_WAIT_RETRY_LIMIT: "15"
   VMWARE_CREDS_REQUEUE_AFTER_MINUTES: "60"
   VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS: "10"
   VOLUME_AVAILABLE_WAIT_RETRY_LIMIT: "15"

@@ -177,7 +177,6 @@ metadata:
   namespace: migration-system
 spec:
   migrationTemplate: migrationtemplate-windows
-  retry: true/false <optional>
   advancedOptions:
     granularVolumeTypes:
       - newvoltype1
@@ -201,7 +200,6 @@ spec:
     - - winserver2k19
       - winserver2k22
 ```
-- `retry`: Optional. Retries one failed migration in a migration plan once. Set to false after a migration has been retried.
 - `advancedOptions`: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualMachines list.
   - `granularVolumeTypes`: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can specify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM.
   - `granularNetworks`: In case you wish to override the default network mapping for a VM, you can provide a list of OpenStack network names to use for each NIC on the VM, in order.

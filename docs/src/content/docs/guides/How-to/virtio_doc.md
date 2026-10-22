@@ -1,22 +1,29 @@
 ---
 title: Inject VirtIO Windows Driver
-description: Adds support for user-uploaded virtio-win.iso files used during Windows VM migrations. If the ISO is present at /home/ubuntu/virtio-win/virtio-win.iso, it is used directly and propagated to agents. If missing, vJailbreak attempts to download it. Migration fails gracefully if both methods are unavailable.
+description: The vJailbreak appliance ships with the VirtIO driver ISOs used during Windows VM migrations. You can replace virtio-win.iso with your own version; it is used directly and propagated to agents. If the ISO is missing, vJailbreak attempts to download it. Migration fails gracefully if both methods are unavailable.
 ---
 
 :::note
 This feature is available from vJailbreak v0.1.13 and later.
 :::
 
+## Bundled VirtIO ISOs
+
+The vJailbreak appliance image already includes the VirtIO driver ISOs in `/home/ubuntu/virtio-win/`, so you do not need to upload anything for a standard migration:
+
+- `virtio-win.iso` — virtio-win 0.1.271 (as of v0.6.0), used for Windows VMs
+- `virtio-win-server12.iso` — virtio-win 0.1.185, used automatically for Windows Server 2012 and 2012 R2 guests
+
 ## How to use user-provided virtio-win.iso
 
-Users can upload the `virtio-win.iso` to the following path on the vJailbreak master node:
+To use a different VirtIO driver version, replace `virtio-win.iso` at the following path on the vJailbreak master node:
 
 ```bash
 /home/ubuntu/virtio-win/virtio-win.iso
 ```
 
 :::note
-In the vJailbreak VM, there is already a folder named `virtio-win` at `/home/ubuntu/`. Please make sure to upload to that directory and the name of the file should be `virtio-win.iso`.
+In the vJailbreak VM, there is already a folder named `virtio-win` at `/home/ubuntu/`, containing the bundled ISOs. Please make sure to upload to that directory and the name of the file should be `virtio-win.iso`.
 :::
 
 
@@ -25,7 +32,7 @@ In the vJailbreak VM, there is already a folder named `virtio-win` at `/home/ubu
 If the user has scaled up vJailbreak, the ISO is propagated to all the agents.
 When a Windows VM migration is initiated:
 
-The migration logic checks for `/home/ubuntu/virtio-win/virtio-win.iso` on the source node.
+The migration logic checks for `/home/ubuntu/virtio-win/virtio-win.iso` on the source node. For Windows Server 2012 and 2012 R2 guests, it uses `/home/ubuntu/virtio-win/virtio-win-server12.iso` instead.
 
 - **If found:**
   - The ISO is used for injecting **VirtIO drivers** into the migrated disk.

@@ -32,11 +32,12 @@ Type=notify
 NotifyAccess=all
 ```
 
-To the `ExecStart` section add the following:
+To the `ExecStart` section, add `--log=/var/log/syslog` after `server`. Keep the existing arguments: the vJailbreak VM runs k3s with `--secrets-encryption`, and removing it would turn off encryption of Kubernetes secrets at rest.
 
 ```shell
 ExecStart=/usr/local/bin/k3s \
     server --log=/var/log/syslog \
+        '--secrets-encryption' \
         '--disable' \
         'traefik' \
 ```

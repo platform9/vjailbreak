@@ -21,4 +21,6 @@ In order to build the UI,
 
     make ui
 
-Change the image names in the Makefile to push to another repository.
+To push to another repository, you do not need to edit the Makefile. The image names are built from the `REGISTRY`, `REPO` and `TAG` variables (defaults: `quay.io`, `platform9` and the current version), so override them on the command line:
+
+    REGISTRY=myregistry.io REPO=myteam TAG=v1.2.3 make ui

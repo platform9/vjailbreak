@@ -237,10 +237,10 @@ vJailbreak **Hot migration** (**Copy live VMs, then power off**) relies on VMwar
 
 VMs on older hardware versions (for example, version 4) do not expose the CBT property at all, so Hot migration cannot track changed blocks for them.
 
-**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step. The reported error looks similar to:
+**Symptom**: A Hot migration of a legacy-hardware VM fails at the CBT step, before any data is copied. The reported error looks similar to:
 
 ```
-CBT is not enabled on disk <id>
+CBT Failure: changed block tracking (CBT) is not supported on virtual hardware version 4 (requires version 7 or newer); please use cold migration for this VM
 ```
 
 **What to do** — choose one:
@@ -288,9 +288,11 @@ The limitations below are specific to [vJailbreak Accelerated Copy](../../concep
 
 ### Concurrent Disk Attach Can Fail
 
-When several migrations reach the disk-attach step at the same time on the same Proxy VM, vCenter does not always handle the simultaneous reconfigure tasks gracefully and rejects some attach requests, failing those migrations. This is a **transient race condition** — the migrations that attached first are unaffected and continue into the copy phase.
+**Fixed in v0.5.0.** As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time. A migration that finds another one attaching waits for its turn, checking every 10 seconds for up to 30 minutes, and fails only if its turn does not come within that time.
 
-**Workaround**: [Retry](../../guides/how-to/retry_failed_migration/) the failed migrations once the others have moved into the copy phase. To reduce the chance of the race, stagger migration start times or distribute migrations across additional Proxy VMs.
+Before v0.5.0, when several migrations reached the disk-attach step at the same time on the same Proxy VM, vCenter did not always handle the simultaneous reconfigure tasks gracefully and rejected some attach requests, failing those migrations. This was a **transient race condition** — the migrations that attached first were unaffected and continued into the copy phase.
+
+**Workaround**: Upgrade to v0.5.0 or later. On any version, [retry](../../guides/how-to/retry_failed_migration/) a failed migration once the others have moved into the copy phase. To avoid failures or long waits, stagger migration start times or distribute migrations across additional Proxy VMs.
 
 See [Proxy VM disk attach fails when several migrations start together](../../guides/troubleshooting/troubleshooting/#proxy-vm-disk-attach-fails-when-several-migrations-start-together).
 

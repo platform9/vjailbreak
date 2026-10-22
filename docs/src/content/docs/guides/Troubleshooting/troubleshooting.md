@@ -45,10 +45,7 @@ Get logs for the `migration-controller-manager`
 kubectl logs -n migration-system deploy/migration-controller-manager
 ```
 
-Turn on Debug Mode
-```bash
-kubectl patch configmap -n migration-system migration-config-<vm-name> --type merge -p '{"data":{"DEBUG":"true"}}'
-```
+Debug logs are always collected. You do not need to enable a debug mode: setting `DEBUG` in the migration's ConfigMap has no effect. Detailed logs for every migration are written to `/var/log/pf9` on the vJailbreak VM. See [Debug Logs](../debuglogs/) for where to find them and how to download a debug bundle from the UI.
 ### A migration is stuck in pending
 If the migration was set to Retry on Failure, then delete the v2v-helper pod for that VM and collect the logs of the pod that comes up.
 
@@ -71,8 +68,16 @@ See [Retry a Failed Migration](../how-to/retry_failed_migration/) for the full w
 
 ### Get all vJailbreak custom resource definitions (CRDs)
 
+List every vJailbreak CRD (there are 24 as of v0.5.0):
+
 ```bash
-kubectl get migrationplans,migrations,migrationtemplates,networkmappings,openstackcreds,storagemappings,vmwarecreds,secrets -n migration-system -o yaml
+kubectl get crd -o name | grep vjailbreak.k8s.pf9.io
+```
+
+Dump every vJailbreak custom resource in one command:
+
+```bash
+kubectl get $(kubectl api-resources --api-group=vjailbreak.k8s.pf9.io -o name | paste -sd, -) -n migration-system -o yaml
 ```
 
 ---
@@ -171,13 +176,13 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
 
 - **Symptom**
 
-  A RHEL 7.x migration fails during `virt-v2v-in-place`, after disk copy and volume attach/detach have already succeeded. The migration log only shows:
+  A RHEL 7.x migration fails during `virt-v2v-in-place`, after disk copy and volume attach/detach have already succeeded. The migration log shows an error that starts with:
 
   ```text
   failed to run virt-v2v-in-place: exit status 1
   ```
 
-  The debug log under `/var/log/pf9/` (see [Debug Logs](debuglogs/)) shows the actual error:
+  As of v0.4.8, vJailbreak appends the most relevant error line from the conversion debug log to this message, so the reason below appears after `exit status 1:`. On earlier versions, the message stops at `exit status 1`, and the reason is only in the debug log under `/var/log/pf9/` (see [Debug Logs](../debuglogs/)):
 
   ```text
   virt-v2v-in-place: error: libguestfs error: command:
@@ -224,10 +229,11 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
   Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** instead of Standard copy.
   Both methods work without VDDK installed on the vJailbreak appliance.
 
-  :::caution[Cold migration only]
-  vJailbreak Accelerated Copy supports **cold migration only**: the source VM must be powered
-  off before copy begins. It does not support live (hot) migration. If live migration is required,
-  wait for VDDK to become available and use Standard copy.
+  :::note[Live (hot) migration without VDDK]
+  As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot) migration. Live
+  migration uses Changed Block Tracking (CBT) on the source VM. Storage Accelerated Copy supports
+  cold migration only. Before v0.5.0, vJailbreak Accelerated Copy was also cold only, so live
+  migration required VDDK and Standard copy.
   :::
 
   See [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) and
@@ -237,7 +243,11 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
 
 ## Proxy VM disk attach fails when several migrations start together
 
-- **Symptom**
+:::note
+As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time, so the race described below no longer occurs. It applies only to versions before v0.5.0. For the behaviour in v0.5.0 and later, see **As of v0.5.0** below.
+:::
+
+- **Symptom** (before v0.5.0)
 
   A batch of [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) migrations is started at once. Some of them fail early with a vCenter error while attaching the source snapshot disks to the Proxy VM, while the rest continue into the copy phase without any problem.
 
@@ -249,12 +259,28 @@ kubectl get migrationplans,migrations,migrationtemplates,networkmappings,opensta
 
 - **Resolution**
 
-  1. Let the surviving migrations progress past the attach step and into the copy phase.
-  2. [Retry](../../how-to/retry_failed_migration/) the failed migrations. They normally succeed on the second attempt.
+  1. Upgrade to v0.5.0 or later, where disk attaches to a shared Proxy VM are serialized.
+  2. On an older version, let the surviving migrations progress past the attach step and into the copy phase, then [retry](../../how-to/retry_failed_migration/) the failed migrations. They normally succeed on the second attempt.
+
+- **As of v0.5.0**
+
+  A migration that finds another migration attaching disks to the same Proxy VM waits for its turn instead of failing. Its logs show:
+
+  ```
+  Migration <migration-name> is currently attaching disks to Proxy VM <proxy-vm>, waiting for turn...
+  ```
+
+  It checks again every 10 seconds and waits for up to 30 minutes. If its turn does not come within 30 minutes, the migration fails with an error containing:
+
+  ```
+  failed waiting for Proxy VM attach turn: timed out after 30m0s waiting for turn to attach disks to Proxy VM <proxy-vm>
+  ```
+
+  [Retry](../../how-to/retry_failed_migration/) the failed migration once the other migrations have moved into the copy phase.
 
 - **Notes**
 
-  - To reduce the chance of hitting this, stagger migration start times rather than starting a large batch at once, or register additional Proxy VMs and distribute migrations across them.
+  - To avoid long waits, stagger migration start times rather than starting a large batch at once, or register additional Proxy VMs and distribute migrations across them.
   - Use the [data copy start time](../../../concepts/migration-options/#data-copy-start-time) option to spread a wave of migrations over a window.
   - See also: [Known Limitations](../../../reference/known-limitations/#concurrent-disk-attach-can-fail).
 

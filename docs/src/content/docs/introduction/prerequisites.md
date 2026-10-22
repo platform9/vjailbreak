@@ -13,7 +13,8 @@ VDDK is required only if you plan to use the **Standard** storage copy method.
 :::note
 VMware's public VDDK download pages are currently unavailable. If you do not already have a VDDK
 package, use vJailbreak Accelerated Copy or Storage Accelerated Copy instead. Both work without
-VDDK. Note that vJailbreak Accelerated Copy supports **cold migration only**.
+VDDK. As of v0.5.0, vJailbreak Accelerated Copy supports both cold and live (hot) migration.
+Storage Accelerated Copy supports cold migration only.
 :::
 
 ### What access do I need for my vCenter user to be able to perform this migration?
@@ -144,7 +145,7 @@ Please refer to the following table for the required ports:
 | 443 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer authentication |
 | 902 | TCP | PCD nodes | VMware ESXi hosts | Disk transfer data copy via NFC protocol (see NFC limitations above) |
 | 22 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
-| 10809–11808 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel) |
+| 10809–11808 (default) | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel). As of v0.6.0, the range is configurable; see [vJailbreak Settings](../../guides/how-to/vjailbreak_settings/) |
 
 
 ### What network connectivity do I need for vJailbreak?
@@ -165,7 +166,7 @@ The vJailbreak VM and any helper nodes must be able to reach:
 The following endpoints are accessed during first-time installation or when upgrading vJailbreak. They are **not** required during normal migration operations:
 
 - **Virtio ISO download source** (for Windows driver injection):
-  - [https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso)
+  - [https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.271-1/virtio-win-0.1.271.iso](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.271-1/virtio-win-0.1.271.iso) (virtio-win 0.1.271, as of v0.6.0)
 - **Cloud-init certificate endpoints**
 - **External tooling sources**:
   - [https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml](https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/main/bundle.yaml)

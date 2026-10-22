@@ -15,7 +15,7 @@ If you enable **Persist source network interfaces**, network persistence may not
 :::
 
 ### VMware Network Types
-For VMware environments, the networks are typically of type `vSphere Standard Port Group` or `vSphere Distributed Port Group`. Currently, vJailbreak supports only these two types of networks and not `NSX`-created networks.
+For VMware environments, the networks are typically of type `vSphere Standard Port Group` or `vSphere Distributed Port Group`. vJailbreak supports both of these types. As of v0.4.7, it also supports NSX-T networks that VMware presents as opaque networks: they are discovered with the VM and appear in the network mapping by name, like any other source network.
 
 Typical VMware networks use VLAN configuration to define the network properties.
 

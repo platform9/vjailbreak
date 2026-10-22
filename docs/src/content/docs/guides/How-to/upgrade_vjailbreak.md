@@ -23,7 +23,7 @@ Before upgrading, vJailbreak requires a cleanup of existing resources to ensure 
 - Delete PCD credentials
 - Delete Custom Resources
 
-Click the **Cleanup** button to initiate this process. Wait for all items to show a green checkmark and the "Cleanup completed successfully" message to appear.
+Click the **Cleanup** button to initiate this process. As of v0.5.0, a **Clean up before upgrade?** confirmation dialog opens first, because cleanup deletes all custom resources in the appliance and cannot be undone. Click **Yes, clean up** to continue. Wait for all items to show a green checkmark and the "Cleanup completed successfully" message to appear. If cleanup has already run, the button reads **Re-run Cleanup**.
 
 ![Pre-Upgrade Cleanup](../../../../../public/images/cleaning_up_resources.png)
 ![Cleanup completed successfully](../../../../../public/images/cleaned_up_sucessfully.png)
