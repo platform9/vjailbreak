@@ -271,7 +271,8 @@ spec:
               phase:
                 description: |-
                   Phase indicates the current phase of the ArrayCreds
-                  Possible values: Discovered, Configured, Validated, Failed, NeedsBackendSelection
+                  Possible values: Discovered, Configured, Validated, Failed, NeedsBackendSelection,
+                  PendingPCDValidation
                 type: string
             type: object
         type: object
@@ -1494,6 +1495,12 @@ spec:
                   PreserveSourceTags copies each source VM's vSphere tags and custom attributes
                   to the migrated VM as instance metadata. Applies to all VMs in the plan.
                 type: boolean
+              proxyVMCandidatesPerVM:
+                additionalProperties:
+                  items:
+                    type: string
+                  type: array
+                type: object
               securityGroups:
                 items:
                   type: string
@@ -1716,6 +1723,38 @@ spec:
                   CurrentDisk tracks which disk is currently being copied (e.g., "0", "1")
                   Extracted from migration pod events
                 type: string
+              diskStatus:
+                description: DiskStatus lists the per-disk migration status, keyed
+                  by diskNumber
+                items:
+                  description: DiskStatus tracks the migration state of a single disk
+                    of the VM.
+                  properties:
+                    diskNumber:
+                      description: DiskNumber is the 1-based index of the disk within
+                        the VM
+                      minimum: 1
+                      type: integer
+                    progress:
+                      description: Progress is the copy progress of the disk (e.g.
+                        "42%")
+                      type: string
+                    status:
+                      description: Status is the current copy state of the disk
+                      enum:
+                      - pending
+                      - copying
+                      - completed
+                      - failed
+                      type: string
+                  required:
+                  - diskNumber
+                  - status
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - diskNumber
+                x-kubernetes-list-type: map
               phase:
                 description: Phase is the current phase of the migration
                 enum:
@@ -2604,6 +2643,14 @@ spec:
                   - present
                   type: object
                 type: array
+              esxiMoRef:
+                description: ESXiMoRef is the managed object ID of the ESXi host the
+                  Proxy VM currently runs on
+                type: string
+              esxiName:
+                description: ESXiName is the name of the ESXi host the Proxy VM currently
+                  runs on
+                type: string
               ipAddress:
                 type: string
               lastValidationTime:
@@ -3617,6 +3664,25 @@ spec:
               clusterName:
                 description: Cluster name of the host
                 type: string
+              datastores:
+                description: |-
+                  Datastores is the list of datastores mounted on this ESXi host.
+                  It is refreshed whenever the owning VMwareCreds is added or revalidated.
+                items:
+                  description: VMwareHostDatastore identifies a datastore mounted
+                    on an ESXi host
+                  properties:
+                    moID:
+                      description: MoID is the managed object ID of the datastore
+                      type: string
+                    name:
+                      description: Name is the datastore name
+                      type: string
+                  required:
+                  - moID
+                  - name
+                  type: object
+                type: array
               hardwareUuid:
                 description: Hardware UUID of the host
                 type: string
@@ -5292,7 +5358,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.5.0
+        image: quay.io/platform9/vjailbreak-controller:v0.5.0-51d455a23
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -5411,7 +5477,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.5.0
+        image: quay.io/platform9/vjailbreak-vpwned:v0.5.0-51d455a23
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -5447,6 +5513,9 @@ spec:
           name: pf9-config
         - mountPath: /var/log/pf9
           name: pf9-logs
+          readOnly: true
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
           readOnly: true
       dnsConfig:
         options:
@@ -5487,6 +5556,10 @@ spec:
           path: /var/log/pf9
           type: DirectoryOrCreate
         name: pf9-logs
+      - hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
+        name: dmi-product-uuid
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -5579,6 +5652,7 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
+    - DELETE
     resources:
     - openstackcreds
   sideEffects: None
@@ -5630,7 +5704,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.5.0
+          image: quay.io/platform9/vjailbreak-ui:v0.5.0-51d455a23
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -5919,7 +5993,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:v0.5.0
+          image: quay.io/platform9/vjailbreak-ai:v0.5.0-51d455a23
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
