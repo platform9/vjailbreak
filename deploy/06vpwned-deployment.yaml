@@ -41,7 +41,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.5.0
+        image: quay.io/platform9/vjailbreak-vpwned:v0.6.0
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -77,6 +77,9 @@ spec:
           name: pf9-config
         - mountPath: /var/log/pf9
           name: pf9-logs
+          readOnly: true
+        - mountPath: /host/dmi/product_uuid
+          name: dmi-product-uuid
           readOnly: true
       dnsConfig:
         options:
@@ -117,4 +120,8 @@ spec:
           path: /var/log/pf9
           type: DirectoryOrCreate
         name: pf9-logs
+      - hostPath:
+          path: /sys/class/dmi/id/product_uuid
+          type: File
+        name: dmi-product-uuid
 ---
