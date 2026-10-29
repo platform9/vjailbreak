@@ -3,7 +3,7 @@ title: vJailbreak Compatibility
 description: A list of supported VMware and operating system versions.
 ---
 
-Following is a list of systems vJailbreak has been validated with. Please reach out to us to report any issues or to add support for additional versions.
+The following is a list of systems vJailbreak has been validated with. Please reach out to us to report any issues or to add support for additional versions.
 
 ## VMware
 
@@ -13,13 +13,13 @@ Following is a list of systems vJailbreak has been validated with. Please reach 
 
 ## Operating System
 
-The list of operating system is large and while we have attempted
+The list of operating systems is large and while we have attempted
 to test some of them, there are still gaps specifically with the older
 versions. This list is expected to grow over time and we will continue to
-add support for additional versions. Verified implies it has been tested and converted vs expected means it has not been tested but is expected to work.
+add support for additional versions. Verified implies it has been tested and converted, whereas expected means it has not been tested but is expected to work.
 
 :::note
-Migration of VMs with 32-bit operating system is not supported.
+Migration of VMs with 32-bit operating systems is not supported.
 :::
 
 
@@ -27,14 +27,14 @@ Migration of VMs with 32-bit operating system is not supported.
 | :--- | :--- | :--- | :--- |
 | AlmaLinux | linux/amd64 | No | Yes |
 | Amazon Linux 2 | linux/amd64 | No | Yes |
-| CentOS 4/5  | linux/i386 | No | Yes |
-| CentOS 4  | linux/amd64 | No | Yes |
-| CentOS 5  | linux/amd64 | Yes | Yes |
+| CentOS 4/5 | linux/i386 | No | No |
+| CentOS 4 | linux/amd64 | No | Yes |
+| CentOS 5 | linux/amd64 | Yes | Yes |
 | CentOS 6  | linux/amd64 | Yes | Yes |
 | CentOS 7 | linux/amd64 | Yes | Yes |
 | CentOS 8 | linux/amd64 | Yes | Yes |
 | CentOS 9 | linux/amd64 | Yes | Yes |
-| CentOS Stream10 | linux/amd64 | No | Yes |
+| CentOS Stream 10 | linux/amd64 | No | Yes |
 | Debian GNU/Linux 8 (64-bit) | linux/amd64 | Yes | Yes |
 | Debian 12 | linux/amd64 | Yes | Yes |
 | FreeBSD 14 | bsd/amd64 | Yes | Yes |
@@ -65,6 +65,6 @@ Migration of VMs with 32-bit operating system is not supported.
 | Ubuntu Linux 17 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 22.04 | linux/amd64 | Yes | Yes |
 | Ubuntu Linux 24.04 | linux/amd64 | Yes | Yes |
-| VMware Photon OS  | linux/amd64 | No | No |
+| VMware Photon OS | linux/amd64 | No | No |
 
 

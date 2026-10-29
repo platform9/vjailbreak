@@ -137,7 +137,7 @@ These are separate from the internal, per-session `MigrationTemplate` objects th
 | Symptom | Cause | What to do |
 |---|---|---|
 | **Create New Template** and **Save as template** are disabled | No VMware or no PCD credential exists | Add both credentials first |
-| Cluster dropdowns are empty after clicking **Use** | The saved source or target cluster no longer exists, or its name changed | Select the clusters manually.
+| Cluster dropdowns are empty after clicking **Use** | The saved source or target cluster no longer exists, or its name changed | Select the clusters manually. |
 | Saved mappings do not appear after **Use** | Expected until VMs are selected | Select VMs. Mappings apply as their source networks and datastores come into scope. |
 | A mapping never reappears after being removed | Mappings deleted by hand are not re-applied | Add the mapping again manually |
 | Saving reports *"A template named … already exists"* | Names are unique, ignoring case | Pick a different name |

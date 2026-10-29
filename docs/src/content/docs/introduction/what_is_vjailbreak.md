@@ -3,9 +3,9 @@ title: What is vJailbreak?
 description: Introduction to vJailbreak
 ---
 
-[vJailbreak](https://github.com/platform9/vjailbreak) is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) __from VMware vSphere__ environments to any [Platform9 Private Cloud Director](https://platform9.com/private-cloud-director/) OR any __OpenStack-compliant__ cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
+[vJailbreak](https://github.com/platform9/vjailbreak) is a source-available tool, licensed under the [Business Source License 1.1](https://github.com/platform9/vjailbreak/blob/main/LICENSE), featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) __from VMware vSphere__ environments to any [Platform9 Private Cloud Director](https://platform9.com/private-cloud-director/) or any __OpenStack-compliant__ cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
 
-### How vJailbreak works
+## How vJailbreak works
 
 vJailbreak's intuitive interface leverages the OpenStack & VMware SDKs to interact directly with both your VMware vSphere environment and your target OpenStack cloud. The UI guides you through these key steps:
 
@@ -15,21 +15,21 @@ vJailbreak's intuitive interface leverages the OpenStack & VMware SDKs to intera
 4.  **Migration Execution:** Initiate and monitor the migration process with real-time progress updates.
 5.  **Post-Migration Validation:** Verify the successful migration and launch of your VMs in OpenStack.
 
-### Key features
+## Key features
 
 * **Intuitive User Interface:** Manage the entire migration process through a clear, easy-to-use graphical interface – no command-line expertise required.
 * **Seamless vCenter Integration:** Easily connect to your VMware vCenter to manage and migrate VMs.
 * **Effortless VM Selection:** Select the virtual machines you wish to migrate with just a few clicks.
 * **Automated Disk Conversion:** VM disks are automatically converted from `vmdk` to `qcow2` format.
 * **Driver and Device Installation:** Necessary virtual devices and drivers are installed to ensure smooth operation post-migration.
-* **Post-Migration Health Checks:** Comprehensive health checks are performed to verify the success of the migration and the operational status of the VMs in the new environment.
-### Key benefits
+* **Post-Migration Health Checks:** Optional ping and HTTP GET checks against the migrated VM, enabled with `performHealthChecks` in the MigrationPlan (off by default). Results are logged and do not fail the migration.
+## Key benefits
 *  **Reduced Migration Time:** Automate migration tasks and visualize progress, significantly reducing the time and effort compared to manual methods.
 *  **Minimized Downtime:** vJailbreak's efficient migration process helps minimize downtime for your critical workloads.
-*  **Cost-Effective Solution:** As an open-source tool, vJailbreak eliminates licensing costs.
+*  **Cost-Effective Solution:** vJailbreak is free for production use under the terms of its [Business Source License 1.1](https://github.com/platform9/vjailbreak/blob/main/LICENSE).
 *  **Broad Compatibility:** Migrate VMs to any OpenStack cloud that adheres to standard OpenStack APIs.
 *  **Non-Disruptive Migration:** Perform migrations without impacting the operation of your source VMware environment.
-*  **Visual Progress Tracking:** Monitor the status of your migrations in real-time through the user interface.
+*  **Visual Progress Tracking:** Monitor the status of your migrations in real time through the user interface.
 
 :::tip[Did you know?]
 By leveraging vJailbreak, organizations can modernize their infrastructure with minimal disruption, ensuring a smooth transition to an OpenStack cloud.

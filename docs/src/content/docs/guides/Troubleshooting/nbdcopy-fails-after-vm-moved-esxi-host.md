@@ -5,16 +5,20 @@ description: Troubleshooting disk copy failures caused by missing DNS/hosts entr
 
 ## Problem
 
-A migration fails during the disk copy (live replicate) phase with an error similar to:
+A migration fails during the disk copy (live replicate) phase with an error that contains `failed to run nbdcopy:`.
+
+As of v0.4.8, vJailbreak adds the underlying reason from the disk-copy debug log to this error. For a name-resolution problem, the reason contains text such as `Host address lookup for server ... failed` or `Name or service not known`, for example:
 
 ```text
-Failed to migrate VM: failed to live replicate disks: failed to copy disk Hard disk 1 (DeviceKey=2000): failed to run nbdcopy: exec: already started.
+Failed to migrate VM: failed to live replicate disks: failed to copy disk Hard disk 1 (DeviceKey=2000): failed to run nbdcopy: <reason, e.g. Name or service not known>: exec: already started
 ```
 
 Error signature:
 ```text
-failed to run nbdcopy: exec: already started
+failed to run nbdcopy: <reason>: ...
 ```
+
+Before v0.4.8, the error does not include a reason and reads only `failed to run nbdcopy: exec: already started`.
 
 ## Symptoms
 

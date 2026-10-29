@@ -9,7 +9,7 @@ Navigate to the **Profiles** section in the sidebar to view and perform all CRUD
 
 ## Default Profiles
 
-vJailbreak ships with two built-in profiles that are created by default as a template:
+vJailbreak ships with two built-in profiles that are created by default as templates:
 
 ### default-linux
 
