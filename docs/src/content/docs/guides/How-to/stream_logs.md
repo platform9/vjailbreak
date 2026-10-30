@@ -55,7 +55,10 @@ sudo systemctl restart k3s
 ```shell
 sudo sh -c 'echo "*.* @<fluentd-host>:5140" >> /etc/rsyslog.d/90-fluentd.conf'
 ```
-**Note:** Change `<fluentd-host>` to the IP address of the Fluentd host.
+
+:::note
+Change `<fluentd-host>` to the IP address of the Fluentd host.
+:::
 
 3. Restart rsyslog
 

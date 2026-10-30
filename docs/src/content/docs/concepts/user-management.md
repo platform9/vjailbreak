@@ -100,16 +100,10 @@ vjbctl user list
 
 # Create a new user
 vjbctl user create john.doe
-# For changes to be reflected, refresh
-vjbctl user refresh
 
 # Update password for a specific user
 vjbctl user change-password jane.doe
-# For changes to be reflected, refresh
-vjbctl user refresh
 
 # Remove a deprovisioned user
 vjbctl user delete temp.user
-# For changes to be reflected, refresh
-vjbctl user refresh
 ```

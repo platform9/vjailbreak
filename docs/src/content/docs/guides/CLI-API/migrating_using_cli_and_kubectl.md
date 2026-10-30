@@ -10,7 +10,9 @@ vJailbreak comprises multiple Kubernetes Controllers which work on Custom Resour
 Before moving to the action, let’s understand the various resources that will be created to perform a migration, and how they are related to each other.
 ![image](../../../../assets/information-flow.png)
 
-**Note**: In the diagram above, the specification/configuration flows towards the arrow, and the status travels backwards (from `v2v-helper` Pod up till `MigrationPlan`).
+:::note
+In the diagram above, the specification/configuration flows towards the arrow, and the status travels backwards (from `v2v-helper` Pod up till `MigrationPlan`).
+:::
 
 
 ### Glossary
@@ -27,7 +29,9 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 * **Job**: With the migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
 * **v2v-helper pods**: Based on the definition of the job created by the vJailbreak controller, Kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, driver injection, guest customization, transfer, and creation of OpenStack resources.
 
-**Note**: `NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
+:::note
+`NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
+:::
 
 Now that we have a basic understanding of the resources that will be useful during our journey, let’s start on the migration part.
 
@@ -79,7 +83,9 @@ Check the resource name for the VMware vCenter credentials using the following c
 kubectl get vmwarecreds -n <namespace>
 ```
 
-**Note**: The default namespace for vJailbreak ecosystem is `migration-system`.
+:::note
+The default namespace for vJailbreak ecosystem is `migration-system`.
+:::
 
 Copy the name of the `VMwareCreds` resource that refers to the vCenter hosting the VM you want to migrate. This will be used when creating the MigrationTemplate. For example, if the following is the output of the above command:
 
@@ -321,7 +327,9 @@ You can confirm it was set correctly with:
 kubectl get vmwaremachine -n migration-system <vm-name> -o jsonpath='{.spec.targetFlavorId}'
 ```
 
-**Note**: `targetFlavorId` is read once, when vJailbreak creates the migration ConfigMap for the VM (as part of `MigrationPlan` processing). Set it on the `VMwareMachine` before creating the `MigrationPlan` for that VM. If it is left blank, vJailbreak falls back to the automatic best-match flavor selection described above.
+:::note
+`targetFlavorId` is read once, when vJailbreak creates the migration ConfigMap for the VM (as part of `MigrationPlan` processing). Set it on the `VMwareMachine` before creating the `MigrationPlan` for that VM. If it is left blank, vJailbreak falls back to the automatic best-match flavor selection described above.
+:::
 
 #### Create the MigrationTemplate custom resource
 

@@ -273,7 +273,9 @@ Each backend can have multiple configurations (shown as "Volume Backend Configur
 - The `netapp` volume backend might have one configuration named `netapp`
 - The `vt-pure-iscsi` volume backend might have multiple configurations: `pure-iscsi-1`, `pure-iscsi-2`, etc.
 
-**Important**: For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::note
+For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::
 
 ```
 Storage Volume Backend Configuration (Example):

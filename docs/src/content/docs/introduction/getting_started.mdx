@@ -120,7 +120,9 @@ The script checks every minute for:
 - A non-loopback IPv4 address assigned to a network interface
 - A default route configured in the routing table
 
-**Note:** The VM is fully accessible via console during this waiting period. You can log in and configure networking while the script waits.
+:::note
+The VM is fully accessible via console during this waiting period. You can log in and configure networking while the script waits.
+:::
 
 ### Step 2: Assign an IP Address
 
@@ -168,7 +170,9 @@ ip a
 ip route
 ```
 
-**Important:** Ensure the IP address and gateway are appropriate for your network. Contact your network administrator if you're unsure about the correct values.
+:::caution
+Ensure the IP address and gateway are appropriate for your network. Contact your network administrator if you're unsure about the correct values.
+:::
 
 ### Step 3: Automatic Installation Proceeds
 
@@ -240,7 +244,9 @@ ip route | grep default
 
 Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or the CLI.
 
-**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
+:::note
+If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
+:::
 
 ### Networks with DHCP
 
@@ -349,7 +355,9 @@ tar -xvf VMware-vix-disklib-8.0.3-*.x86_64.tar.gz
 ## Configure DNS Resolution
 Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly. You can either configure this during VM creation with cloud-init (as shown above) or modify the configuration after VM deployment.
 
-**Important:** DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
+:::caution
+DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
+:::
 
 
 - **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually later.

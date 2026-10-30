@@ -80,7 +80,9 @@ Perform the following steps on each VM from the cluster you are planning to migr
     openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
     ```
 
-**Note: Not all SAN arrays are supported by the OpenStack block storage client; in such cases, the above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
+:::note
+Not all SAN arrays are supported by the OpenStack block storage client; in such cases, the above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.
+:::
 
 RDM disk migration has been tested with two storage arrays:
 
@@ -128,7 +130,9 @@ Optional: Once the RDM disk is detached, you can list the vmwaremachine custom r
 kubectl describe vmwaremachine <vm-name> -n migration-system
 ```
 
-**Note:** Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually.
+:::caution
+Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually.
+:::
 <br>
 
 Delete the `vmwaremachine` and `rdmdisk` custom resources on vJailbreak. After deletion, wait for the configured reconciliation time, and re-ensure that the deleted resources are recreated by vJailbreak.
