@@ -293,7 +293,7 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 │                                                                 │
 │  2. Provision Destination Resources (standard workflow)         │
 │     ├── Create Cinder volumes in PCD                            │
-│     └── Attach destination disks to vJailbreak VM              │
+│     └── Attach destination disks to vJailbreak VM               │
 │                                                                 │
 │  3. Power Off Source VM, then Take Snapshot                     │
 │                                                                 │
@@ -319,31 +319,37 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 The pieces involved and how they interact with each other:
 
 ```mermaid
-architecture-beta
-    group pcd(cloud)[Platform9 PCD]
-    group vjb(cloud)[vJailbreak Appliance]
-    group vmw(cloud)[VMware Environment]
+flowchart LR
+    ui["vJailbreak UI"]
+    subgraph vjb["vJailbreak Appliance"]
+        ctrl["Controller"]
+        pod["Migration Pod"]
+    end
+    subgraph vmw["VMware Environment"]
+        vc["vCenter / ESXi"]
+        proxy["Proxy VM"]
+    end
+    subgraph pcd["Platform9 PCD"]
+        cinder[("Cinder Volume")]
+    end
 
-    service admin(internet)[vJailbreak UI]
-    service os(disk)[Cinder Volume] in pcd
-    service ctrl(server)[Controller] in vjb
-    service pod(server)[Migration Pod] in vjb
-    service vc(server)[vCenter] in vmw
-    service proxy(server)[Proxy VM] in vmw
-
-    admin:R -- L:ctrl
-    ctrl:R -- L:vc
-    os:B -- T:pod
-    pod:R -- L:proxy
-    pod:T -- B:vc
+    ui -->|Kubernetes API| ctrl
+    ctrl -->|create and manage| pod
+    ctrl -->|inventory, Proxy VM config| vc
+    ctrl -->|SSH checks| proxy
+    vc -->|hot-add disks| proxy
+    pod -->|snapshot, attach disks| vc
+    pod -->|SSH, NBD| proxy
+    pod -->|write disk data| cinder
 ```
 
 - **vJailbreak UI → Controller**: manage Proxy VMs and MigrationPlans (Kubernetes API)
 - **Controller → Migration Pod**: create and manage the Migration Pod (v2v-helper) that performs the copy
-- **Controller → vCenter/ESXi**: deploy/register the Proxy VM (OVA import), read host inventory
-- **Controller → Proxy VM**: push/verify SSH key, confirm `qemu-nbd` and `disk.EnableUUID`
+- **Controller → vCenter/ESXi**: read the Proxy VM's configuration, add PVSCSI controllers when needed and set `disk.EnableUUID`, read host inventory. The OVA import for a new Proxy VM is run by the vJailbreak API server.
+- **Controller → Proxy VM**: SSH — check that `qemu-nbd` is installed, and install it if it is missing (this needs internet access on the Proxy VM)
 - **vCenter/ESXi → Proxy VM**: hot-add the frozen source-VM disks
-- **Migration Pod → Proxy VM**: SSH — identify block devices, start `qemu-nbd`, run `nbdcopy`
+- **Migration Pod → vCenter/ESXi**: take the source-VM snapshot and attach its disks to the Proxy VM
+- **Migration Pod → Proxy VM**: SSH — identify block devices and start `qemu-nbd`; `nbdcopy` in the Migration Pod then reads each disk over NBD
 - **Migration Pod → Cinder Volume**: write the copied disk data to the destination
 
 ### Sequence Diagram
@@ -354,6 +360,7 @@ The same flow as a sequence diagram, including Proxy VM onboarding (only the ope
 sequenceDiagram
     autonumber
     actor Admin
+    participant API as vJailbreak API server
     participant Ctrl as vJailbreak Controller
     participant vC as vCenter / ESXi
     participant Proxy as Proxy VM
@@ -361,18 +368,17 @@ sequenceDiagram
     participant OS as OpenStack (Cinder/Nova)
 
     Note over Admin,OS: Onboarding — Option A: Deploy new Proxy VM (OVA)
-    Admin->>Ctrl: Deploy & Register VM (OVA)
-    Ctrl->>vC: Import OVA, power on VM
-    Ctrl->>Proxy: Auto-generate & inject SSH keypair
+    Admin->>API: Deploy a new vJailbreak Proxy VM (OVA)
+    API->>vC: Import OVA, power on VM
+    API->>Proxy: Generate SSH keypair, install public key
+    API->>API: Store private key as Secret "{proxyVM}-keypair"
     Ctrl->>Proxy: Verify SSH, qemu-nbd, disk.EnableUUID
-    Ctrl->>Ctrl: Store private key as Secret "{proxyVM}-hot-add-ssh-key"
     Ctrl-->>Admin: Proxy VM ready
 
     Note over Admin,OS: Onboarding — Option B: Register an existing VM
     Admin->>Ctrl: Register VM + SSH key (generate or upload)
-    Note right of Admin: If generated, admin adds public key<br/>to the VM's authorized_keys manually
+    Note right of Admin: Generated key: Secret "{proxyVM}-keypair",<br/>admin adds the public key to the VM's authorized_keys.<br/>Uploaded key: Secret "{proxyVM}-hot-add-ssh-key"
     Ctrl->>Proxy: Verify SSH, qemu-nbd, disk.EnableUUID
-    Ctrl->>Ctrl: Store private key as Secret "{proxyVM}-hot-add-ssh-key"
     Ctrl-->>Admin: Proxy VM ready
 
     Note over Admin,OS: Migration — vJailbreak Accelerated Copy

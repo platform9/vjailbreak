@@ -5,20 +5,20 @@ description: How to set up rsyslog to stream logs from vJailbreak VMs to Fluentd
 In this guide, we will cover how to enable the streaming of syslogs from vJailbreak VMs to Fluentd and integrate with Loki running on the PCD-CE.
 For this tutorial, you will need working knowledge of k3s, Fluentd and Loki.
 
-### Prerequisites
+## Prerequisites
 
 - A running vJailbreak instance with SSH enabled.
 - A running Fluentd instance on a remote host (in this case, the PCD-CE Management host).
 - A running grafana/loki-stack instance; for this, we are using PCD-CE.
 
-### Set up vJailbreak VM for rsyslog
+## Set up vJailbreak VM for rsyslog
 
 1. Enable k3s to write to `syslog`.
 2. Install rsyslog on the vJailbreak VM - if not already present.
 3. Configure rsyslog to forward syslogs to Fluentd.
 4. Configure Loki to read logs from the Fluentd log directory.
 
-### Enable syslog for k3s
+## Enable syslog for k3s
 
 To the service section add the following:
 
@@ -47,7 +47,7 @@ sudo systemctl daemon-reload
 sudo systemctl restart k3s
 ```
 
-### Configure rsyslog
+## Configure rsyslog
 
 1. Edit the rsyslog configuration file
 2. Add the following configuration:
@@ -55,7 +55,10 @@ sudo systemctl restart k3s
 ```shell
 sudo sh -c 'echo "*.* @<fluentd-host>:5140" >> /etc/rsyslog.d/90-fluentd.conf'
 ```
-**Note:** Change `<fluentd-host>` to the IP address of the Fluentd host.
+
+:::note
+Change `<fluentd-host>` to the IP address of the Fluentd host.
+:::
 
 3. Restart rsyslog
 
@@ -69,7 +72,7 @@ sudo systemctl restart rsyslog
 sudo journalctl -f
 ```
 
-### Install Fluentd
+## Install Fluentd
 
 1. Install Fluentd on the PCD-CE Management host
 2. Test Fluentd
@@ -146,7 +149,7 @@ sudo systemctl restart fluentd
 sudo systemctl status fluentd
 ```
 
-### Configure Fluentd
+## Configure Fluentd
 
 1. Edit the Fluentd configuration file `/etc/fluentd/fluentd.conf`
 2. Add the following configuration:
@@ -174,7 +177,7 @@ sudo systemctl restart fluentd
 
 Generally, the logs should now show up in `/var/log/fluent/fluentd.log`.
 
-### Verify
+## Verify
 
 1. Check that rsyslog is running
 
@@ -200,7 +203,7 @@ vjb$ logger -p vjailbreak.notice "This is a test message from Rsyslog - Hello Op
 pcd$ tail -f /var/log/fluent/fluentd.log
 ```
 
-### Set up Loki on PCD-CE
+## Set up Loki on PCD-CE
 
 1. Log in to the PCD-CE Management Host
 2. Then export the kubeconfig
@@ -298,6 +301,26 @@ kubectl get pods -n pcd-community | grep loki
   Configuration > "Add Datasource" > Loki > "url: http://loki:3100" > "Save & Test"
 - Add it using a ConfigMap
 
+  Create `loki-datasource.yaml`. The Grafana sidecar loads ConfigMaps that carry the `grafana_datasource: "1"` label (the kube-prometheus-stack default):
+
+  ```yaml
+  apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: loki-datasource
+    namespace: pcd-community
+    labels:
+      grafana_datasource: "1"
+  data:
+    loki-datasource.yaml: |-
+      apiVersion: 1
+      datasources:
+        - name: Loki
+          type: loki
+          access: proxy
+          url: http://loki:3100
+  ```
+
   Add the ConfigMap
 
   ```shell
@@ -307,7 +330,7 @@ kubectl get pods -n pcd-community | grep loki
   Restart the deployment
 
   ```shell
-  kubectl rollout restart deployment prometheus-stack-grafana
+  kubectl rollout restart deployment prometheus-stack-grafana -n pcd-community
   ```
 
 Go to "Explore" > "Loki" to start exploring the logs.
@@ -318,7 +341,7 @@ Go to "Explore" > "Loki" to start exploring the logs.
 {job="fluentd"} |= ``
 ```
 
-### Flow of Logs
+## Flow of Logs
 ```mermaid
 architecture-beta
     group vJailbreak(server)[vJailbreak VM]
@@ -339,7 +362,7 @@ architecture-beta
 
 ```
 
-### Version of tools used
+## Version of tools used
 
 1. Fluentd
 
