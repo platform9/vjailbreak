@@ -11,7 +11,7 @@ Some Group Policy Object (GPO) settings can interfere with driver injection, whi
 
 **Driver installation cannot be done properly, leading to:**
 - Blue Screen of Death (BSOD)
-- Windows VM getting stuck in boot loop
+- Windows VM getting stuck in a boot loop
 - Migration failures due to hardware driver conflicts
 
 ### What to Do
@@ -39,7 +39,7 @@ Some Group Policy Object (GPO) settings can interfere with driver injection, whi
      - `Prevent installation of devices that match any of these device IDs` → Not Configured
      - `Prevent installation of devices using drivers that match these device setup classes` → Not Configured
 
-**Option 2: Sure Shot Way - Remove GPO via PowerShell**
+**Option 2: Sure-Shot Way - Remove GPO via PowerShell**
 ```powershell
 Remove-Item -Recurse -Force "C:\Windows\System32\GroupPolicy" -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force "C:\Windows\System32\GroupPolicyUsers" -ErrorAction SilentlyContinue
@@ -49,6 +49,6 @@ Remove-Item -Recurse -Force "HKCU:\Software\Policies" -ErrorAction SilentlyConti
 gpupdate /force
 ```
 
-:::warning
+:::caution
 The PowerShell method completely removes all local Group Policy settings. Use this only when GUI methods fail or when you need to ensure complete GPO removal.
 :::

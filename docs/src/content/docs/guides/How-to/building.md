@@ -21,4 +21,4 @@ In order to build the UI,
 
     make ui
 
-Change the image names in the makefile to push to another repository.
+Change the image names in the Makefile to push to another repository.

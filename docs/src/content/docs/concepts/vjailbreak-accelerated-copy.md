@@ -145,7 +145,7 @@ This setting is required for vJailbreak to match attached disks to their block d
 
 vJailbreak matches attached disks to block devices inside the Proxy VM using WWIDs, which only a **VMware Paravirtual (PVSCSI)** controller passes through reliably — LSI Logic SAS, LSI Logic Parallel, and BusLogic controllers don't.
 
-During onboarding, vJailbreak inspects the Proxy VM's SCSI controllers and **automatically adds PVSCSI controllers as needed**, on a best-effort basis, up to vSphere's per-VM cap of 4 SCSI controllers. Existing legacy (LSI/BusLogic) controllers are left in place; they simply count against that cap and reduce how many PVSCSI controllers can be added. Onboarding only fails when the Proxy VM has **zero PVSCSI controllers and no free controller slot to add one** (i.e. all 4 slots are already legacy controllers). In that case:
+During onboarding, vJailbreak inspects the Proxy VM's SCSI controllers and **automatically adds PVSCSI controllers as needed**, on a best-effort basis, up to vSphere's per-VM cap of 4 SCSI controllers. Existing legacy (LSI/BusLogic) controllers are left in place; they simply count against that cap and reduce how many PVSCSI controllers can be added. Onboarding only fails when the Proxy VM has **zero PVSCSI controllers and no free controller slot to add one** (i.e., all 4 slots are already legacy controllers). In that case:
 
 1. Power off the Proxy VM
 2. In vSphere Client, right-click the Proxy VM and select **Edit Settings**
@@ -418,7 +418,7 @@ Error: failed to connect to NBD endpoint on proxy VM
 
 **Resolution:**
 1. Verify the Proxy VM is still running and SSH is accessible
-2. Check that `qemu-nbd` started successfully — review v2v helper logs
+2. Check that `qemu-nbd` started successfully — review v2v-helper logs
 3. Ensure the NBD ports (TCP **10809–11808**, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and vJailbreak
 4. Confirm the Proxy VM's guest IP is correct (VMware Tools must be running)
 
@@ -461,7 +461,7 @@ Error: failed to create snapshot on source VM
 
 If the migration is stuck after taking the snapshot and the source VM remains powered off:
 
-1. Check v2v helper logs for the last successful phase
+1. Check v2v-helper logs for the last successful phase
 2. If the Proxy VM became unavailable, the migration will not auto-recover — clean up manually:
    ```bash
    # Remove the snapshot from vCenter

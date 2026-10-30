@@ -1,6 +1,6 @@
 ---
 title: "User Credential Management"
-description: "A guide on how to manage user credentials using vjailbreak CLI."
+description: "A guide on how to manage user credentials using the vJailbreak CLI."
 ---
 
 ## Overview

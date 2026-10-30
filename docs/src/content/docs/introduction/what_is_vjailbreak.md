@@ -3,7 +3,7 @@ title: What is vJailbreak?
 description: Introduction to vJailbreak
 ---
 
-[vJailbreak](https://github.com/platform9/vjailbreak) is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) __from VMware vSphere__ environments to any [Platform9 Private Cloud Director](https://platform9.com/private-cloud-director/) OR any __OpenStack-compliant__ cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
+[vJailbreak](https://github.com/platform9/vjailbreak) is an open-source tool featuring a user-friendly interface designed to simplify and accelerate the migration of virtual machines (VMs) __from VMware vSphere__ environments to any [Platform9 Private Cloud Director](https://platform9.com/private-cloud-director/) or any __OpenStack-compliant__ cloud. It eliminates the complexities of cross-platform VM migration, enabling you to modernize your infrastructure with minimal disruption and a streamlined, visual workflow.
 
 ### How vJailbreak works
 
@@ -29,7 +29,7 @@ vJailbreak's intuitive interface leverages the OpenStack & VMware SDKs to intera
 *  **Cost-Effective Solution:** As an open-source tool, vJailbreak eliminates licensing costs.
 *  **Broad Compatibility:** Migrate VMs to any OpenStack cloud that adheres to standard OpenStack APIs.
 *  **Non-Disruptive Migration:** Perform migrations without impacting the operation of your source VMware environment.
-*  **Visual Progress Tracking:** Monitor the status of your migrations in real-time through the user interface.
+*  **Visual Progress Tracking:** Monitor the status of your migrations in real time through the user interface.
 
 :::tip[Did you know?]
 By leveraging vJailbreak, organizations can modernize their infrastructure with minimal disruption, ensuring a smooth transition to an OpenStack cloud.

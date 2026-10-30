@@ -27,7 +27,7 @@ This guide outlines how vJailbreak handles debug log collection for VM migration
   | `virtv2v` | `virt-v2v` conversion commands and their output        |
   | `general` | Everything else run during the migration               |
 
-- These logs are centrally accessible from the **vjailbreak node**, simplifying the debugging process.
+- These logs are centrally accessible from the **vJailbreak node**, simplifying the debugging process.
 
 ## Log File Location
 
@@ -44,7 +44,7 @@ If a migration is named `vm-migrate-001`, its logs will be available at:
 - `/var/log/pf9/vm-migrate-001/nbd.2026-08-25-10:15:00.log` — disk-copy log
 - `/var/log/pf9/vm-migrate-001/virtv2v.2026-08-25-10:20:00.log` — conversion log
 
-on the vjailbreak node.
+on the vJailbreak node.
 
 ## Log Retention
 
@@ -56,8 +56,8 @@ As of v0.5.0, these logs are cleaned up automatically:
 
 ## Downloading a Debug Bundle from the UI
 
-Instead of SSHing into the vjailbreak node to collect logs manually, you can download a full debug bundle directly from the migration's **Pod logs** tab.
+Instead of SSHing into the vJailbreak node to collect logs manually, you can download a full debug bundle directly from the migration's **Pod logs** tab.
 
 ![Download button on the Pod logs tab](../../../../../public/images/debug-bundle-download-button.png)
 
-There is a download button as shown in the image above. This downloads all the logs, debug logs, and everything related to the migration as a tar ball — no extra `kubectl` or SSH access is required.
+There is a download button as shown in the image above. This downloads all the logs, debug logs, and everything related to the migration as a tarball — no extra `kubectl` or SSH access is required.

@@ -27,12 +27,12 @@ The v2v-helper pod already mounts the host `/dev` directory into the pod at `/de
 
 The condition that must be met is that the vJailbreak VM itself has access to KVM, which requires nested virtualization to be enabled at every layer of the stack.
 
-⚠️ **Caution — this affects all VMs on the compute host, not just vjailbreak.**
+⚠️ **Caution — this affects all VMs on the compute host, not just vJailbreak.**
 
 ## Enabling Nested Virtualization
 
 ### Step 1 — Enable nested KVM on the compute host
-On each compute host that will run vjailbreak VMs and agents:
+On each compute host that will run vJailbreak VMs and agents:
 
 ```
 cat /sys/module/kvm_intel/parameters/nested   # expect Y (or 1)
@@ -52,7 +52,7 @@ sudo modprobe -r kvm_intel && sudo modprobe kvm_intel   # or reboot the host
 
 ### Step 2 — Set the CPU mode in `nova_override.conf`
 
-`[libvirt]` section of `/opt/pf9/etc/nova/conf.d/nova_override.conf` on each
+Edit the `[libvirt]` section of `/opt/pf9/etc/nova/conf.d/nova_override.conf` on each
 compute host.
 
 **Recommended — `host-passthrough`** (passes `vmx`/`svm` through automatically):
@@ -72,12 +72,12 @@ cpu_model_extra_flags = vmx    # use svm on AMD
 ```
 
 > **Note:** `host-passthrough` ties the VM to a host with a closely matching
-> CPU, model, and microcode for live migration. For vjailbreak — a
+> CPU, model, and microcode for live migration. For vJailbreak — a
 > short-lived, migration-tool VM — this is rarely a concern. 
 
 ### Step 3 — Apply
 
-Restart Nova on the compute host, then hard-reboot the vjailbreak VM so it picks
+Restart Nova on the compute host, then hard-reboot the vJailbreak VM so it picks
 up the new CPU definition (a soft reboot is not enough):
 
 ```
@@ -87,7 +87,7 @@ openstack server reboot --hard <instance-uuid>
 
 ### Step 4 — Verify
 
-Inside the vjailbreak VM, confirm the flag is present:
+Inside the vJailbreak VM, confirm the flag is present:
 
 ```
 grep -E -o 'vmx|svm' /proc/cpuinfo | sort -u    # expect vmx (Intel) or svm (AMD)
