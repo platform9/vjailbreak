@@ -86,6 +86,8 @@ vJailbreak can deploy and register the Proxy VM in a single step directly from t
 
 vJailbreak will import the pre-configured OVA into vCenter, power the VM on, generate and inject an SSH key pair automatically, and register the Proxy VM — no manual key setup required. The VM appears in the list with status **Deploying** and transitions to **Ready** once verification completes (typically 3–5 minutes).
 
+**Networks without DHCP:** In the proxy VM deploy form, turn ON **Configure a static IP** and enter the IP address, subnet mask, and optionally a gateway. Without a gateway, the VM is reachable only from its own subnet. DNS is not configured. Leave the toggle off to use DHCP.
+
 :::caution
 The OVA image uses default credentials (`root` / `password`) for the initial SSH key injection step. Change the root password on the VM after deployment in production environments.
 :::
