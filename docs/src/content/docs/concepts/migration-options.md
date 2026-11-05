@@ -84,7 +84,9 @@ The VM is powered off on the source before the initial copy begins. After the in
 #### Admin Initiated Cutover
 The VM is powered off on the source before the initial copy begins. After the initial copy completes, the migration waits for manual intervention. When the admin initiates cutover, the migration performs the final sync and powers on the VM at the destination.
 
-> **Note:** When "Power off VMs then copy" is selected, cutover timing options (immediate, time window, or admin-initiated) are disabled in the UI.
+:::note
+When **Power off live VMs, then copy** is selected, the cutover options (immediate, time window, or admin-initiated) are disabled in the UI. Cutover happens automatically after the data copy completes.
+:::
 
 ### 2. Copy Live VM, then Power off
 

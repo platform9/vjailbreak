@@ -3,8 +3,6 @@ title: Network Persistence
 description: Guide to Linux and Windows network interface persistence post-migration
 ---
 
-# Network Persistence Post-Migration
-
 This document details the mechanism for ensuring network interface persistence following a virtual machine migration for both Linux and Windows operating systems.
 
 ## Prerequisites
@@ -75,9 +73,7 @@ The Windows Virtual Machine (VM) will undergo multiple reboots during the instal
 
 ## Important Considerations
 
-:::caution
-**Important: Routing Considerations**
-
+:::caution[Routing considerations]
 If a VM has multiple interfaces on the same subnet and has an asymmetric routing table, the destination OpenStack platform may not support it and drop the packets. This may cause partial connectivity. This is mainly observed when a VM with asymmetric routing has port security enabled.
 
 **Recommendation:**

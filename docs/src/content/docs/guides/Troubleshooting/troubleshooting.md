@@ -11,8 +11,9 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 
 - [VDDK unavailable: VMware's public download pages are down](#vddk-unavailable-vmwares-public-download-pages-are-down)
 - [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
-- [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
+- [nbdcopy fails during disk copy (often DNS resolution)](../nbdcopy-fails-after-vm-moved-esxi-host/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
+- [Disk attach fails during migration: No more available PCI slots](#disk-attach-fails-during-migration-no-more-available-pci-slots)
 - [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
 - [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
 - [vJailbreak Accelerated Copy fails: could not identify block device](#vjailbreak-accelerated-copy-fails-could-not-identify-block-device)
@@ -64,7 +65,7 @@ kubectl delete migrationplan <UUID> -n migration-system
 ### A migration failed and I want to run it again
 Use the **Retry** action on the failed migration in the vJailbreak UI. It reopens the migration form pre-filled with the original configuration, so you can correct the setting that caused the failure before starting again. To restart several failed migrations without changing anything, select them in the **Migrations** table and use **Retry Selected**.
 
-See [Retry a Failed Migration](../how-to/retry_failed_migration/) for the full workflow and its limitations.
+See [Retry a Failed Migration](../../how-to/retry_failed_migration/) for the full workflow and its limitations.
 
 ### Get all vJailbreak custom resource definitions (CRDs)
 
@@ -192,7 +193,7 @@ kubectl get $(kubectl api-resources --api-group=vjailbreak.k8s.pf9.io -o name | 
 
 - **Cause**
 
-  RHEL 7's `grubby`, used internally by `virt-v2v-in-place`, expects `/boot/grub/grub.cfg` to be a symlink to `/boot/grub2/grub.cfg`. On affected guests GRUB2 itself is configured correctly, but this compatibility symlink is missing, so `grubby`'s file open fails. This is unrelated to [SUSE Legacy GRUB 0.97](../../../reference/known-limitations/#suse-linux-sles-sled-with-legacy-grub-097), which requires a GRUB2 upgrade instead.
+  RHEL 7's `grubby`, used internally by `virt-v2v-in-place`, expects `/boot/grub/grub.cfg` to be a symlink to `/boot/grub2/grub.cfg`. On affected guests GRUB2 itself is configured correctly, but this compatibility symlink is missing, so `grubby`'s file open fails. This is unrelated to [SUSE Legacy GRUB 0.97](../../../reference/known-limitations/#suse-linux-sles--sled-with-legacy-grub-097), which requires a GRUB2 upgrade instead.
 
 - **Resolution**
 

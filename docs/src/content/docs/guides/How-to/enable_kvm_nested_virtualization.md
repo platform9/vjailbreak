@@ -71,9 +71,11 @@ cpu_mode = host-model
 cpu_model_extra_flags = vmx    # use svm on AMD
 ```
 
-> **Note:** `host-passthrough` ties the VM to a host with a closely matching
-> CPU, model, and microcode for live migration. For vJailbreak — a
-> short-lived, migration-tool VM — this is rarely a concern. 
+:::note
+`host-passthrough` ties the VM to a host with a closely matching
+CPU, model, and microcode for live migration. For vJailbreak — a
+short-lived, migration-tool VM — this is rarely a concern.
+:::
 
 ### Step 3 — Apply
 

@@ -3,8 +3,6 @@ title: Windows Offline Disks After Migration
 description: Troubleshooting guide for Windows VMs with offline disks after migration from VMware to PCD
 ---
 
-# Windows Offline Disks After Migration
-
 ## Problem Description
 
 After migrating a Windows VM from VMware vCenter to PCD using vJailbreak, additional disks (beyond the primary C: drive) may not be visible inside the Windows operating system, even though they are successfully attached to the VM in PCD.

@@ -241,9 +241,9 @@ When you add PCD credentials to vJailbreak, the system automatically discovers a
 
 4. **User Completion**: Users then update these auto-discovered entries with the actual storage array credentials (hostname, username, password) to enable Storage Accelerated Copy.
 
-#### Storage Management Page
+#### Storage Array Page
 
-The Storage Management page displays all auto-discovered storage backends:
+The **Storage Array** page (**Credentials** → **Storage Array**) lists all auto-discovered storage backends in its **Storage Array Credentials** table:
 
 | Column | Description |
 |--------|-------------|
@@ -252,10 +252,10 @@ The Storage Management page displays all auto-discovered storage backends:
 | **Volume Type** | Cinder volume type name |
 | **Backend Name** | Cinder backend name from configuration |
 | **Source** | "Auto-discovered" for automatically detected backends |
-| **Credentials** | "Pending" until user provides array credentials |
+| **Credentials** | Status of the array credentials: "Pending" until you provide them, "Succeeded" once they are validated (see [Checking ArrayCreds Status](#checking-arraycreds-status)) |
 | **Actions** | Edit (to add credentials) and Delete |
 
-![Storage Management Page](../../../assets/storagemanagementpage.png)
+![Storage Array Page](../../../assets/storagemanagementpage.png)
 
 #### Example: PCD with Multiple Storage Backends
 
@@ -273,7 +273,9 @@ Each backend can have multiple configurations (shown as "Volume Backend Configur
 - The `netapp` volume backend might have one configuration named `netapp`
 - The `vt-pure-iscsi` volume backend might have multiple configurations: `pure-iscsi-1`, `pure-iscsi-2`, etc.
 
-**Important**: For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::note
+For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::
 
 ```
 Storage Volume Backend Configuration (Example):
@@ -306,7 +308,7 @@ Only storage backends with supported vendors (Pure Storage, NetApp, and Hitachi 
 
 ## Hitachi Vantara
 
-Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
+Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the **Storage Array** page.
 
 ### Hitachi-specific fields
 
@@ -336,7 +338,7 @@ If not already done:
 
 ### Step 2: Configure Storage Array Credentials
 
-1. Navigate to **Storage Management**
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
 2. You'll see auto-discovered entries for each PCD storage backend:
    - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
    - **Vendor**: Auto-identified from driver type
@@ -345,18 +347,18 @@ If not already done:
    - **Source**: "Auto-discovered"
    - **Credentials**: "Pending" (requires your input)
 
-3. Click the **Edit** icon for a storage array entry
+3. Click the **Edit credentials** icon for a storage array entry
 
-![Storage Array Credentials Edit](../../../assets/credsedit.png)
+   ![Storage Array Credentials Edit](../../../assets/credsedit.png)
 
-4. Fill in the storage array credentials:
-   - **Hostname/IP**: Storage array management IP address
+4. Fill in the storage array credentials in the **Edit Array Credentials** drawer:
+   - **Management Endpoint**: Storage array management IP address or hostname
    - **Username**: Array administrator username
    - **Password**: Array administrator password
-   - **Skip SSL Verification**: Enable for testing environments (disable in production)
+   - **Allow insecure connection**: Skips TLS certificate verification. Enable for testing environments (disable in production)
    - **NetApp only**: SVM and FlexVol where LUNs will be created
    - **Hitachi Vantara only**: optional Pool ID and REST Port (see [Hitachi Vantara](#hitachi-vantara))
-5. Click **Save**
+5. Click **Update**
 6. The system will:
    - Validate the credentials
    - Connect to the storage array
@@ -374,7 +376,7 @@ If not already done:
 
 1. When creating a migration plan, select **Storage Accelerated Copy** as the storage copy method
 
-![Storage Accelerated Copy](../../../assets/trigger-mig.png)
+   ![Storage Accelerated Copy](../../../assets/trigger-mig.png)
 
 2. The UI will automatically map datastores to ArrayCreds if everything is configured correctly
 3. Start the migration - it will use array-level XCOPY for data transfer
@@ -418,7 +420,7 @@ When Storage Accelerated Copy is enabled, the migration follows this workflow:
 │                                                                 │
 │  5. Convert Volumes (same as normal migration)                  │
 │                                                                 │
-│  6. Create Target VM in PCD                               │
+│  6. Create Target VM in PCD                                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -468,8 +470,8 @@ Error: failed to connect to storage array: authentication failed
 ```
 
 **Solutions:**
-1. Verify credentials in the Storage Management UI:
-   - Navigate to **Storage Management**
+1. Verify the array credentials in the UI:
+   - In the left sidebar, navigate to **Credentials** → **Storage Array**
    - Check the array credentials are correct
    - Re-enter credentials if needed
 
@@ -640,10 +642,9 @@ Only remove volumes that belong to the failed migration, which you can identify 
 
 You can check the status of your storage array credentials in the UI:
 
-1. Navigate to **Storage Management**
-2. Check the **Credentials** column - it should show "Valid" after successful configuration
-3. The system will display discovered datastores for each array
-4. Any validation errors will be shown in the status column
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
+2. Check the **Credentials** column. It shows **Succeeded** once the array credentials are validated. Other values are **Pending** (no credentials yet), **Configured** (credentials saved, not yet validated), **Needs target selection** (NetApp: SVM or FlexVol not selected), **Awaiting PCD credentials** and **Failed**
+3. If it shows **Failed**, check the credentials and update them with the **Edit credentials** icon
 
 ## Best Practices
 

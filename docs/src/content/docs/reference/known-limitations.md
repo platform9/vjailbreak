@@ -124,7 +124,7 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 vJailbreak does not support migrating Linux VMs with **LUKS-encrypted** disks or partitions. `virt-v2v` cannot inspect or convert the guest without the decryption key, and vJailbreak has no way to supply one, so conversion fails.
 
-This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/).
+This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/#additional-privileges-required-for-encrypted-vms).
 
 **Workaround**: Decrypt the LUKS volumes on the source VM before migration.
 
@@ -136,7 +136,9 @@ In such scenarios, we recommend upgrading to GRUB2.
 
 **Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2.
 
-NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::note
+On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::
 
 ## RHEL 7 Guests Missing GRUB Compatibility Symlink
 
