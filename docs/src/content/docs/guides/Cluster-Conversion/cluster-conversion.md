@@ -10,8 +10,8 @@ The following outlines the steps to use the vJailbreak RollingConversion feature
 Before starting the RollingConversion process, ensure the following checks are completed:
 
 1. Ensure vCenter setup is available
-* vCenter credentials must possess sufficient privileges to place ESXi hosts into maintenance mode (and take them out again) and subsequently remove them from the inventory. These privileges are supplementary to the [migration privileges](../../../introduction/prerequisites/#what-access-do-i-need-for-my-vcenter-user-to-be-able-to-perform-this-migration):
-  * `Host.Config.Maintenance` (**Host > Configuration > Maintenance**), to enter and exit maintenance mode.
+* vCenter credentials must possess sufficient privileges to place ESXi hosts into maintenance mode and subsequently remove them from the inventory. These privileges are supplementary to the [migration privileges](../../../introduction/prerequisites/#what-access-do-i-need-for-my-vcenter-user-to-be-able-to-perform-this-migration):
+  * `Host.Config.Maintenance` (**Host > Configuration > Maintenance**), to put a host into maintenance mode.
   * `Host.Inventory.RemoveHostFromCluster` (**Host > Inventory > Remove host from cluster**), to remove a converted host from vCenter. Grant it on the host and on its parent cluster.
 2. Ensure PCD (Platform9 Private Cloud Director) setup is available and properly configured.
 * Ensure the ClusterBlueprint is configured.

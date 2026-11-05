@@ -241,9 +241,9 @@ When you add PCD credentials to vJailbreak, the system automatically discovers a
 
 4. **User Completion**: Users then update these auto-discovered entries with the actual storage array credentials (hostname, username, password) to enable Storage Accelerated Copy.
 
-#### Storage Management Page
+#### Storage Array Page
 
-The Storage Management page displays all auto-discovered storage backends:
+The **Storage Array** page (**Credentials** → **Storage Array**) lists all auto-discovered storage backends in its **Storage Array Credentials** table:
 
 | Column | Description |
 |--------|-------------|
@@ -252,10 +252,10 @@ The Storage Management page displays all auto-discovered storage backends:
 | **Volume Type** | Cinder volume type name |
 | **Backend Name** | Cinder backend name from configuration |
 | **Source** | "Auto-discovered" for automatically detected backends |
-| **Credentials** | "Pending" until user provides array credentials |
+| **Credentials** | Status of the array credentials: "Pending" until you provide them, "Succeeded" once they are validated (see [Checking ArrayCreds Status](#checking-arraycreds-status)) |
 | **Actions** | Edit (to add credentials) and Delete |
 
-![Storage Management Page](../../../assets/storagemanagementpage.png)
+![Storage Array Page](../../../assets/storagemanagementpage.png)
 
 #### Example: PCD with Multiple Storage Backends
 
@@ -308,7 +308,7 @@ Only storage backends with supported vendors (Pure Storage, NetApp, and Hitachi 
 
 ## Hitachi Vantara
 
-Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
+Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the **Storage Array** page.
 
 ### Hitachi-specific fields
 
@@ -470,8 +470,8 @@ Error: failed to connect to storage array: authentication failed
 ```
 
 **Solutions:**
-1. Verify credentials in the Storage Management UI:
-   - Navigate to **Storage Management**
+1. Verify the array credentials in the UI:
+   - In the left sidebar, navigate to **Credentials** → **Storage Array**
    - Check the array credentials are correct
    - Re-enter credentials if needed
 
@@ -642,10 +642,9 @@ Only remove volumes that belong to the failed migration, which you can identify 
 
 You can check the status of your storage array credentials in the UI:
 
-1. Navigate to **Storage Management**
-2. Check the **Credentials** column - it should show "Valid" after successful configuration
-3. The system will display discovered datastores for each array
-4. Any validation errors will be shown in the status column
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
+2. Check the **Credentials** column. It shows **Succeeded** once the array credentials are validated. Other values are **Pending** (no credentials yet), **Configured** (credentials saved, not yet validated), **Needs target selection** (NetApp: SVM or FlexVol not selected), **Awaiting PCD credentials** and **Failed**
+3. If it shows **Failed**, check the credentials and update them with the **Edit credentials** icon
 
 ## Best Practices
 

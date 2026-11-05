@@ -298,17 +298,17 @@ kubectl get pods -n pcd-community | grep loki
 5. Add Loki as a data source in Grafana
 
 - Add it manually in the Grafana UI
-  Configuration > "Add Datasource" > Loki > "url: http://loki:3100" > "Save & Test"
+  Configuration > "Add Datasource" > Loki > "url: http://loki.pcd-community:3100" > "Save & Test"
 - Add it using a ConfigMap
 
-  Create `loki-datasource.yaml`. The Grafana sidecar loads ConfigMaps that carry the `grafana_datasource: "1"` label (the kube-prometheus-stack default):
+  If your Grafana is deployed by the kube-prometheus-stack Helm chart, its datasource sidecar loads ConfigMaps that carry the `grafana_datasource: "1"` label (the chart default). Find the namespace Grafana runs in with `kubectl get deploy -A | grep grafana`, then create `loki-datasource.yaml`, replacing `<grafana-namespace>`:
 
   ```yaml
   apiVersion: v1
   kind: ConfigMap
   metadata:
     name: loki-datasource
-    namespace: pcd-community
+    namespace: <grafana-namespace>
     labels:
       grafana_datasource: "1"
   data:
@@ -318,7 +318,7 @@ kubectl get pods -n pcd-community | grep loki
         - name: Loki
           type: loki
           access: proxy
-          url: http://loki:3100
+          url: http://loki.pcd-community:3100
   ```
 
   Add the ConfigMap
@@ -330,7 +330,7 @@ kubectl get pods -n pcd-community | grep loki
   Restart the deployment
 
   ```shell
-  kubectl rollout restart deployment prometheus-stack-grafana -n pcd-community
+  kubectl rollout restart deployment prometheus-stack-grafana -n <grafana-namespace>
   ```
 
 Go to "Explore" > "Loki" to start exploring the logs.

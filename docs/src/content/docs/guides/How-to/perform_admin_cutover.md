@@ -15,11 +15,11 @@ It can be triggered in two ways:
    ![Admin Cutover](../../../../../public/images/admin_cutover_form.png)
 
    Once the migration is done copying data, its status changes to `AwaitingAdminCutOver`.
-   You can then click the **Trigger Admin Cutover** button on the migration to start the cutover. To cut over several migrations at once, select them in the **Migrations** table and click **Trigger Cutover**.
+   You can then click the **Trigger Admin Cutover** button on the migration to start the cutover. To cut over several migrations at once, select them in the **Migrations** table and click **Trigger Cutover (n)**.
 
    ![Admin Cutover Button](../../../../../public/images/admin_cutover_button.png)
 
-2. A **Trigger Admin Cutover** confirmation dialog appears. Click **Trigger Cutover** to proceed with the admin cutover.
+2. A confirmation dialog appears: **Trigger Admin Cutover** for a single migration, or **Confirm Admin Cutover** for several. Click **Trigger Cutover** to proceed with the admin cutover.
 
    ![Admin Cutover Confirmation](../../../../../public/images/admin_cutover_confirmation.png)
 
@@ -32,9 +32,9 @@ It can be triggered in two ways:
 You can also trigger the admin cutover using the `kubectl patch` command.
 1. First, identify the name of the migration `Pod` you want to perform the admin
    cutover for:
-    * Get the name of the Migration object. You can find it in the vJailbreak UI under the migration details.
+    * Get the name of the Migration object. Migrations are named after the VM (`migration-<vm-name>`, made Kubernetes-safe), so search by the VM name:
       ```bash
-      kubectl get migration -n migration-system | grep -i <migration-name>
+      kubectl get migration -n migration-system | grep -i <vm-name>
       migration-name   AwaitingAdminCutOver   vjb   migration-plan-name   1h
       ```
     * Get the podRef of the Migration object.

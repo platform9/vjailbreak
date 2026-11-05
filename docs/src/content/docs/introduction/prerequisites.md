@@ -67,7 +67,7 @@ The required privileges depend on which features you use. The base set below is 
 
 #### `VixDiskLib_Open` token-retrieval failure
 
-A missing encryption privilege does not produce a permissions error. It shows up as the following failure.
+A missing encryption privilege does not show up as a permissions error. Instead, the migration can fail with the following error.
 
 **Symptom**: Migration fails during disk open with:
 

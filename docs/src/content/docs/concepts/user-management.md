@@ -41,7 +41,7 @@ Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `c
 ## Usage
 
 :::note
-`vjbctl user create`, `delete` and `change-password` restart the vJailbreak UI automatically, so the change takes effect right away. If you used `--no-restart`, run `vjbctl user refresh` to apply the pending changes.
+`vjbctl user create`, `delete` and `change-password` restart the vJailbreak UI automatically, so the change takes effect once the UI has restarted. If you used `--no-restart`, run `vjbctl user refresh` to apply the pending changes.
 :::
 
 ### List users
