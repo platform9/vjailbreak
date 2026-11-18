@@ -12,6 +12,18 @@ the recommended methods when VDDK is unavailable.
 It also uses the OpenStack SDK to interact with the OpenStack environment and perform the necessary
 provisioning operations, including creation of volumes and VMs.
 
+:::tip[Want faster conversions? Enable nested virtualization]
+vJailbreak's conversion step (`virt-v2v`) runs much faster when it can use hardware-accelerated
+KVM instead of falling back to slow software emulation. Enabling nested virtualization on the
+compute host(s) running your vJailbreak VM — combined with **Storage Accelerated Copy** — has
+been measured to cut end-to-end migration time to roughly 10–15 minutes for ~100GB VMs.
+
+This isn't required to use vJailbreak, but if migration performance matters to you, set it up
+before deploying the vJailbreak VM. See
+[Enable KVM for virt-v2v (Nested Virtualization)](../../guides/how-to/enable_kvm_nested_virtualization/)
+for setup steps, expected performance impact, and recommended host configuration.
+:::
+
 ### Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
 
