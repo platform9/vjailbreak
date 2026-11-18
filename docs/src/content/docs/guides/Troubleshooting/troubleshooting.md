@@ -12,6 +12,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 - [VDDK unavailable: VMware's public download pages are down](#vddk-unavailable-vmwares-public-download-pages-are-down)
 - [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
 - [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
+- [Migration fails due to NFC memory exhaustion on the source ESXi host](nfc-memory-exhaustion/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
 - [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
 - [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
