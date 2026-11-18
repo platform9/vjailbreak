@@ -21,6 +21,16 @@ qemu-kvm: falling back to tcg
 
 Conversions still succeed but take significantly longer.
 
+## Performance impact
+
+In customer benchmarking on ~100GB VMs using the **Standard** copy method, enabling nested
+virtualization alone brought cutover time down to roughly **5 minutes** and total migration time
+to roughly **24 minutes**. Combined with **Storage Accelerated Copy (SAM)**, end-to-end migration
+time can drop to roughly **10–15 minutes**.
+
+Actual numbers depend on your infrastructure (CPU, storage, network) and the VM being migrated —
+treat these as directional, not a guarantee.
+
 ## How vJailbreak exposes `/dev/kvm`
 
 The v2v-helper pod already mounts the host `/dev` directory into the pod at `/dev` via a `hostPath` volume. This means **if `/dev/kvm` exists on the vJailbreak VM, it is automatically visible inside the pod** — no additional configuration is required.
@@ -111,6 +121,71 @@ kubectl -n migration-system logs <migration-name>-v2v-helper | grep -i kvm
 ```
 
 A healthy KVM-accelerated run shows no `falling back to tcg` messages and noticeably faster conversion times.
+
+## Recommended host configuration
+
+Nested virtualization is **not a dedicated-host requirement** — it is a host-wide setting, so it
+can be enabled on hosts already running other workloads. That said, for the best balance of
+performance and isolation we recommend:
+
+- Enable nested virtualization only on the compute hosts that will run vJailbreak VMs, rather
+  than cluster-wide.
+- Where possible, use a dedicated host aggregate or cluster that runs only vJailbreak VMs. This
+  avoids changing the configuration of hosts running production workloads and keeps existing
+  live-migration behavior on those hosts unaffected.
+- Within that aggregate/cluster, use **uniform CPU hardware** (same vendor, model, and
+  microcode) across hosts if vJailbreak VMs will need to live-migrate between them.
+
+## Common questions
+
+### What is the resource overhead of enabling nested virtualization on a KVM host?
+
+Overhead has not been formally quantified. In practice, Platform9's own test automation runs
+nested virtualization on all hypervisors without issues. Nested virtualization is a host-wide
+setting — once enabled, every VM on that host can use it (after that VM is rebooted, rebuilt, or
+live-migrated to the enabled host).
+
+### Does enabling this require restarting Nova, and is it safe to do while VMs are running?
+
+Yes, the `nova-compute` (`pf9-ostackhost`) service must be restarted after applying the
+`cpu_model_extra_flags` / `cpu_mode` setting, and restarting it while VMs are running on the host
+is safe. The CPU configuration change only takes effect for guests the next time they are
+started, rebuilt, or hard-rebooted — existing running VMs keep their current CPU definition
+until then.
+
+### Does nested virtualization affect live migration, and does that depend on the CPU model?
+
+Nested virtualization itself does not affect live migration. What does affect it is the
+`cpu_mode` choice:
+
+- **`host-passthrough`** ties the VM to hosts with a closely matching CPU model and microcode —
+  live migration can fail or be blocked if the destination host's hardware doesn't match closely
+  enough. A microcode/firmware update or a CPU vendor change across hosts can break migration
+  under this mode.
+- **`host-model` with `cpu_model_extra_flags`** (see Step 2 above) is less restrictive for live
+  migration across hosts with differing hardware.
+
+If you need live migration to work reliably, use uniform hardware within the cluster, or prefer
+`host-model` over `host-passthrough`.
+
+### Are there known CVEs for nested virtualization?
+
+There's no CVE specific to the Nova/libvirt configuration itself — Nova only sets the guest CPU
+flags (`cpu_model_extra_flags = +vmx`/`+svm`). The actual exposure is in the **host kernel's KVM
+code**, and whether it affects you depends on your CPU vendor, kernel version, and whether
+`nested` is enabled at all (`nested=0` means none of this applies).
+
+Because open kernel CVEs in this area change over time, don't treat "no open CVEs" as a
+permanent answer. Before rollout:
+
+- Check your host's CPU vendor, kernel version (`uname -r`), and nested-virtualization state
+  (`cat /sys/module/kvm_{intel,amd}/parameters/nested`).
+- Run a patched, currently-supported kernel for your distribution.
+- Re-check your distribution's kernel security tracker for KVM nested-virtualization CVEs
+  against that kernel version before enabling this in a customer-facing environment.
+- Mitigate exposure by enabling nested virtualization only on dedicated vJailbreak hosts (see
+  [Recommended host configuration](#recommended-host-configuration)) and disabling it on hosts
+  where it isn't needed.
 
 ## Troubleshooting
 
