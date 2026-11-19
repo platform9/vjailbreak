@@ -1,6 +1,6 @@
 ---
 title: Migration fails due to NFC memory exhaustion on the source ESXi host
-description: Troubleshooting VM data-copy failures caused by the ESXi host's NFC (Network File Copy) memory limit
+description: Troubleshooting VM data-copy failures (including NFC_COMPRESSION_ERROR) caused by the ESXi host's NFC (Network File Copy) memory limit
 ---
 
 ## Problem
@@ -9,7 +9,13 @@ A migration fails during the VM data-copy phase with an error indicating that th
 
 This only affects the **Standard** copy method, which reads disks over NFC through nbdkit's VDDK plugin. [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) (the default since v0.4.10) and [Storage Accelerated Copy](../../../concepts/storage-accelerated-copy/) don't use NFC at all — Accelerated Copy reads disks via `qemu-nbd` on the Proxy VM, and Storage Accelerated Copy uses array-level XCOPY — so neither is affected by this issue.
 
-Error signature (from the ESXi host's `hostd` logs, or surfaced in the vCenter/ESXi task):
+VMware surfaces this as a session fault named **`NFC_COMPRESSION_ERROR`**:
+
+```text
+The session is in a faulted state: NFC_COMPRESSION_ERROR
+```
+
+The underlying `hostd`/ESXi-side error behind that fault (in `hostd` logs, or surfaced in the vCenter/ESXi task) is:
 
 ```text
 Cannot allocate anymore memory as NFC is already using <n> and allocating <m> will make it more than the maximum allocated
@@ -21,7 +27,7 @@ or
 Failed to allocate the requested <n> bytes
 ```
 
-vJailbreak's own migration failure reason comes from the second form (`[NFC error] NfcFssrvrProcessErrorMsg: ... failed to allocate ...`), which it pattern-matches from the copy-phase debug log.
+vJailbreak's own migration failure reason comes from the second form (`[NFC error] NfcFssrvrProcessErrorMsg: ... failed to allocate ...`), which it pattern-matches from the copy-phase debug log. `NFC_COMPRESSION_ERROR` is the same NFC memory exhaustion described below, not a separate compression-specific bug — other NFC clients (for example backup/replication tools) surface it under that name.
 
 ## Symptoms
 
@@ -91,5 +97,5 @@ After raising the limit, re-run the migration. See [Retry a Failed Migration](..
 
 ## Notes
 
-- This is a known VMware/ESXi constraint, not specific to vJailbreak. See the [NFC_SESSION_ERROR knowledge base article](https://knowledge.broadcom.com/external/article/389223/virtual-machine-replication-fails-with-e.html) and the [`virt-v2v-input-vmware` documentation](https://libguestfs.org/virt-v2v-input-vmware.1.html) for background.
+- This is a known VMware/ESXi constraint, not specific to vJailbreak. See the [NFC_SESSION_ERROR knowledge base article](https://knowledge.broadcom.com/external/article/389223/virtual-machine-replication-fails-with-e.html), the [NFC_COMPRESSION_ERROR knowledge base article](https://knowledge.broadcom.com/external/article/393216/rubrik-vm-backup-failing-with-nfccompres.html) (reported against a third-party backup product, but the same ESXi-side root cause and fix), and the [`virt-v2v-input-vmware` documentation](https://libguestfs.org/virt-v2v-input-vmware.1.html) for background.
 - The NFC memory limit lives on the ESXi host's `hostd` regardless of whether the client connects directly to the host or routes through vCenter; there's no separate, independently-configurable limit for the vCenter-routed path.
