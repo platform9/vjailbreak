@@ -5,7 +5,9 @@ description: Troubleshooting VM data-copy failures caused by the ESXi host's NFC
 
 ## Problem
 
-A migration fails during the VM data-copy phase with an error indicating that the ESXi host's **NFC (Network File Copy)** service has run out of memory. NFC is the VMware service used to read and write VM disk data over the network, and `virt-v2v`/`nbdcopy` rely on it when copying disks from the source ESXi host.
+A migration fails during the VM data-copy phase with an error indicating that the ESXi host's **NFC (Network File Copy)** service has run out of memory.
+
+This only affects the **Standard** copy method, which reads disks over NFC through nbdkit's VDDK plugin. [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) (the default since v0.4.10) and [Storage Accelerated Copy](../../../concepts/storage-accelerated-copy/) don't use NFC at all — Accelerated Copy reads disks via `qemu-nbd` on the Proxy VM, and Storage Accelerated Copy uses array-level XCOPY — so neither is affected by this issue.
 
 Error signature (from the ESXi host's `hostd` logs, or surfaced in the vCenter/ESXi task):
 
@@ -19,6 +21,8 @@ or
 Failed to allocate the requested <n> bytes
 ```
 
+vJailbreak's own migration failure reason comes from the second form (`[NFC error] NfcFssrvrProcessErrorMsg: ... failed to allocate ...`), which it pattern-matches from the copy-phase debug log.
+
 ## Symptoms
 
 - Migration fails during disk copy, not at an earlier validation or snapshot step.
@@ -29,7 +33,7 @@ Failed to allocate the requested <n> bytes
 
 Each ESXi host's `hostd` service enforces a memory limit for the NFC service (`nfcsvc`). The default limit is **100663296 bytes (~96 MB)** on current ESXi releases (older releases default to ~48 MB). Every concurrent NFC session (migrations, clones, backups, replication) draws from this shared pool. Once enough sessions are active, or stale sessions haven't been cleaned up, the host can't allocate a buffer for a new transfer and the copy fails.
 
-This is an **ESXi host-side configuration limit**, not a vJailbreak bug or a VM-specific issue. vJailbreak recognizes this specific error and, when copying through vCenter, already uses a smaller VDDK read-block size to reduce the chance of hitting it under concurrent load. That's a best-effort mitigation, not a fix: under enough concurrent NFC sessions the host can still exhaust the limit, and the actual fix is applied on the ESXi host, not in vJailbreak.
+This is an **ESXi host-side configuration limit**, not a vJailbreak bug or a VM-specific issue. vJailbreak already caps every Standard-copy read request at a conservative size (2 MiB or less, tighter still if the copy pod's memory budget is tight) as a best-effort way to lower the odds of hitting this limit, and it recognizes the error to report it as a clear migration failure reason. That mitigation reduces the chance of running into the limit; it doesn't remove it; under enough concurrent NFC sessions the host can still exhaust the limit, and the actual fix is applied on the ESXi host, not in vJailbreak.
 
 ## Resolution
 
@@ -83,9 +87,9 @@ After raising the limit, re-run the migration. See [Retry a Failed Migration](..
 
 - If several ESXi hosts in the cluster are used as migration sources, proactively raise the NFC memory limit on **all** of them, not just the host that failed, to avoid hitting the same issue on the next VM.
 - Avoid running a large number of migrations (or other NFC-consuming operations such as backups/replication) against a single ESXi host at the same time; spreading the load across hosts, or using the [data copy start time](../../../concepts/migration-options/#data-copy-start-time) option to stagger migrations, reduces concurrent NFC sessions per host.
-- Size the limit to your migration plan, not just the 150663296-byte example above: NFC service memory on a host is shared across its concurrent connections, so a migration plan that moves many VMs off the same ESXi host at once needs a higher limit than one moving a handful. If a plan will move more than about 10 VMs from one host concurrently, raise the limit further rather than reusing the example value.
+- Size the limit to your migration plan, not just the 150663296-byte example above: NFC service memory on a host is shared across its concurrent connections, so a migration plan that moves many VMs off the same ESXi host at once needs a higher limit than one moving a handful. Red Hat's Forklift/MTV documentation, migrating VMs from the same kind of ESXi NFC service, recommends raising `maxMemory` well beyond the default when moving more than 10 VMs from one host in the same plan, since NFC service memory is otherwise shared across roughly 10 parallel connections; size proactively rather than reusing the example value above for a large plan.
 
 ## Notes
 
 - This is a known VMware/ESXi constraint, not specific to vJailbreak. See the [NFC_SESSION_ERROR knowledge base article](https://knowledge.broadcom.com/external/article/389223/virtual-machine-replication-fails-with-e.html) and the [`virt-v2v-input-vmware` documentation](https://libguestfs.org/virt-v2v-input-vmware.1.html) for background.
-- The NFC memory limit lives on the ESXi host's `hostd` regardless of whether the client connects directly to the host or routes through vCenter. vCenter-routed connections do behave somewhat differently in practice: vJailbreak itself requests smaller read blocks over that path (see Root Cause), which lowers but doesn't remove the chance of hitting the limit under concurrent load.
+- The NFC memory limit lives on the ESXi host's `hostd` regardless of whether the client connects directly to the host or routes through vCenter; there's no separate, independently-configurable limit for the vCenter-routed path.
