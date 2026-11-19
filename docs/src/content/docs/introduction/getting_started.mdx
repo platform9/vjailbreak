@@ -15,8 +15,10 @@ provisioning operations, including creation of volumes and VMs.
 :::tip[Want faster conversions? Enable nested virtualization]
 vJailbreak's conversion step (`virt-v2v`) runs much faster when it can use hardware-accelerated
 KVM instead of falling back to slow software emulation. Enabling nested virtualization on the
-compute host(s) running your vJailbreak VM — combined with **Storage Accelerated Copy** — has
-been measured to cut end-to-end migration time to roughly 10–15 minutes for ~100GB VMs.
+compute host(s) running your vJailbreak VM and any agent VMs — combined with **Storage
+Accelerated Copy (SAM)** — has been measured to cut end-to-end migration time to roughly 10–15
+minutes for ~100GB VMs. Actual numbers depend on your infrastructure and the VM being migrated —
+treat this as directional, not a guarantee.
 
 This isn't required to use vJailbreak, but if migration performance matters to you, set it up
 before deploying the vJailbreak VM. See

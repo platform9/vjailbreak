@@ -142,8 +142,9 @@ performance and isolation we recommend:
 
 Overhead has not been formally quantified. In practice, Platform9's own test automation runs
 nested virtualization on all hypervisors without issues. Nested virtualization is a host-wide
-setting — once enabled, every VM on that host can use it (after that VM is rebooted, rebuilt, or
-live-migrated to the enabled host).
+setting — once enabled, every VM on that host can use it (after that VM is hard-rebooted,
+rebuilt, or stopped and started). A live migration onto the enabled host does **not** give the
+VM access to it — live migration preserves the guest's existing CPU definition.
 
 ### Does enabling this require restarting Nova, and is it safe to do while VMs are running?
 
@@ -170,8 +171,9 @@ If you need live migration to work reliably, use uniform hardware within the clu
 
 ### Are there known CVEs for nested virtualization?
 
-There's no CVE specific to the Nova/libvirt configuration itself — Nova only sets the guest CPU
-flags (`cpu_model_extra_flags = +vmx`/`+svm`). The actual exposure is in the **host kernel's KVM
+There's no CVE specific to the Nova/libvirt configuration itself — Nova only controls the guest
+CPU definition (`cpu_mode = host-passthrough`, or `host-model` with `cpu_model_extra_flags =
+vmx`/`svm`; see Step 2 above). The actual exposure is in the **host kernel's KVM
 code**, and whether it affects you depends on your CPU vendor, kernel version, and whether
 `nested` is enabled at all (`nested=0` means none of this applies).
 
