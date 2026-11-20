@@ -12,6 +12,9 @@ The `v2v-helper` is the main application responsible for executing the migration
 ## UI
 The `UI` component provides a user-friendly interface for vJailbreak. It allows users to manage and monitor the migration process through an intuitive graphical interface.
 
+## API server
+The vJailbreak API server (`vpwned`) provides REST endpoints used by the UI and the migration pods. For example, it deploys Proxy VMs from the OVA, generates SSH key pairs, applies time settings, runs appliance upgrades, and coordinates disk attaches on shared Proxy VMs.
+
 ## migration-controller
 The `migration-controller` is a Kubernetes controller that schedules and manages the migration tasks. It ensures that migrations are executed efficiently and in accordance with the defined policies.
 

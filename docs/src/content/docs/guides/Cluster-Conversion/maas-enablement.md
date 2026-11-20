@@ -36,5 +36,5 @@ power_parameters_power_pass=<IPMI_PASSWORD>
 ```
 
 :::note
-Set `power_type` to the IPMI power type that your hardware uses and include the IPMI credentials as shown above.
+`power_type` must be `ipmi`; vJailbreak rejects any other power type. Set `power_parameters_power_driver` (`LAN` or `LAN_2_0`) to match your BMC, and include the IPMI credentials as shown above.
 :::

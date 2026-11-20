@@ -124,7 +124,7 @@ Get the details of the VM using the `VMwareMachine` resource and verify that the
 kubectl get vmwaremachine -n <namespace> <vmwaremachine-name> -o yaml
 ```
 
-Find it with `kubectl get vmwaremachine -n migration-system | grep -i <vm-name>`; VMwareMachine names are the Kubernetes-safe VM name plus a 5-character hash.
+Find it with `kubectl get vmwaremachine -n migration-system | grep -i <vm-name>`; VMwareMachine names have the form `<vm-name>-<moref-id>-<hash>`: the VM name and its vCenter managed object ID (without the `vm-` prefix), made Kubernetes-safe, plus a 5-character hash.
 
 From the YAML, note down the following:
 * VM's name using `spec.vms.name`
@@ -136,12 +136,12 @@ From the YAML, note down the following:
 For example, if the following is the output of the above command: 
 
 ```
-$ kubectl get vmwaremachines -n migration-system vm-1 -o yaml
+$ kubectl get vmwaremachines -n migration-system vm-1-1234-a1b2c -o yaml
 
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: VMwareMachine
 metadata:
-  name: vm-1
+  name: vm-1-1234-a1b2c
   namespace: migration-system
   creationTimestamp: "2025-05-27T09:27:34Z"
   generation: 1
@@ -156,6 +156,7 @@ spec:
     cpu: 1
     memory: 4096
     name: vm-1
+    vmid: vm-1234
     osFamily: linuxGuest
     vmState: running
     datastores:
@@ -405,7 +406,7 @@ spec:
     performHealthChecks: false
     healthCheckPort: "443"
   virtualMachines:
-    - - vm-1
+    - - vm-1-1234
 ```
 
 To know more about all the supported fields for advanced use cases, refer to the [MigrationPlan section of the CRD reference document](../../../reference/reference/#migrationplan).
@@ -449,7 +450,7 @@ spec:
       - "port-uuid-1"
 
   virtualMachines:
-    - - vm-1
+    - - vm-1-1234
 ```
 
 ##### How to apply this configuration?
@@ -472,7 +473,7 @@ Whenever a `MigrationPlan` is created, vJailbreak controller creates a `Migratio
 
 ##### Check the Migration custom resource
 
-Following the standard naming conventions used by vJailbreak, the `Migration` custom resource has a name like `migration-<vm-name>-<hash>`, where `<vm-name>` is the VM name in lowercase with spaces and underscores replaced by hyphens and other special characters removed, and `<hash>` is a 5-character suffix. Find it with `kubectl get migration -n <namespace> | grep -i <vm-name>`. We can confirm if the `MigrationPlan` and VM name are correct or not. To check the specifications of a migration custom resource, run the following command:
+Following the standard naming conventions used by vJailbreak, the `Migration` custom resource has a name like `migration-<vm-name>-<moref-id>-<hash>`, where `<vm-name>-<moref-id>` is the VM name and its vCenter managed object ID (without the `vm-` prefix) in lowercase, with spaces and underscores replaced by hyphens and other special characters removed, and `<hash>` is a 5-character suffix. Find it with `kubectl get migration -n <namespace> | grep -i <vm-name>`. We can confirm if the `MigrationPlan` and VM name are correct or not. To check the specifications of a migration custom resource, run the following command:
 
 
 ```

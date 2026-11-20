@@ -75,7 +75,7 @@ For migration plans containing both Windows and Linux VMs, OS tags are strongly 
 To configure a post-migration firstboot script:
 
 1. Open the **Migration Form**
-2. Navigate to the **Migration Options (Optional)** section
+2. Navigate to the **Migration Options** section
 3. Select **Enable script** under **Post-migration script**
 4. Paste the script content into the script field
 5. Separate multiple scripts using `### NEXT SCRIPT ###`

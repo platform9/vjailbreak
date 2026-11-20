@@ -30,8 +30,8 @@ for setup steps, expected performance impact, and recommended host configuration
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
 
 :::note[vJailbreak Accelerated Copy]
-When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM:
-- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.1, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
+When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM and agent nodes:
+- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
 - **22** — SSH, used by vJailbreak to control the Proxy VM
 :::
 
@@ -53,7 +53,7 @@ For older versions, download the vJailbreak image with the following command:
 oras pull quay.io/platform9/vjailbreak:<version>
 ```
 
-This downloads the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
+These commands download the image to `vjailbreak_qcow2/vjailbreak-image.qcow2` in the current directory.
 
 ### Option 2: Direct Download from S3
 
@@ -67,7 +67,7 @@ For older versions, download directly using wget:
 wget https://vjailbreak.s3.us-west-2.amazonaws.com/releases/<version>/vjailbreak.qcow2
 ```
 
-This downloads the vJailbreak qcow2 image locally in the same directory named `vjailbreak.qcow2`.
+These commands download the image to `vjailbreak.qcow2` in the current directory.
 
 :::note
 This direct download method is supported in v0.3.2 and later versions.

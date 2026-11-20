@@ -31,6 +31,7 @@ The vjailbreak-settings ConfigMap supports the following settings:
 
 | Setting | Description | Default Value | Example Values |
 |---------|-------------|---------------|---------------|
+| `ALLOW_MANUAL_PROXY_ONBOARDING` | Shows the **Register an existing VM** option when you add a vJailbreak Proxy VM. When `false`, only **Deploy a new vJailbreak Proxy VM** is available. Not in the shipped ConfigMap; set it in **Global Settings** (**Allow Manual Proxy Onboarding**) | `false` | `true`, `false` |
 | `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `true` | `true`, `false` |
 | `AUTO_PXE_BOOT_ON_CONVERSION` | Automatically configure PXE boot during conversion | `false` | `true`, `false` |
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks during hot migration | `20` | Any positive integer |
@@ -50,7 +51,6 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `VALIDATE_RDM_OWNER_VMS` | Validates that all VMs linked to an RDM disk are migrated in a single migration plan | `true` | `true`, `false` |
 | `VCENTER_LOGIN_RETRY_LIMIT` | Number of retries for vCenter login attempts | `5` | Any positive integer |
 | `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
-| `ALLOW_MANUAL_PROXY_ONBOARDING` | Shows the **Register an existing VM** option when you add a vJailbreak Proxy VM. When `false`, only **Deploy a new vJailbreak Proxy VM** is available. Not in the shipped ConfigMap; set it in **Global Settings** (**Allow Manual Proxy Onboarding**) | `false` | `true`, `false` |
 | `VDDK_REQUIRED` | If `true`, users are sent to the VDDK upload page until VDDK is present; if `false`, VDDK is optional | `false` | `true`, `false` |
 | `VM_ACTIVE_WAIT_INTERVAL_SECONDS` | Interval to wait for VM to become active (in seconds) | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_RETRY_LIMIT` | Number of retries to wait for VM to become active | `15` | Any positive integer |
@@ -287,27 +287,31 @@ kubectl get configmap -n migration-system vjailbreak-settings -o yaml
 
 ## Applying Changes
 
-After modifying settings in the ConfigMap, the behavior depends on which settings you changed:
+After you modify settings in the ConfigMap, they take effect as follows.
 
 ### Settings That Take Effect Immediately
 
 The following settings are read dynamically at runtime and do not require a controller restart:
 
+- `ALLOW_MANUAL_PROXY_ONBOARDING`
 - `AUTO_FSTAB_UPDATE`
 - `AUTO_PXE_BOOT_ON_CONVERSION`
 - `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD`
 - `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE`
 - `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE`
 - `DEFAULT_MIGRATION_METHOD`
+- `DEFAULT_NETWORK_PERSISTENCE`
 - `DEPLOYMENT_NAME`
 - `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES` (applies from the next scheduled revalidation)
 - `PERIODIC_SYNC_INTERVAL`
 - `PERIODIC_SYNC_MAX_RETRIES`
 - `PERIODIC_SYNC_RETRY_CAP`
 - `POPULATE_VMWARE_MACHINE_FLAVORS`
+- `PROXY_VM_OVA_URL`
 - `VALIDATE_RDM_OWNER_VMS`
 - `VCENTER_LOGIN_RETRY_LIMIT`
 - `VCENTER_SCAN_CONCURRENCY_LIMIT`
+- `VDDK_REQUIRED`
 - `VM_ACTIVE_WAIT_INTERVAL_SECONDS`
 - `VM_ACTIVE_WAIT_RETRY_LIMIT`
 - `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` (applies from the next scheduled revalidation)
@@ -317,7 +321,7 @@ The following settings are read dynamically at runtime and do not require a cont
 
 ### When Changes Take Effect
 
-For settings that don't require a restart:
+Settings are applied as follows:
 
 - **On-demand access**: Values are read from the ConfigMap when they are needed for an operation
 - **New operations**: Changes affect only new operations that start after the ConfigMap is updated

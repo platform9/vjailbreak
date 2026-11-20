@@ -89,9 +89,14 @@ Network interface name persistence depends on PowerShell capabilities, the Windo
 
 **Workaround**: Manually reconfigure network interface names and static IP settings inside the VM after migration.
 
-## Persist Source Network Interfaces Requires Preserve IP
+## When Persist Source Network Interfaces Is Unavailable
 
-The UI disables **Persist source network interfaces** when Preserve IP is off on an interface mapped to a Layer 3 network (a network with subnets).
+The UI disables **Persist source network interfaces** when any of the following is true:
+
+- Preserve IP is off on an interface mapped to a Layer 3 network (a network with subnets). Interfaces mapped to Layer 2 networks do not count.
+- A preserved IP address does not lie within the subnet of its destination network, and **Fallback to DHCP** is off.
+- A selected VM is powered off, or VMware Tools is not running on it.
+- A selected VM has interfaces mapped to both Layer 2 and Layer 3 networks.
 
 ## Multi-IP Assignment: One Primary IP, Plus Virtual IPs
 

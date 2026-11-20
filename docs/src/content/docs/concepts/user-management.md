@@ -52,7 +52,7 @@ vjbctl user list
 
 ### Create a user
 
-Create a user. You are prompted for the password:
+Create a user. You are prompted for the password, which must be at least 8 characters:
 
 ```bash
 vjbctl user create <username>
@@ -74,7 +74,7 @@ Change the password for an existing user:
 vjbctl user change-password <username>
 ```
 
-You will be prompted to enter the new password in the terminal.
+You are prompted for the current password, then the new password. Passwords must be at least 8 characters.
 
 ### Batch multiple changes efficiently
 

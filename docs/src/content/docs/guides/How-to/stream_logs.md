@@ -301,7 +301,7 @@ kubectl get pods -n pcd-community | grep loki
   Configuration > "Add Datasource" > Loki > "url: http://loki.pcd-community:3100" > "Save & Test"
 - Add it using a ConfigMap
 
-  If your Grafana is deployed by the kube-prometheus-stack Helm chart, its datasource sidecar loads ConfigMaps that carry the `grafana_datasource: "1"` label (the chart default). Find the namespace Grafana runs in with `kubectl get deploy -A | grep grafana`, then create `loki-datasource.yaml`, replacing `<grafana-namespace>`:
+  If your Grafana is deployed by the kube-prometheus-stack Helm chart (or any Grafana chart with the datasource sidecar enabled), its datasource sidecar loads ConfigMaps that carry the `grafana_datasource: "1"` label (the chart default). Find the namespace Grafana runs in with `kubectl get deploy -A | grep grafana`, then create `loki-datasource.yaml`, replacing `<grafana-namespace>`:
 
   ```yaml
   apiVersion: v1

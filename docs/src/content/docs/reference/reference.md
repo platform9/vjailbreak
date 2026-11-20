@@ -195,10 +195,10 @@ spec:
     performHealthChecks: true/false
     healthCheckPort: string
   virtualMachines:
-    - - winserver2k12
-      - winserver2k16
-    - - winserver2k19
-      - winserver2k22
+    - - winserver2k12-1001
+      - winserver2k16-1002
+    - - winserver2k19-1003
+      - winserver2k22-1004
 ```
 - `advancedOptions`: This is an optional field for granular control over migration options. MigrationTemplate with mappings must still be present. These options override the ones in the template, if set. If you use these options, you must only have 1 VM present in the virtualMachines list.
   - `granularVolumeTypes`: In case you wish to provide different volume types to disks of a VM when they are all on the same datastore, you can specify the volume type of each disk of your VM in order. You must define one volume type for one disk present on the VM.
@@ -214,7 +214,7 @@ spec:
   - `adminInitiatedCutOver`: Set to true if you wish to manually trigger the cutover process. Default: `false`
   - `performHealthChecks`: Set to false if you want to disable Ping and HTTP GET health check. Failing these checks does not clean up the targeted VM. Default: `false`
   - `healthCheckPort`: Port to run the HTTP GET health check against. Default: "443"
-- `virtualMachines`: Specify names of VMs to migrate. In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or in parallel within a plan.
+- `virtualMachines`: Specify the VMs to migrate. Each entry is `<vm-name>-<moref-id>`: the VM name, a hyphen, then its vCenter managed object ID without the `vm-` prefix (the `spec.vms.name` and `spec.vms.vmid` of its VMwareMachine). In this example the batch of VMs `winserver2k12` and `winserver2k16` migrate in parallel. `winserver2k19` and `winserver2k22` will wait for the first 2 to complete successfully, and then start in parallel. You can use this notation to specify whether VMs should migrate sequentially or in parallel within a plan.
 
 ## VjailbreakNode
 vJailbreak can be scaled to perform multiple migrations in parallel by deploying additional `agents`, enabling greater efficiency and workload distribution. The VjailbreakNode Custom Resource Definition (CRD) streamlines the creation and management of these agents, ensuring seamless integration into the migration workflow. Each `VjailbreakNode` represents a VM that functions as an independent migration `agent`. These agents are dynamically added to the original `VjailbreakNode`, forming a cohesive cluster that enhances scalability, reliability, and overall migration performance.

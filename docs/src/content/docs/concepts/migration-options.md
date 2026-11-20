@@ -35,7 +35,7 @@ Determines the underlying mechanism used to transfer disk data.
   - VMs must be powered off during copy (cold migration only)
 
 * **vJailbreak Accelerated Copy** *(default)* - Attaches frozen snapshot disks directly to a Proxy VM running in vCenter (using VMware's hot-add mechanism) and streams data over NBD to the destination. Works with any datastore type (NFS, VMFS, vSAN) and does not require a shared storage array. **Does not require VDDK.** Requires:
-  - A registered Proxy VM in **Ready** state (a Linux VM; `qemu-nbd` is installed automatically on Debian, Ubuntu, Linux Mint and Alpine)
+  - A registered Proxy VM in **Ready** state (a Linux VM; `qemu-nbd` is installed automatically on Debian, Ubuntu, Linux Mint and Alpine if the Proxy VM has internet access)
   - SSH access from vJailbreak to the Proxy VM
   - Supports all of the data copy methods above; vJailbreak Accelerated Copy streams changed blocks over the hot-add NBD path via the Proxy VM instead of VDDK
 

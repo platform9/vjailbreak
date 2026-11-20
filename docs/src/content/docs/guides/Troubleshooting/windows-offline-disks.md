@@ -25,6 +25,7 @@ The Windows SAN policies are:
 - **Offline Shared**: Keeps all shared disks offline (common after migration)
 - **Offline All**: Keeps all new disks offline
 - **Online All**: Automatically brings all new disks online
+- **Offline Internal**: Keeps all new internal disks offline
 
 ## Manual Workaround
 
@@ -63,7 +64,7 @@ SAN Policy : Online All
 
 ### Step 4: Bring Offline Disks Online
 
-While still in diskpart:
+Open Command Prompt as Administrator and run `diskpart`, then:
 
 ```cmd
 DISKPART> list disk

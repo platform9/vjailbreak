@@ -45,13 +45,13 @@ This describes the **cold** data copy path; see the note above for hot migration
 
 ### Requirements
 
-- **Proxy VM**: A Linux VM running in the same vCenter with `openssh-server` installed. vJailbreak installs `qemu-nbd` automatically on Debian, Ubuntu, Linux Mint and Alpine if the Proxy VM has internet access; on other distributions, install it yourself
+- **Proxy VM**: A Linux VM running in the same vCenter with `openssh-server` installed. vJailbreak installs `qemu-nbd` automatically on Debian, Ubuntu, Linux Mint and Alpine if the Proxy VM can reach the internet (vJailbreak checks this by running `curl` against `https://8.8.8.8` on the Proxy VM, so `curl` must be installed and outbound HTTPS allowed); otherwise, install it yourself
 - **SSH access**: vJailbreak must be able to SSH into the Proxy VM as root
-- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM on **22** (SSH) and the `qemu-nbd` port range, **10809–11808** by default (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
+- **Open ports**: The Proxy VM must accept inbound TCP from the vJailbreak VM and agent nodes on **22** (SSH) and the `qemu-nbd` port range, **10809–11808** by default (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
 - **disk.EnableUUID**: vJailbreak sets it to `TRUE` during onboarding if it is missing, which resets the Proxy VM
 - **PVSCSI controller**: At least one SCSI controller on the Proxy VM must be **VMware Paravirtual (PVSCSI)** — vJailbreak auto-adds one during onboarding if a free controller slot is available
 - **Datastore accessibility**: The HotAdd proxy must have access to the same datastore as the target virtual machine, and the VMFS version and data block sizes for the target VM must be the same as the datastore where the HotAdd proxy resides.
-- **vCenter permissions**: see [Additional Privileges: vJailbreak Accelerated Copy Migrations](../../introduction/prerequisites/#additional-privileges-vjailbreak-accelerated-copy-migrations). These include snapshotting VMs, attaching and detaching disks, adding PVSCSI controllers and resetting the Proxy VM
+- **vCenter permissions**: see [Additional Privileges: vJailbreak Accelerated Copy Migrations](../../introduction/prerequisites/#additional-privileges-vjailbreak-accelerated-copy-migrations). These cover attaching and detaching disks, adding PVSCSI controllers and resetting the Proxy VM; snapshot privileges are in the base set
 
 ## Prerequisites
 
@@ -106,7 +106,7 @@ The bundled OVA uses virtual hardware version **vmx-21**, which requires **ESXi 
 
 If you prefer to deploy the Proxy VM yourself, download the OVA from the vJailbreak UI and deploy it in vCenter:
 
-1. In the left sidebar, open **Migrations** → **vJailbreak Proxy VMs** and click **Download OVA template** (also available as the download icon on the **Register an existing VM** card).
+1. In the left sidebar, open **Migrations** → **vJailbreak Proxy VMs** and click **Download OVA template** (also available as the download icon on the **Register an existing VM** card, which appears when **Allow Manual Proxy Onboarding** is enabled in **Global Settings**).
 2. In vSphere Client, right-click the target cluster or host and select **Deploy OVF Template**.
 3. Select **Local file**, choose the downloaded `ha-proxy-vm.ova`, and complete the wizard (name, compute resource, datastore, network).
 4. Power on the VM and note its IP address.
@@ -301,12 +301,12 @@ When vJailbreak Accelerated Copy is selected, the migration follows this workflo
 │                                                                 │
 │  3. Power Off Source VM, then Take Snapshot                     │
 │                                                                 │
-│  4. For Each Source Disk:                                       │
-│     ├── Attach frozen snapshot disk to Proxy VM                 │
-│     ├── Identify block device via disk UUID matching            │
-│     ├── Expose disk as NBD via qemu-nbd on the first free port  │
-│     ├── Run nbdcopy on vJailbreak VM to destination disk        │
-│     └── Detach and clean up disk from Proxy VM                  │
+│  4. Copy the Source Disks:                                      │
+│     ├── Attach all frozen snapshot disks to the Proxy VM        │
+│     ├── Identify block devices via disk UUID matching           │
+│     ├── Expose each disk via qemu-nbd on the first free port    │
+│     ├── Copy all disks in parallel with nbdcopy                 │
+│     └── Detach and clean up the disks from the Proxy VM         │
 │                                                                 │
 │  5. Remove Source VM Snapshot                                   │
 │                                                                 │
@@ -347,6 +347,7 @@ flowchart LR
     vc -->|hot-add disks| proxy
     pod -->|snapshot, attach disks| vc
     pod -->|SSH, NBD| proxy
+    pod -->|Proxy VM attach lock| api
     pod -->|write disk data| cinder
 ```
 
@@ -360,6 +361,7 @@ flowchart LR
 - **vCenter/ESXi → Proxy VM**: hot-add the frozen source-VM disks
 - **Migration Pod → vCenter/ESXi**: take the source-VM snapshot and attach its disks to the Proxy VM
 - **Migration Pod → Proxy VM**: SSH — identify block devices and start `qemu-nbd`; the Migration Pod then reads each disk over NBD
+- **Migration Pod → API server**: take and release the Proxy VM attach lock, so that migrations sharing a Proxy VM attach their disks one at a time
 - **Migration Pod → Cinder Volume**: write the copied disk data to the destination
 
 ### Sequence Diagram
@@ -419,7 +421,7 @@ sequenceDiagram
 
 ### Proxy VM Verification Failed
 
-**Symptoms:** Proxy VM stuck in **Pending** or **Verification Failed** state with a validation error.
+**Symptoms:** Proxy VM stuck in **Pending**, **Verifying** or **Verification Failed** state with a validation error.
 
 **Resolution by error:**
 
@@ -428,19 +430,20 @@ sequenceDiagram
 | VM not found in vCenter | Verify the VM name exactly matches the vCenter inventory name |
 | Guest IP not available | Ensure VMware Tools is installed and running on the Proxy VM |
 | `disk.EnableUUID` not set | vJailbreak sets it and resets the Proxy VM automatically. If the error persists, check that the vCenter user has the `Virtual machine.Config.AdvancedConfig` and `Virtual machine.Interaction.Reset` privileges |
-| SSH connection refused | Verify `sshd` is running and port 22 is reachable from vJailbreak |
+| `SSH connection to Proxy VM <ip> failed: ...` | Verify `sshd` is running and port 22 is reachable from the vJailbreak VM and agent nodes |
 | `missing components [qemu-nbd] and internet not reachable for auto-install` or `missing components and OS "<os>" is not supported for auto-install` | Give the Proxy VM internet access and click the **Retry verification** icon, or install `qemu-utils` (Debian, Ubuntu, Linux Mint) or `qemu-nbd` (Alpine) yourself |
 
-### NBD Connection Failed During Copy
+### qemu-nbd Fails to Start or Serve
 
 ```
-Error: failed to connect to NBD endpoint on proxy VM
+qemu-nbd failed to start for <disk> on Proxy VM <ip> (ports <start>-<end>): ...
+qemu-nbd for <disk> on Proxy VM <ip> port <port> (pid <pid>) started but is not serving
 ```
 
 **Resolution:**
 1. Verify the Proxy VM is still running and SSH is accessible
 2. Check that `qemu-nbd` started successfully — review v2v-helper logs
-3. Ensure the NBD ports (the **Proxy VM Port Range**, TCP **10809–11808** by default, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and vJailbreak
+3. Ensure the NBD ports (the **Proxy VM Port Range**, TCP **10809–11808** by default, one per disk copied in parallel) are not blocked by a firewall between the Proxy VM and the vJailbreak VM or agent nodes
 4. Confirm the Proxy VM's guest IP is correct (VMware Tools must be running)
 
 ### Block Device Not Found in Proxy VM

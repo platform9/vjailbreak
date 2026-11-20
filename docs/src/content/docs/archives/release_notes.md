@@ -643,10 +643,8 @@ description: Archived Release Notes for vJailbreak
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.7...v0.3.8
----
-title:  v0.4.0
-description: Release Notes for v0.4.0
----
+
+## v0.4.0
 
 ### What's Changed
 * Added link to public documentation in the ui by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1345
@@ -702,10 +700,8 @@ description: Release Notes for v0.4.0
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.8...v0.4.0
 
----
-title:  v0.4.1
-description: Release Notes for v0.4.1
----
+
+## v0.4.1
 
 ### What's Changed
 * upgrade core components by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1458

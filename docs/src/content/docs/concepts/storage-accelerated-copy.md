@@ -230,7 +230,7 @@ When you add PCD credentials to vJailbreak, the system automatically discovers a
    - Volume Type (e.g., `netapp`, `vt-pure-iscsi`)
    - Backend Name (e.g., `netapp`, `pure-iscsi-1`)
    - Driver Type (e.g., `NetApp Data ONTAP`, `Pure Storage iSCSI`)
-   - Cinder Host string
+   - Available cinder-volume hosts (offered in the **Cinder Host** list)
 
 3. **Placeholder Creation**: For each discovered backend, vJailbreak automatically creates an ArrayCreds resource with:
    - **Name**: Derived from the volume type and backend name (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
@@ -426,7 +426,7 @@ When Storage Accelerated Copy is enabled, the migration follows this workflow:
 
 ## Migration Phases
 
-When using Storage Accelerated Copy, you'll see these additional migration phases:
+When using Storage Accelerated Copy, you'll see these migration phases. The XCOPY clone is reported under `CopyingBlocks`, the same copy phase that the other copy methods use:
 
 | Phase | Description |
 |-------|-------------|

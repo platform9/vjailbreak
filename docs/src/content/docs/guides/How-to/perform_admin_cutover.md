@@ -10,7 +10,7 @@ It can be triggered in two ways:
 
 
 ## Admin Cutover from the UI
-1. When you create the migration, go to **Migration Options (Optional)** → **Cutover** in the migration form. Select the **Cutover option** checkbox, then choose **Admin initiated cutover** from the drop-down list, as shown in the image below. Cutover options are disabled when the data copy method is **Power off live VMs, then copy**; in that case, cutover happens automatically after the data copy.
+1. When you create the migration, go to **Migration Options** → **Cutover** in the migration form. Select the **Cutover option** checkbox, then choose **Admin initiated cutover** from the drop-down list, as shown in the image below. Cutover options are disabled when the data copy method is **Power off live VMs, then copy**; in that case, cutover happens automatically after the data copy.
 
    ![Admin Cutover](../../../../../public/images/admin_cutover_form.png)
 
@@ -32,7 +32,7 @@ It can be triggered in two ways:
 You can also trigger the admin cutover using the `kubectl patch` command.
 1. First, identify the name of the migration `Pod` you want to perform the admin
    cutover for:
-    * Get the name of the Migration object. It has the form `migration-<vm-name>-<hash>`, where `<vm-name>` is the VM name in lowercase, with spaces and underscores replaced by hyphens and other special characters removed, and `<hash>` is a 5-character suffix. Search for it by that form of the VM name:
+    * Get the name of the Migration object. It has the form `migration-<vm-name>-<moref-id>-<hash>`, where `<vm-name>-<moref-id>` is the VM name and its vCenter managed object ID (without the `vm-` prefix) in lowercase, with spaces and underscores replaced by hyphens and other special characters removed, and `<hash>` is a 5-character suffix. Search for it by that form of the VM name:
       ```bash
       kubectl get migration -n migration-system | grep -i <vm-name>
       migration-name   AwaitingAdminCutOver   vjb   migration-plan-name   1h

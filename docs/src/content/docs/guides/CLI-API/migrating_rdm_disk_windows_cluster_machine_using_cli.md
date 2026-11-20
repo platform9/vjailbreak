@@ -189,7 +189,7 @@ Follow the detailed CLI steps here:
 [Migrating Using CLI and Kubectl](../migrating_using_cli_and_kubectl/)
 
 :::note
-- While creating the migration plan, make sure the actual VM name is passed in `spec.virtualMachines` of the `MigrationPlan`, not the VM custom resource name.
+- While creating the migration plan, pass each VM in `spec.virtualMachines` of the `MigrationPlan` as `<vm-name>-<moref-id>`: the VMwareMachine's `spec.vms.name`, a hyphen, then its `spec.vms.vmid` without the `vm-` prefix. Do not use the VMwareMachine resource name.
 - Every VM in the migration plan that has an RDM disk must be powered off in vCenter before the plan runs. Otherwise, the plan fails.
 - All VMs that share an RDM disk must be in the same migration plan. This is enforced by the `VALIDATE_RDM_OWNER_VMS` setting, which is on by default (see [vJailbreak Settings](../../how-to/vjailbreak_settings/)).
 :::

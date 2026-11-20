@@ -140,8 +140,8 @@ Please refer to the following table for the required ports:
 | 443 | TCP | vJailbreak VM and agent nodes | VMware vCenter API endpoint | VMware provider inventory<br><br>Disk transfer authentication |
 | 443 | TCP | vJailbreak VM and agent nodes | VMware ESXi hosts | Disk transfer authentication |
 | 902 | TCP | vJailbreak VM and agent nodes | VMware ESXi hosts | Disk transfer data copy via NFC protocol (see NFC limitations above) |
-| 22 | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
-| 10809–11808 (default) | TCP | vJailbreak VM | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel). As of v0.6.0, the range is configurable; see [vJailbreak Settings](../../guides/how-to/vjailbreak_settings/) |
+| 22 | TCP | vJailbreak VM and agent nodes | Proxy VM | vJailbreak Accelerated Copy only: SSH control of the Proxy VM |
+| 10809–11808 (default) | TCP | vJailbreak VM and agent nodes | Proxy VM | vJailbreak Accelerated Copy only: `qemu-nbd` disk transfer (one port per disk copied in parallel). As of v0.6.0, the range is configurable; see [vJailbreak Settings](../../guides/how-to/vjailbreak_settings/) |
 
 
 ## What network connectivity do I need for vJailbreak?
@@ -150,7 +150,7 @@ During normal migration operations, vJailbreak only requires connectivity to vCe
 
 ### Required for Migration (always)
 
-The vJailbreak VM and any helper nodes must be able to reach:
+The vJailbreak VM and any agent nodes must be able to reach:
 
 - **vCenter and ESXi hosts** — for VM inventory, disk transfer authentication, and NFC data copy (ports 443 and 902)
 - **OpenStack API endpoints** — for creating volumes, networks, and VM resources at the destination
