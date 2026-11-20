@@ -5,7 +5,7 @@ description: "A guide on how to manage user credentials using the vJailbreak CLI
 
 ## Overview
 
-Use `vjbctl` to manage user credentials: list users, delete users, change passwords, and refresh credentials.
+Use `vjbctl` to manage user credentials: list, create and delete users, change passwords, and refresh credentials.
 
 ## Assumptions
 
@@ -21,7 +21,7 @@ The following commands are available for user credential management:
 # List users
 vjbctl user list
 
-# create a new user
+# Create a new user
 vjbctl user create <username>
 
 # Delete a user
@@ -34,16 +34,28 @@ vjbctl user change-password <username>
 vjbctl user refresh
 ```
 
-> Tip: Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `change-password`) to defer applying changes. Then run `vjbctl user refresh` once to apply all pending changes for better efficiency.
+:::tip
+Append `--no-restart` to `vjbctl user` subcommands (e.g., `create`, `delete`, `change-password`) to defer applying changes. Then run `vjbctl user refresh` once to apply all pending changes for better efficiency.
+:::
 
 ## Usage
 
-> Note: After any user change (e.g., password updates or deletions), run `vjbctl user refresh` for the changes to be reflected.
+:::note
+`vjbctl user create`, `delete` and `change-password` restart the vJailbreak UI automatically, so the change takes effect once the UI has restarted. If you used `--no-restart`, run `vjbctl user refresh` to apply the pending changes.
+:::
 
 ### List users
 
 ```bash
 vjbctl user list
+```
+
+### Create a user
+
+Create a user. You are prompted for the password, which must be at least 8 characters:
+
+```bash
+vjbctl user create <username>
 ```
 
 ### Delete a user
@@ -62,11 +74,11 @@ Change the password for an existing user:
 vjbctl user change-password <username>
 ```
 
-You will be prompted to enter the new password in the terminal.
+You are prompted for the current password, then the new password. Passwords must be at least 8 characters.
 
 ### Batch multiple changes efficiently
 
-To avoid refreshing after every change, you can batch multiple operations using `--no-restart` and then apply them all at once with a single refresh:
+To avoid a UI restart after every change, you can batch multiple operations using `--no-restart` and then apply them all at once with a single refresh:
 
 ```bash
 # Defer applying changes while making multiple updates
@@ -80,7 +92,7 @@ vjbctl user refresh
 
 ### Refresh user credentials
 
-Refresh user credentials for active users:
+Restart the vJailbreak UI so that it loads the current users and passwords:
 
 ```bash
 vjbctl user refresh
@@ -96,16 +108,10 @@ vjbctl user list
 
 # Create a new user
 vjbctl user create john.doe
-# For changes to be reflected, refresh
-vjbctl user refresh
 
 # Update password for a specific user
 vjbctl user change-password jane.doe
-# For changes to be reflected, refresh
-vjbctl user refresh
 
 # Remove a deprovisioned user
 vjbctl user delete temp.user
-# For changes to be reflected, refresh
-vjbctl user refresh
 ```

@@ -643,10 +643,8 @@ description: Archived Release Notes for vJailbreak
 
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.7...v0.3.8
----
-title:  v0.4.0
-description: Release Notes for v0.4.0
----
+
+## v0.4.0
 
 ### What's Changed
 * Added link to public documentation in the ui by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/1345
@@ -702,10 +700,8 @@ description: Release Notes for v0.4.0
 
 **Full Changelog**: https://github.com/platform9/vjailbreak/compare/v0.3.8...v0.4.0
 
----
-title:  v0.4.1
-description: Release Notes for v0.4.1
----
+
+## v0.4.1
 
 ### What's Changed
 * upgrade core components by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/1458
@@ -1124,7 +1120,7 @@ kubectl rollout restart deployment -n migration-system
 * Make clean up both agents and vjb nodes to run as background and improve reliability by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2155
 * Refactoring boot partition detection by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2168
 * Separate out nbd and virtv2v debug logs by @spai-p9 in https://github.com/platform9/vjailbreak/pull/2165
-https://github.com/platform9/vjailbreak/pull/2172
+* feat(claude): add vjb-debug skill and mandatory context loading by @OmkarDeshpande7 in https://github.com/platform9/vjailbreak/pull/2172
 * [2173] Remove beta tag from Storage Accelerated Copy by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2177
 * [2152] Add MigrationBlueprint CRD to support migration templates by @sarika-pf9 in https://github.com/platform9/vjailbreak/pull/2158
 * [2175] UI patch call for proxy vm retry by @meghansh-pf9 in https://github.com/platform9/vjailbreak/pull/2181

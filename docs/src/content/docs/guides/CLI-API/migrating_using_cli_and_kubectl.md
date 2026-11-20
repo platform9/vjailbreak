@@ -10,7 +10,9 @@ vJailbreak comprises multiple Kubernetes Controllers which work on Custom Resour
 Before moving to the action, let’s understand the various resources that will be created to perform a migration, and how they are related to each other.
 ![image](../../../../assets/information-flow.png)
 
-**Note**: In the diagram above, the specification/configuration flows towards the arrow, and the status travels backwards (from `v2v-helper` Pod up till `MigrationPlan`).
+:::note
+In the diagram above, the specification/configuration flows in the direction of the arrows, and the status travels backwards (from the `v2v-helper` Pod up to the `MigrationPlan`).
+:::
 
 
 ### Glossary
@@ -27,7 +29,9 @@ Let’s get familiar with the resources mentioned in the diagram above. These re
 * **Job**: With the migration custom resource in place, the vJailbreak controller creates a Kubernetes Job, which will in turn create the v2v-helper pod to execute migration for the particular VM mentioned in the Migration custom resource.
 * **v2v-helper pods**: Based on the definition of the job created by the vJailbreak controller, Kubernetes creates a pod to perform the actual VM migration. These pods are temporary workloads that run the helper logic and handle all the migration steps such as image conversion, driver injection, guest customization, transfer, and creation of OpenStack resources.
 
-**Note**: `NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
+:::note
+`NetworkMapping`, `StorageMapping`, `MigrationTemplate`, `MigrationPlan`, and `Migration` are Custom Resources.
+:::
 
 Now that we have a basic understanding of the resources that will be useful during our journey, let’s start on the migration part.
 
@@ -79,7 +83,9 @@ Check the resource name for the VMware vCenter credentials using the following c
 kubectl get vmwarecreds -n <namespace>
 ```
 
-**Note**: The default namespace for vJailbreak ecosystem is `migration-system`.
+:::note
+The default namespace for the vJailbreak ecosystem is `migration-system`.
+:::
 
 Copy the name of the `VMwareCreds` resource that refers to the vCenter hosting the VM you want to migrate. This will be used when creating the MigrationTemplate. For example, if the following is the output of the above command:
 
@@ -115,8 +121,10 @@ Then the name of the `OpenstackCreds` would be `openstack-a`.
 
 Get the details of the VM using the `VMwareMachine` resource and verify that the details are correct:
 ```
-kubectl get vmwaremachine -n <namespace> <vm-name> -o yaml
+kubectl get vmwaremachine -n <namespace> <vmwaremachine-name> -o yaml
 ```
+
+Find it with `kubectl get vmwaremachine -n migration-system | grep -i <vm-name>`; VMwareMachine names have the form `<vm-name>-<moref-id>-<hash>`: the VM name and its vCenter managed object ID (without the `vm-` prefix), made Kubernetes-safe, plus a 5-character hash.
 
 From the YAML, note down the following:
 * VM's name using `spec.vms.name`
@@ -128,12 +136,12 @@ From the YAML, note down the following:
 For example, if the following is the output of the above command: 
 
 ```
-$ kubectl get vmwaremachines -n migration-system vm-1 -o yaml
+$ kubectl get vmwaremachines -n migration-system vm-1-1234-a1b2c -o yaml
 
 apiVersion: vjailbreak.k8s.pf9.io/v1alpha1
 kind: VMwareMachine
 metadata:
-  name: vm-1
+  name: vm-1-1234-a1b2c
   namespace: migration-system
   creationTimestamp: "2025-05-27T09:27:34Z"
   generation: 1
@@ -148,14 +156,19 @@ spec:
     cpu: 1
     memory: 4096
     name: vm-1
+    vmid: vm-1234
     osFamily: linuxGuest
     vmState: running
     datastores:
       - datastore-1
       - datastore-2
     disks:
-      - Hard disk 1
-      - Hard disk 2
+      - name: Hard disk 1
+        capacityGB: 40
+        datastore: datastore-1
+      - name: Hard disk 2
+        capacityGB: 40
+        datastore: datastore-2
     networks:
       - network-1
       - network-2
@@ -196,9 +209,12 @@ spec:
 status:
   openstack:
     networks:
-    - vlan1
-    - vlan2
-    - vlan3
+    - name: vlan1
+      tags: []
+    - name: vlan2
+      tags: []
+    - name: vlan3
+      tags: []
     volumeTypes:
     - lvm
     - lvm-class-2
@@ -248,7 +264,7 @@ spec:
 kubectl apply -f storage-mapping.yaml
 ```
 
-Read more about `StorageMapping` in [the CRDs reference document](https://platform9.github.io/vjailbreak/reference/reference/#datastore-mapping).
+Read more about `StorageMapping` in [the CRDs reference document](../../../reference/reference/#datastore-mapping).
 
 
 #### Create the NetworkMapping custom resource
@@ -281,7 +297,7 @@ spec:
 kubectl apply -f network-mapping.yaml
 ```
 
-Read more about `NetworkMapping` in [the CRDs reference document](https://platform9.github.io/vjailbreak/reference/reference/#network-mapping).
+Read more about `NetworkMapping` in [the CRDs reference document](../../../reference/reference/#network-mapping).
 
 
 #### (Optional) Explicitly select the target OpenStack flavor
@@ -312,16 +328,18 @@ Identify the flavor that matches what you want (by name and/or by inspecting its
 Once you've identified the flavor ID you want (`d2a1e2d0-1111-4a3e-9c3e-abc123456789` in this example), patch the `VMwareMachine` resource for the VM being migrated:
 
 ```
-kubectl patch vmwaremachine -n migration-system <vm-name> --type merge -p '{"spec":{"targetFlavorId":"d2a1e2d0-1111-4a3e-9c3e-abc123456789"}}'
+kubectl patch vmwaremachine -n migration-system <vmwaremachine-name> --type merge -p '{"spec":{"targetFlavorId":"d2a1e2d0-1111-4a3e-9c3e-abc123456789"}}'
 ```
 
 You can confirm it was set correctly with:
 
 ```
-kubectl get vmwaremachine -n migration-system <vm-name> -o jsonpath='{.spec.targetFlavorId}'
+kubectl get vmwaremachine -n migration-system <vmwaremachine-name> -o jsonpath='{.spec.targetFlavorId}'
 ```
 
-**Note**: `targetFlavorId` is read once, when vJailbreak creates the migration ConfigMap for the VM (as part of `MigrationPlan` processing). Set it on the `VMwareMachine` before creating the `MigrationPlan` for that VM. If it is left blank, vJailbreak falls back to the automatic best-match flavor selection described above.
+:::note
+`targetFlavorId` is read once, when vJailbreak creates the migration ConfigMap for the VM (as part of `MigrationPlan` processing). Set it on the `VMwareMachine` before creating the `MigrationPlan` for that VM. If it is left blank, vJailbreak falls back to the automatic best-match flavor selection described above.
+:::
 
 #### Create the MigrationTemplate custom resource
 
@@ -347,7 +365,7 @@ metadata:
 spec:
   networkMapping: networkmapping
   storageMapping: storagemapping
-  osFamily: linux        # valid values: linux, windows (optional — auto-detected when VM is powered on)
+  osFamily: linuxGuest   # optional; valid values: linuxGuest, windowsGuest
   source:
     vmwareRef: vcenter-a
   destination:
@@ -361,7 +379,7 @@ spec:
 kubectl apply -f migration-template.yaml
 ```
 
-Read more about `MigrationTemplate` in [the CRDs reference document](https://platform9.github.io/vjailbreak/reference/reference/#migrationtemplate).
+Read more about `MigrationTemplate` in [the CRDs reference document](../../../reference/reference/#migrationtemplate).
 
 
 #### Create the MigrationPlan custom resource
@@ -388,10 +406,10 @@ spec:
     performHealthChecks: false
     healthCheckPort: "443"
   virtualMachines:
-    - - vm-1
+    - - vm-1-1234
 ```
 
-To know more about all the supported fields for advanced use cases, refer to the [MigrationPlan section of the CRD reference document](https://platform9.github.io/vjailbreak/reference/reference/#migrationplan).
+To know more about all the supported fields for advanced use cases, refer to the [MigrationPlan section of the CRD reference document](../../../reference/reference/#migrationplan).
 
 ##### Optional MigrationPlan Fields
 
@@ -432,7 +450,7 @@ spec:
       - "port-uuid-1"
 
   virtualMachines:
-    - - vm-1
+    - - vm-1-1234
 ```
 
 ##### How to apply this configuration?
@@ -455,11 +473,11 @@ Whenever a `MigrationPlan` is created, vJailbreak controller creates a `Migratio
 
 ##### Check the Migration custom resource
 
-Following the standard naming conventions used by vJailbreak, the `Migration` custom resource has a name like `migration-<vm-name>`. We can confirm if the `MigrationPlan` and VM name are correct or not. To check the specifications of a migration custom resource, run the following command:
+Following the standard naming conventions used by vJailbreak, the `Migration` custom resource has a name like `migration-<vm-name>-<moref-id>-<hash>`, where `<vm-name>-<moref-id>` is the VM name and its vCenter managed object ID (without the `vm-` prefix) in lowercase, with spaces and underscores replaced by hyphens and other special characters removed, and `<hash>` is a 5-character suffix. Find it with `kubectl get migration -n <namespace> | grep -i <vm-name>`. We can confirm if the `MigrationPlan` and VM name are correct or not. To check the specifications of a migration custom resource, run the following command:
 
 
 ```
-kubectl get migration -n <namespace> migration-<vm-name> -o yaml
+kubectl get migration -n <namespace> <migration-name> -o yaml
 ```
 
 * MigrationPlan will be available under: `metadata.labels.migrationplan` or `spec.migrationPlan`
@@ -475,7 +493,7 @@ Migration Job is a Kubernetes Job responsible for migrating one VM from VMware t
 ##### Check the Migration Job
 
 
-* Following the standard naming conventions followed by vJailbreak, the job has a name like `v2v-helper-<vm-name>`.
+* Following the standard naming conventions used by vJailbreak, the job name starts with `v2v-helper-<vm-name>` and ends with hash suffixes. Read the exact pod name from `spec.podRef` of the Migration.
 * We can check the status of the job under the `status` section.
 
 

@@ -8,7 +8,7 @@ Before you start using vJailbreak, you need to provide credentials for both the 
 ## VMware vCenter Credentials
 VMware vCenter credentials are required to connect to the vCenter server and retrieve information about the virtual machines you want to migrate.
 
-The credentials should have enough permissions to retrieve information about the virtual machines you want to migrate, and if you are looking to use cluster conversion, the credentials should have enough permissions to retrieve information about the cluster, put hosts into maintenance mode, etc. (see [Cluster Conversion](../../guides/cluster-conversion/) for more details).
+The credentials should have enough permissions to retrieve information about the virtual machines you want to migrate, and if you are looking to use cluster conversion, the credentials should have enough permissions to retrieve information about the cluster, put hosts into maintenance mode, etc. (see [Cluster Conversion](../../guides/cluster-conversion/cluster-conversion/) for more details).
 
 The VMware credentials need the vCenter Server IP address or vCenter Server name, username, and password.
 The credentials also take the Datacenter name, and the VMs and hosts being worked on would be restricted to the Datacenter specified in the credentials.
@@ -21,7 +21,7 @@ OpenStack/PCD credentials are required to create VMs inside the OpenStack/PCD en
 
 To copy the content of the `openstack.rc` file, you should navigate to the Settings > API Access > pcdctl RC section.
 
-If using PCD, we recommend toggling the "Is PCD credentials" option. This will automatically indicate to vJailbreak that the credentials are for PCD and would use PCD Cluster as a destination for different migrations.
+If using PCD, we recommend toggling the **Is PCD credential** option. This will automatically indicate to vJailbreak that the credentials are for PCD and would use PCD Cluster as a destination for different migrations.
 
 For non-PCD environments, the `openstack.rc` file will be available as part of various distributions and documentation. The `openstack.rc` file is typically used for any automation with the OpenStack CLI.
 
@@ -76,7 +76,7 @@ export OS_PROJECT_DOMAIN_NAME=Default
 export OS_PROJECT_NAME=service
 export OS_INTERFACE=public
 export OS_INSECURE=false
-````
+```
 
 ---
 
@@ -132,8 +132,8 @@ export OS_AUTH_TYPE=token
 
 Revalidation re-runs the same flow that runs on credential creation. It is triggered automatically by the controller and can also be initiated manually from the UI.
 
-![img1](../../../../public/images/revalidate_openstack_cred.png)
-![img1](../../../../public/images/revalidate_vmware_cred.png)
+![Revalidate PCD credentials](../../../../public/images/revalidate_openstack_cred.png)
+![Revalidate VMware credentials](../../../../public/images/revalidate_vmware_cred.png)
 
 #### What Revalidation Does
 
@@ -157,7 +157,7 @@ When a credential is revalidated, vJailbreak performs two steps:
 
 - **On credential creation** — initial validation + resource fetch.
 - **Periodically** — the controller reconciles every 1 hour by default to keep resources in sync. The default time to requeue creds can be changed on the Global Settings page.
-- **Manually** — click the refresh button on the Credentials page to trigger an immediate revalidation.
+- **Manually** — click the **Revalidate Credentials** icon on the credentials page to trigger an immediate revalidation.
 
 
 #### Important: VMware IP Discovery and Credential Revalidation
@@ -167,8 +167,10 @@ VMware Tools and guest IP addresses can take some time to appear in vCenter afte
 **Best Practice:**
 - Make all necessary configuration changes to your VMs in the vCenter UI first.
 - **Wait** until the IP addresses are clearly visible on the VM summary page in vCenter.
-- Only then click **Add Credential** or **Revalidate** in vJailbreak.
+- Only then click **Add VMware Credentials** or the **Revalidate Credentials** icon in vJailbreak.
 
 Revalidating too early may result in missing IP information, which can prevent proper IP preservation on the destination and cause migration issues.
 
-> **Note**: vJailbreak will show a warning for VMs where network interfaces are detected but IPs could not be discovered.
+:::note
+vJailbreak will show a warning for VMs where network interfaces are detected but IPs could not be discovered.
+:::

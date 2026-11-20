@@ -31,12 +31,14 @@ The vjailbreak-settings ConfigMap supports the following settings:
 
 | Setting | Description | Default Value | Example Values |
 |---------|-------------|---------------|---------------|
-| `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `false` | `true`, `false` |
+| `ALLOW_MANUAL_PROXY_ONBOARDING` | Shows the **Register an existing VM** option when you add a vJailbreak Proxy VM. When `false`, only **Deploy a new vJailbreak Proxy VM** is available. Not in the shipped ConfigMap; set it in **Global Settings** (**Allow Manual Proxy Onboarding**) | `false` | `true`, `false` |
+| `AUTO_FSTAB_UPDATE` | Automatically update fstab during migration | `true` | `true`, `false` |
 | `AUTO_PXE_BOOT_ON_CONVERSION` | Automatically configure PXE boot during conversion | `false` | `true`, `false` |
 | `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD` | Number of iterations to copy changed blocks during hot migration | `20` | Any positive integer |
 | `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE` | Automatically clean up OpenStack ports after migration failure | `false` | `true`, `false` |
 | `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE` | Automatically clean up OpenStack volumes after conversion failure | `false` | `true`, `false` |
 | `DEFAULT_MIGRATION_METHOD` | Default method for VM migration | `cold` | `hot` (migrate while VM is running), `cold` (power off VM before migration) |
+| `DEFAULT_NETWORK_PERSISTENCE` | Default value of **Persist source network interfaces** in the migration form | `false` | `true`, `false` |
 | `DEPLOYMENT_NAME` | Name of the vJailbreak deployment | `vJailbreak` | Any string |
 | `NTP_SERVERS` | NTP servers the appliance synchronizes against. | Empty (default public pools) | Space-separated hostnames or IPv4 addresses (e.g., `ntp1.corp.local ntp2.corp.local`) |
 | `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue OpenStack credentials validation | `60` | Any positive integer |
@@ -44,10 +46,12 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `PERIODIC_SYNC_MAX_RETRIES` | Maximum number of retries for periodic sync | `3` | Any positive integer |
 | `PERIODIC_SYNC_RETRY_CAP` | Maximum duration to retry periodic sync | `3h` | Duration format (e.g., `1h`, `3h`, `6h`) |
 | `POPULATE_VMWARE_MACHINE_FLAVORS` | Automatically populate flavor recommendations for VMware machines | `true` | `true`, `false` |
+| `PROXY_VM_OVA_URL` | URL of the OVA template used to deploy a vJailbreak Proxy VM | `https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova` | Any URL |
 | `TIMEZONE` | System time zone of the vJailbreak appliance. | Empty (UTC) | IANA time zone (e.g., `Asia/Calcutta`, `America/New_York`) |
 | `VALIDATE_RDM_OWNER_VMS` | Validates that all VMs linked to an RDM disk are migrated in a single migration plan | `true` | `true`, `false` |
 | `VCENTER_LOGIN_RETRY_LIMIT` | Number of retries for vCenter login attempts | `5` | Any positive integer |
 | `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
+| `VDDK_REQUIRED` | If `true`, users are sent to the VDDK upload page until VDDK is present; if `false`, VDDK is optional | `false` | `true`, `false` |
 | `VM_ACTIVE_WAIT_INTERVAL_SECONDS` | Interval to wait for VM to become active (in seconds) | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_RETRY_LIMIT` | Number of retries to wait for VM to become active | `15` | Any positive integer |
 | `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` | Interval in minutes to requeue VMware credentials validation | `60` | Any positive integer |
@@ -58,8 +62,8 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `HTTP_TIMEOUT_SECONDS` | Timeout in seconds for HTTP requests made by the controller | `30` | Any positive integer |
 | `V2V_HELPER_POD_CPU_REQUEST` | CPU request for v2v-helper migration pods | `1000m` | Kubernetes CPU quantity (e.g., `500m`, `2000m`) |
 | `V2V_HELPER_POD_CPU_LIMIT` | CPU limit for v2v-helper migration pods | `2000m` | Kubernetes CPU quantity |
-| `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `1Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
-| `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `3Gi` | Kubernetes memory quantity |
+| `V2V_HELPER_POD_MEMORY_REQUEST` | Memory request for v2v-helper migration pods | `2Gi` | Kubernetes memory quantity (e.g., `512Mi`, `2Gi`) |
+| `V2V_HELPER_POD_MEMORY_LIMIT` | Memory limit for v2v-helper migration pods | `5Gi` | Kubernetes memory quantity |
 | `LOG_RETENTION_HOURS` | As of v0.5.0, hours to retain per-migration debug logs on the vJailbreak node before the sync-daemon deletes them | `24` | Any integer ≥ 24 (lower values are clamped up to 24) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_REQUEST` | Ephemeral storage request for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity (e.g., `5Gi`, `20Gi`) |
 | `V2V_HELPER_POD_EPHEMERAL_STORAGE_LIMIT` | Ephemeral storage limit for v2v-helper migration pods | `3Gi` | Kubernetes storage quantity |
@@ -228,7 +232,9 @@ To automatically clean up resources after migration failures:
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"CLEANUP_PORTS_AFTER_MIGRATION_FAILURE":"true","CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE":"true"}}'
 ```
 
-> **Note:** Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::note
+Enabling automatic cleanup helps prevent resource accumulation after failed migrations, but ensure you have proper logging and monitoring in place to track what gets cleaned up.
+:::
 
 ### Adjusting Volume Availability Wait Parameters
 
@@ -254,7 +260,9 @@ To disable the validation that requires all VMs linked to an RDM disk to be migr
 kubectl patch configmap -n migration-system vjailbreak-settings --type merge -p '{"data":{"VALIDATE_RDM_OWNER_VMS":"false"}}'
 ```
 
-> **Note:** When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::note
+When `VALIDATE_RDM_OWNER_VMS` is set to `true` (default), the system ensures that all VMs sharing an RDM disk are migrated together in the same migration plan. This prevents potential data consistency issues. Only disable this validation if you understand the implications for your RDM disk configuration.
+:::
 
 ### Setting Default Migration Method
 
@@ -279,48 +287,41 @@ kubectl get configmap -n migration-system vjailbreak-settings -o yaml
 
 ## Applying Changes
 
-After modifying settings in the ConfigMap, the behavior depends on which settings you changed:
-
-### Settings That Require Controller Restart
-
-The following settings are loaded at controller startup and require a restart of the migration controller pod to take effect:
-
-- `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES`
-- `VMWARE_CREDS_REQUEUE_AFTER_MINUTES`
-
-To restart the controller after changing these settings:
-
-```bash
-kubectl rollout restart deployment migration-controller-manager -n migration-system
-```
+After you modify settings in the ConfigMap, they take effect as follows.
 
 ### Settings That Take Effect Immediately
 
-All other settings are read dynamically at runtime and do not require a restart:
+The following settings are read dynamically at runtime and do not require a controller restart:
 
+- `ALLOW_MANUAL_PROXY_ONBOARDING`
 - `AUTO_FSTAB_UPDATE`
 - `AUTO_PXE_BOOT_ON_CONVERSION`
 - `CHANGED_BLOCKS_COPY_ITERATION_THRESHOLD`
 - `CLEANUP_PORTS_AFTER_MIGRATION_FAILURE`
 - `CLEANUP_VOLUMES_AFTER_CONVERT_FAILURE`
 - `DEFAULT_MIGRATION_METHOD`
+- `DEFAULT_NETWORK_PERSISTENCE`
 - `DEPLOYMENT_NAME`
+- `OPENSTACK_CREDS_REQUEUE_AFTER_MINUTES` (applies from the next scheduled revalidation)
 - `PERIODIC_SYNC_INTERVAL`
 - `PERIODIC_SYNC_MAX_RETRIES`
 - `PERIODIC_SYNC_RETRY_CAP`
 - `POPULATE_VMWARE_MACHINE_FLAVORS`
+- `PROXY_VM_OVA_URL`
 - `VALIDATE_RDM_OWNER_VMS`
 - `VCENTER_LOGIN_RETRY_LIMIT`
 - `VCENTER_SCAN_CONCURRENCY_LIMIT`
+- `VDDK_REQUIRED`
 - `VM_ACTIVE_WAIT_INTERVAL_SECONDS`
 - `VM_ACTIVE_WAIT_RETRY_LIMIT`
+- `VMWARE_CREDS_REQUEUE_AFTER_MINUTES` (applies from the next scheduled revalidation)
 - `VOLUME_AVAILABLE_WAIT_INTERVAL_SECONDS`
 - `VOLUME_AVAILABLE_WAIT_RETRY_LIMIT`
 - `LOG_RETENTION_HOURS` (read directly by the `sync-daemon` DaemonSet, not the controller, on its next 5-minute cleanup cycle)
 
 ### When Changes Take Effect
 
-For settings that don't require a restart:
+Settings are applied as follows:
 
 - **On-demand access**: Values are read from the ConfigMap when they are needed for an operation
 - **New operations**: Changes affect only new operations that start after the ConfigMap is updated
@@ -345,4 +346,6 @@ Typically, your changes will be effective within seconds for any new operations 
 - After changing settings, monitor system behavior to ensure the changes produce the expected results.
 - Use vJailbreak logs to verify that settings are being correctly applied.
 
-> **Important:** Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::caution
+Always select configuration values appropriate for your specific environment. Incorrect settings may negatively impact system performance or stability.
+:::

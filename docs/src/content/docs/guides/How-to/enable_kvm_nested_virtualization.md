@@ -25,7 +25,7 @@ Conversions still succeed but take significantly longer.
 
 In customer benchmarking on ~100GB VMs using the **Standard** copy method, enabling nested
 virtualization alone brought cutover time down to roughly **5 minutes** and total migration time
-to roughly **24 minutes**. Combined with **Storage Accelerated Copy (SAM)**, end-to-end migration
+to roughly **24 minutes**. Combined with **Storage Accelerated Copy**, end-to-end migration
 time can drop to roughly **10–15 minutes**.
 
 Actual numbers depend on your infrastructure (CPU, storage, network) and the VM being migrated —
@@ -37,7 +37,9 @@ The v2v-helper pod already mounts the host `/dev` directory into the pod at `/de
 
 The condition that must be met is that the vJailbreak VM itself has access to KVM, which requires nested virtualization to be enabled at every layer of the stack.
 
-⚠️ **Caution — this affects all VMs on the compute host, not just vJailbreak.**
+:::caution
+This affects all VMs on the compute host, not just vJailbreak.
+:::
 
 ## Enabling Nested Virtualization
 
@@ -81,9 +83,11 @@ cpu_mode = host-model
 cpu_model_extra_flags = vmx    # use svm on AMD
 ```
 
-> **Note:** `host-passthrough` ties the VM to a host with a closely matching
-> CPU, model, and microcode for live migration. For vJailbreak — a
-> short-lived, migration-tool VM — this is rarely a concern. 
+:::note
+`host-passthrough` ties the VM to a host with a closely matching
+CPU model and microcode for live migration. For vJailbreak — a
+short-lived, migration-tool VM — this is rarely a concern.
+:::
 
 ### Step 3 — Apply
 
@@ -117,7 +121,7 @@ No changes are needed. The pod's `/dev` hostPath mount makes `/dev/kvm` visible 
 After enabling nested virtualization and restarting a migration, inspect the v2v-helper pod logs. You should **not** see the TCG fallback warning. Instead, look for QEMU initializing with KVM:
 
 ```bash
-kubectl -n migration-system logs <migration-name>-v2v-helper | grep -i kvm
+kubectl -n migration-system logs $(kubectl -n migration-system get migration <migration-name> -o jsonpath='{.spec.podRef}') | grep -i kvm
 ```
 
 A healthy KVM-accelerated run shows no `falling back to tcg` messages and noticeably faster conversion times.

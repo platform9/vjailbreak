@@ -220,7 +220,7 @@ If the SSH connection fails:
 
 ### Understanding Auto-Discovery
 
-When you add PCD credentials to vJailbreak, the system automatically discovers all storage volume backends configured in your PCD environment. For each detected storage backend (NetApp, Pure Storage, Hitachi Vantara, etc.), vJailbreak creates a placeholder ArrayCreds entry with status "Auto-discovered" and credentials marked as "Pending".
+When you add PCD credentials to vJailbreak, the system automatically discovers all storage volume backends configured in your PCD environment. For each detected storage backend (NetApp, Pure Storage, Hitachi Vantara, etc.), vJailbreak creates a placeholder ArrayCreds entry with source "Auto-discovered" and credentials "Pending".
 
 #### How Auto-Discovery Works
 
@@ -230,20 +230,20 @@ When you add PCD credentials to vJailbreak, the system automatically discovers a
    - Volume Type (e.g., `netapp`, `vt-pure-iscsi`)
    - Backend Name (e.g., `netapp`, `pure-iscsi-1`)
    - Driver Type (e.g., `NetApp Data ONTAP`, `Pure Storage iSCSI`)
-   - Cinder Host string
+   - Available cinder-volume hosts (offered in the **Cinder Host** list)
 
 3. **Placeholder Creation**: For each discovered backend, vJailbreak automatically creates an ArrayCreds resource with:
    - **Name**: Derived from the volume type and backend name (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
    - **Vendor**: Automatically identified from the driver type
    - **Source**: Marked as "Auto-discovered"
    - **Credentials**: Status shows "Pending" (requires user input)
-   - **PCD Mapping**: Pre-populated with volume type, backend name, and Cinder host
+   - **PCD Mapping**: Pre-populated with volume type and backend name; **Cinder Host** is left at **Auto (recommended)**
 
-4. **User Completion**: Users then update these auto-discovered entries with the actual storage array credentials (hostname, username, password) to enable Storage Accelerated Copy.
+4. **User Completion**: Users then update these auto-discovered entries with the actual storage array credentials (management endpoint, username and password) to enable Storage Accelerated Copy.
 
-#### Storage Management Page
+#### Storage Array Page
 
-The Storage Management page displays all auto-discovered storage backends:
+The **Storage Array** page (**Credentials** → **Storage Array**) lists all auto-discovered storage backends in its **Storage Array Credentials** table:
 
 | Column | Description |
 |--------|-------------|
@@ -252,10 +252,8 @@ The Storage Management page displays all auto-discovered storage backends:
 | **Volume Type** | Cinder volume type name |
 | **Backend Name** | Cinder backend name from configuration |
 | **Source** | "Auto-discovered" for automatically detected backends |
-| **Credentials** | "Pending" until user provides array credentials |
-| **Actions** | Edit (to add credentials) and Delete |
-
-![Storage Management Page](../../../assets/storagemanagementpage.png)
+| **Credentials** | Status of the array credentials: "Pending" until you provide them, "Succeeded" once they are validated (see [Checking ArrayCreds Status](#checking-arraycreds-status)) |
+| **Actions** | **Edit credentials** and **Delete** |
 
 #### Example: PCD with Multiple Storage Backends
 
@@ -273,7 +271,9 @@ Each backend can have multiple configurations (shown as "Volume Backend Configur
 - The `netapp` volume backend might have one configuration named `netapp`
 - The `vt-pure-iscsi` volume backend might have multiple configurations: `pure-iscsi-1`, `pure-iscsi-2`, etc.
 
-**Important**: For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::note
+For each volume type, you can configure multiple storage arrays. This is useful when you have multiple Pure Storage or NetApp arrays in your environment, each serving different datastores.
+:::
 
 ```
 Storage Volume Backend Configuration (Example):
@@ -306,7 +306,7 @@ Only storage backends with supported vendors (Pure Storage, NetApp, and Hitachi 
 
 ## Hitachi Vantara
 
-Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the Storage Management page.
+Hitachi Vantara VSP arrays are supported for Storage Accelerated Copy, and the workflow is the same as for the other vendors. A Cinder backend backed by a Hitachi driver is auto-discovered and shown as **Hitachi Vantara** on the **Storage Array** page.
 
 ### Hitachi-specific fields
 
@@ -330,13 +330,13 @@ Storage Accelerated Copy can be configured entirely through the vJailbreak UI wi
 ### Step 1: Add PCD Credentials
 
 If not already done:
-1. Navigate to **Credentials** → **PCD/OpenStack**
+1. Navigate to **Credentials** → **PCD**
 2. Add your PCD credentials
 3. vJailbreak will automatically discover all storage volume backends configured in PCD
 
 ### Step 2: Configure Storage Array Credentials
 
-1. Navigate to **Storage Management**
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
 2. You'll see auto-discovered entries for each PCD storage backend:
    - **Name**: Auto-generated (e.g., `netapp-netapp`, `vt-pure-iscsi-pure-iscsi-1`)
    - **Vendor**: Auto-identified from driver type
@@ -345,18 +345,19 @@ If not already done:
    - **Source**: "Auto-discovered"
    - **Credentials**: "Pending" (requires your input)
 
-3. Click the **Edit** icon for a storage array entry
+3. Click the **Edit credentials** icon for a storage array entry
 
-![Storage Array Credentials Edit](../../../assets/credsedit.png)
+   ![Storage Array Credentials Edit](../../../assets/credsedit.png)
 
-4. Fill in the storage array credentials:
-   - **Hostname/IP**: Storage array management IP address
+4. Fill in the fields in the **Edit Array Credentials** drawer:
+   - **Management Endpoint**: Storage array management IP address or hostname
    - **Username**: Array administrator username
    - **Password**: Array administrator password
-   - **Skip SSL Verification**: Enable for testing environments (disable in production)
+   - **Allow insecure connection**: Skips SSL/TLS certificate verification. Enable for testing environments (disable in production)
    - **NetApp only**: SVM and FlexVol where LUNs will be created
    - **Hitachi Vantara only**: optional Pool ID and REST Port (see [Hitachi Vantara](#hitachi-vantara))
-5. Click **Save**
+   - **Cinder Host** (optional): the cinder-volume service used to import the migrated volumes. Leave it set to **Auto (recommended)** so that each migration picks a healthy one. If the host you select is unavailable, the migration falls back to Auto.
+5. Click **Update**
 6. The system will:
    - Validate the credentials
    - Connect to the storage array
@@ -374,14 +375,14 @@ If not already done:
 
 1. When creating a migration plan, select **Storage Accelerated Copy** as the storage copy method
 
-![Storage Accelerated Copy](../../../assets/trigger-mig.png)
+   ![Storage Accelerated Copy](../../../assets/trigger-mig.png)
 
 2. The UI will automatically map datastores to ArrayCreds if everything is configured correctly
 3. Start the migration - it will use array-level XCOPY for data transfer
 
 :::note
 **Auto-Discovery Benefits:**
-- No manual typing of volume types, backend names, or Cinder host strings
+- No manual typing of volume types or backend names
 - Automatic vendor identification from driver type
 - Pre-populated PCD mapping configuration
 - Automatic datastore-to-array mapping
@@ -418,14 +419,14 @@ When Storage Accelerated Copy is enabled, the migration follows this workflow:
 │                                                                 │
 │  5. Convert Volumes (same as normal migration)                  │
 │                                                                 │
-│  6. Create Target VM in PCD                               │
+│  6. Create Target VM in PCD                                     │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ## Migration Phases
 
-When using Storage Accelerated Copy, you'll see these additional migration phases:
+When using Storage Accelerated Copy, you'll see these migration phases. The XCOPY clone is reported under `CopyingBlocks`, the same copy phase that the other copy methods use:
 
 | Phase | Description |
 |-------|-------------|
@@ -435,7 +436,7 @@ When using Storage Accelerated Copy, you'll see these additional migration phase
 | `ImportingToCinder` | Importing volume to PCD Cinder |
 | `MappingVolume` | Mapping volume to ESXi host |
 | `RescanningStorage` | Rescanning ESXi storage adapters |
-| `StorageAcceleratedCopyInProgress` | XCOPY clone operation in progress |
+| `CopyingBlocks` | XCOPY clone operation in progress |
 
 ## Limitations
 
@@ -468,8 +469,8 @@ Error: failed to connect to storage array: authentication failed
 ```
 
 **Solutions:**
-1. Verify credentials in the Storage Management UI:
-   - Navigate to **Storage Management**
+1. Verify the array credentials in the UI:
+   - In the left sidebar, navigate to **Credentials** → **Storage Array**
    - Check the array credentials are correct
    - Re-enter credentials if needed
 
@@ -527,7 +528,7 @@ Error: failed to manage existing volume: volume not found on backend
 2. Check Cinder backend configuration:
    - Verify Cinder services are running in PCD
    - Ensure volume backend name matches ArrayCreds configuration
-   - Check that the Cinder host string is correct
+   - If a **Cinder Host** is pinned, check that its cinder-volume service is up, or set it back to **Auto (recommended)**
 
 3. Ensure volume naming matches backend expectations:
    - **Pure Storage**: Volume name must match exactly
@@ -536,7 +537,7 @@ Error: failed to manage existing volume: volume not found on backend
 4. Review Cinder logs for detailed errors:
    - Check PCD Cinder volume service logs
    - Look for backend connection issues
-   - Verify the `cinderHost` field in ArrayCreds matches a running Cinder service
+   - If a **Cinder Host** is pinned in the array credentials, verify that it matches a running cinder-volume service
 
 #### vmkfstools Clone Failed
 
@@ -613,16 +614,16 @@ Error: clone progress stalled - no update for 5 minutes
 
 **Symptoms:**
 ```
-failed to create target volume vjb-<vm-name>-<disk-name>: failed to create volume vjb-<vm-name>-<disk-name>: Response code: 400, ResponeBody: [{"msg": "Name belongs to a volume that has been destroyed and is pending eradication.", ...}]
+failed to create target volume vjb-<8-hex-id>-<vm-name>-<disk-name>: failed to create volume vjb-<8-hex-id>-<vm-name>-<disk-name>: Response code: 400, ResponeBody: [{"msg": "Name belongs to a volume that has been destroyed and is pending eradication.", ...}]
 ```
 
 **Cause:**
 
-When a Storage Accelerated Copy migration fails, vJailbreak deletes the target volume it created on the array (named `vjb-<vm-name>-<disk-name>`). Many arrays do not remove a deleted volume immediately. They keep it in a trash or recovery queue for a retention period and continue to reserve its name. A retry creates a volume with the same name, so it fails until the deleted volume is purged. How long the volume is retained, and how to purge it, depend on the array.
+When a Storage Accelerated Copy migration fails, vJailbreak deletes the target volume it created on the array (named `vjb-<8-hex-id>-<vm-name>-<disk-name>`). Many arrays do not remove a deleted volume immediately. They keep it in a trash or recovery queue for a retention period and continue to reserve its name. A retry creates a volume with the same name, so it fails until the deleted volume is purged. How long the volume is retained, and how to purge it, depend on the array.
 
 **Resolution:**
 
-1. Note the volume name from the error message (`vjb-<vm-name>-<disk-name>`).
+1. Note the volume name from the error message (`vjb-<8-hex-id>-<vm-name>-<disk-name>`).
 2. On the storage array, remove the leftover volume as described below.
 3. [Retry the migration](../../guides/how-to/retry_failed_migration/).
 
@@ -630,7 +631,7 @@ When a Storage Accelerated Copy migration fails, vJailbreak deletes the target v
 |-------|------------------------|----------------------------|
 | **Pure Storage FlashArray** | The volume is destroyed and moved to **Destroyed Volumes**. It stays there, with its name reserved, until the array's eradication delay expires (24 hours by default). | Eradicate the volume: in the Purity UI go to **Storage → Volumes → Destroyed Volumes** and eradicate it, or run `purevol eradicate <volume-name>`. Alternatively, wait for the eradication delay to expire. |
 | **NetApp ONTAP** | vJailbreak deletes the LUN. If the containing volume was also deleted, ONTAP keeps it in the volume recovery queue for its retention period. | Check for a leftover LUN with the same name and delete it. If a deleted volume is in the recovery queue, run `volume recovery-queue show`, then `volume recovery-queue purge -vserver <svm> -volume <volume-name>`. |
-| **Hitachi Vantara VSP** | The LDEV is deleted directly, with no recycle bin. A leftover LDEV is usually from an interrupted cleanup. | Look for an LDEV whose label starts with `vjb-<vm-name>-<disk-name>`. Remove its host group path (LUN mapping), then delete the LDEV. |
+| **Hitachi Vantara VSP** | The LDEV is deleted directly, with no recycle bin. A leftover LDEV is usually from an interrupted cleanup. | Look for an LDEV whose label starts with `vjb-<8-hex-id>-<vm-name>-<disk-name>`. Remove its host group path (LUN mapping), then delete the LDEV. |
 
 :::caution
 Only remove volumes that belong to the failed migration, which you can identify by the `vjb-` prefix and the VM and disk name in the error. Do not remove a volume that is attached to a running VM. Retention periods and purge permissions depend on your array configuration, so check your array's documentation if the steps above do not apply.
@@ -640,10 +641,9 @@ Only remove volumes that belong to the failed migration, which you can identify 
 
 You can check the status of your storage array credentials in the UI:
 
-1. Navigate to **Storage Management**
-2. Check the **Credentials** column - it should show "Valid" after successful configuration
-3. The system will display discovered datastores for each array
-4. Any validation errors will be shown in the status column
+1. In the left sidebar, navigate to **Credentials** → **Storage Array**
+2. Check the **Credentials** column. It shows **Succeeded** once the array credentials are validated. Other values are **Pending** (no credentials yet), **Configured** (credentials saved, not yet validated), **Awaiting PCD credentials** and **Failed** (for NetApp, this includes a missing SVM or FlexVol).
+3. If it shows **Failed**, check the credentials and update them with the **Edit credentials** icon.
 
 ## Best Practices
 

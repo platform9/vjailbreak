@@ -89,14 +89,14 @@ Network interface name persistence depends on PowerShell capabilities, the Windo
 
 **Workaround**: Manually reconfigure network interface names and static IP settings inside the VM after migration.
 
-## Assign IP and Persist Network Cannot Be Used Together
+## When Persist Source Network Interfaces Is Unavailable
 
-The **Assign IP** and **Persist Network** (Persist source network interfaces) options are mutually exclusive. Enabling both simultaneously produces undefined behavior and the migration may not apply either setting correctly.
+The UI disables **Persist source network interfaces** when any of the following is true:
 
-**Rule**: Use one or the other — not both.
-
-- Use **Assign IP** when you need to set a specific IP address on the destination VM.
-- Use **Persist Network** when you need to preserve the source VM's interface names and static routes.
+- Preserve IP is off on an interface mapped to a Layer 3 network (a network with subnets). Interfaces mapped to Layer 2 networks do not count.
+- A preserved IP address does not lie within the subnet of its destination network, and **Fallback to DHCP** is off.
+- A selected VM is powered off, or VMware Tools is not running on it.
+- A selected VM has interfaces mapped to both Layer 2 and Layer 3 networks.
 
 ## Multi-IP Assignment: One Primary IP, Plus Virtual IPs
 
@@ -104,7 +104,7 @@ Only one **primary** IP address per network interface is allowed when Preserve I
 
 Additional addresses on the same NIC can be marked **Virtual IP**, regardless of whether Preserve IP is on or off. vJailbreak attaches these to the port as Neutron allowed-address-pairs instead of fixed IPs, so no post-migration manual step is needed.
 
-**Limitations**: For Virtual IPs to take effect on the destination network, port security shall be enabled on the network along with the port having at least 1 security group. This also implies that virtual IPs are ignored on L2-only networks.
+**Limitations**: For Virtual IPs to take effect on the destination network, port security must be enabled on the network along with the port having at least one security group. This also implies that virtual IPs are ignored on L2-only networks.
 
 ## VMware Tools Removal: Residual Artifacts
 
@@ -124,7 +124,7 @@ vJailbreak does not support VMs with **multiple bootable operating systems** (mu
 
 vJailbreak does not support migrating Linux VMs with **LUKS-encrypted** disks or partitions. `virt-v2v` cannot inspect or convert the guest without the decryption key, and vJailbreak has no way to supply one, so conversion fails.
 
-This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/).
+This is separate from vSphere VM Encryption (KMS), which is supported. See [Additional privileges required for encrypted VMs](../../introduction/prerequisites/#additional-privileges-required-for-encrypted-vms).
 
 **Workaround**: Decrypt the LUKS volumes on the source VM before migration.
 
@@ -136,7 +136,9 @@ In such scenarios, we recommend upgrading to GRUB2.
 
 **Why we upgrade GRUB**: GRUB 0.97 is too old and fragile — it hard-codes disk numbers and block offsets that break the moment the hypervisor re-orders disks. `virt-v2v` also can't reconfigure GRUB 0.97 for KVM; it only manages GRUB2.
 
-NOTE: On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::note
+On these older SUSE releases GRUB2 ships only as an EFI build (no legacy-BIOS version), so upgrading GRUB forces a switch to UEFI.
+:::
 
 ## RHEL 7 Guests Missing GRUB Compatibility Symlink
 
@@ -245,7 +247,7 @@ CBT Failure: changed block tracking (CBT) is not supported on virtual hardware v
 
 **What to do** — choose one:
 
-1. **Use cold migration** (**Power off VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
+1. **Use cold migration** (**Power off live VMs, then copy**) for these VMs. Cold migration copies each disk once in full while the VM is powered off and does not use CBT, so it works on any hardware version. *(Recommended — requires no changes to the source VM.)*
 2. **Upgrade the VM's virtual hardware version** to 7 or newer in vCenter, then use Hot migration if you need minimal downtime. Upgrading the hardware version requires a VM power-off and cannot be reversed — review VMware's documentation before proceeding.
 
 | VM virtual hardware version | Hot migration | Cold migration |
@@ -257,11 +259,11 @@ CBT Failure: changed block tracking (CBT) is not supported on virtual hardware v
 To check a VM's hardware version in vCenter, select the VM and look at **VM Hardware → Compatibility** (shown as "ESXi X.X and later (VM version N)").
 :::
 
-## Independent Disks: Normal Copy Always Fails, Hot Migration Always Fails
+## Independent Disks: Standard Copy Always Fails, Hot Migration Always Fails
 
 VMware **Independent** disks (Independent - Persistent or Independent - Nonpersistent) are excluded from a VM's snapshot lifecycle. Two separate vJailbreak mechanisms can't handle them, for two different reasons:
 
-- **Normal (Standard) storage copy** uses VMware VDDK, which has a known bug (VDDK ≥ 7) that cannot open independent-mode disks at all — regardless of Hot or Cold migration. See the [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html).
+- **Standard Copy** uses VMware VDDK, which has a known bug (VDDK ≥ 7) that cannot open independent-mode disks at all — regardless of Hot or Cold migration. See the [`nbdkit-vddk-plugin(1)` man page](https://libguestfs.org/nbdkit-vddk-plugin.1.html).
 - **Hot migration** (**Copy live VMs, then power off**), on any storage copy method, needs a CBT change ID for every disk. Independent disks never get one — with or without CBT enabled on the VM.
 
 **Symptoms**:
@@ -274,11 +276,11 @@ nbdkit: vddk[1]: debug: GetFileName: Cannot create disk spec for disk scsi0:0. E
 CBT is not enabled on disk <id>
 ```
 
-**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
+**What to do**: Use **vJailbreak Accelerated Copy** or **Storage Accelerated Copy** with **Power off live VMs, then copy** (Cold) — neither method uses VDDK or CBT. See the full guide: [Migrating VMs with Independent Disks](../../guides/how-to/independent-disks-migration/).
 
 | Storage copy method | Hot migration | Cold migration |
 |---|---|---|
-| Normal (Standard) | Not supported | Not supported (VDDK bug) |
+| Standard Copy | Not supported | Not supported (VDDK bug) |
 | vJailbreak Accelerated Copy | Not supported (needs CBT) | Supported |
 | Storage Accelerated Copy | N/A — always runs cold internally | Supported |
 
@@ -302,11 +304,11 @@ vJailbreak matches each attached snapshot disk to a block device inside the Prox
 
 **Workaround**: If onboarding fails for this reason, power off the Proxy VM and change a legacy SCSI controller to **VMware Paravirtual** in **Edit Settings** before retrying registration in vJailbreak.
 
-See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [could not identify block device](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-could-not-identify-block-device).
+See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [failed to identify block devices on Proxy VM](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-failed-to-identify-block-devices-on-proxy-vm).
 
 ## Application Reboot During Migration
 
-Cold migration (**Power off VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.
+Cold migration (**Power off live VMs, then copy**) powers off the source VM before copying its disk. The destination VM boots fresh after migration completes. **Applications must tolerate a reboot** — any in-memory state, open transactions, or non-persistent connections will be lost.
 
 Hot migration (**Copy live VMs, then power off**) minimizes downtime but still requires a brief power-off during the final cutover phase to synchronize the last changed blocks. Applications should be tested for graceful handling of this cutover reboot.
 

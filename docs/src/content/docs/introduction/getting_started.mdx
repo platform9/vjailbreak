@@ -26,22 +26,22 @@ before deploying the vJailbreak VM. See
 for setup steps, expected performance impact, and recommended host configuration.
 :::
 
-### Network and access requirements
+## Network and access requirements
 Ensure that your vJailbreak VM can communicate with your OpenStack and VMware environments. This includes any setup required for VPNs, etc.
 
 :::note[vJailbreak Accelerated Copy]
-When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM:
-- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.1, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
+When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM and agent nodes:
+- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
 - **22** — SSH, used by vJailbreak to control the Proxy VM
 :::
 
 <ReadMore>Further details can be found in [Prerequisites](../prerequisites/).</ReadMore>
 
-### Download vJailbreak Image
+## Download vJailbreak Image
 
 You can download the vJailbreak image using one of the following methods:
 
-#### Option 1: Using ORAS
+### Option 1: Using ORAS
 
 Download and install [ORAS](https://oras.land/docs/installation), a toolkit to download the qcow2 image of vJailbreak. Then, download the latest version of the vJailbreak image with the following command:
 ```shell
@@ -53,9 +53,9 @@ For older versions, download the vJailbreak image with the following command:
 oras pull quay.io/platform9/vjailbreak:<version>
 ```
 
-These will download the vJailbreak qcow2 folder containing the image locally in the current directory named `vjailbreak_qcow2/vjailbreak-image.qcow2`.
+These commands download the image to `vjailbreak_qcow2/vjailbreak-image.qcow2` in the current directory.
 
-#### Option 2: Direct Download from S3
+### Option 2: Direct Download from S3
 
 For the latest version, download directly using wget:
 ```shell
@@ -67,11 +67,13 @@ For older versions, download directly using wget:
 wget https://vjailbreak.s3.us-west-2.amazonaws.com/releases/<version>/vjailbreak.qcow2
 ```
 
-These will download the vJailbreak qcow2 image locally in the same directory named `vjailbreak.qcow2`.
+These commands download the image to `vjailbreak.qcow2` in the current directory.
 
-Note: This direct download method is supported in v0.3.2 and later versions.
+:::note
+This direct download method is supported in v0.3.2 and later versions.
+:::
 
-### Upload image to OpenStack
+## Upload image to OpenStack
 These example instructions are for any version of [Private Cloud Director](https://platform9.com/private-cloud-director/) - Platform9-hosted, self-hosted, or [Community Edition](https://platform9.com/docs/private-cloud-director/private-cloud-director/getting-started-with-community-edition) - but can be adapted for any OpenStack-compliant cloud.
 - Follow the instructions in _Private Cloud Director > Images > Import with CLI_ to upload the image from the command line.
 - Upload the vJailbreak qcow2 image to your image library.
@@ -84,24 +86,24 @@ With virtio-scsi, all volumes share a single controller. See [Known Limitations]
 openstack image set --property hw_disk_bus=scsi --property hw_scsi_model=virtio-scsi vjailbreak-image.qcow2
 ```
 
-### Create vJailbreak VM
+## Create vJailbreak VM
 - Deploy a new VM from the uploaded image, choosing the _m1.xlarge.vol_ flavor (use a larger flavor for larger VM migrations).
 - Choose a network that can reach your VMware vCenter environment.
 - Assign a network security group that allows inbound and outbound traffic.
 
-### Network Initialization
+## Network Initialization
 
 vJailbreak requires a valid IP address and network route to initialize properly. The installation behavior differs based on your network configuration:
 
 **Standard DHCP Networks**
 
-In most PCD deployments, the VM receives an IP address via DHCP immediately at boot. The vJailbreak installation proceeds automatically and the UI becomes accessible within a few minutes at `http://<vm-ip>/`.
+In most PCD deployments, the VM receives an IP address via DHCP immediately at boot. The vJailbreak installation proceeds automatically and the UI becomes accessible within a few minutes at `https://<vm-ip>/`.
 
 **L2-Only Networks**
 
 In environments where IP addresses are assigned manually after VM deployment (L2-only networks without DHCP), the vJailbreak installation follows a specific sequence. This section provides a detailed walkthrough of what to expect and how to configure the VM.
 
-#### Step 1: VM Boot and Network Wait State
+### Step 1: VM Boot and Network Wait State
 
 When the vJailbreak VM starts in an L2-only network, the installation script detects that no IP address is available and enters a waiting state. You will see the following behavior in the console:
 
@@ -132,9 +134,11 @@ The script checks every minute for:
 - A non-loopback IPv4 address assigned to a network interface
 - A default route configured in the routing table
 
-**Note:** The VM is fully accessible via console during this waiting period. You can log in and configure networking while the script waits.
+:::note
+The VM is fully accessible via console during this waiting period. You can log in and configure networking while the script waits.
+:::
 
-#### Step 2: Assign an IP Address
+### Step 2: Assign an IP Address
 
 You can assign an IP address using one of the following methods:
 
@@ -180,9 +184,11 @@ ip a
 ip route
 ```
 
-**Important:** Ensure the IP address and gateway are appropriate for your network. Contact your network administrator if you're unsure about the correct values.
+:::caution
+Ensure the IP address and gateway are appropriate for your network. Contact your network administrator if you're unsure about the correct values.
+:::
 
-#### Step 3: Automatic Installation Proceeds
+### Step 3: Automatic Installation Proceeds
 
 Once the network is configured, the installation script automatically detects the change and proceeds with the setup. You can monitor progress by tailing the installation log:
 
@@ -221,20 +227,20 @@ The installation performs the following steps automatically:
 10. **Default Profiles** - The default volume image profiles are created
 11. **Cleanup** - Temporary cron jobs are removed
 
-#### Step 4: Access vJailbreak
+### Step 4: Access vJailbreak
 
 Once installation completes (typically 2-5 minutes after network configuration), you can access vJailbreak:
 
-- **UI Access:** `http://<assigned-ip>/`
+- **UI Access:** `https://<assigned-ip>/`
 - **SSH Access:** `ssh ubuntu@<assigned-ip>` (default password: `password`)
 
-#### Troubleshooting L2-Only Network Setup
+### Troubleshooting L2-Only Network Setup
 
 | Issue | Solution |
 |-------|----------|
 | Script not detecting IP | Ensure both IP address AND default route are configured |
 | Installation stuck after IP assignment | Check `/var/log/pf9-install.log` for errors |
-| Cannot reach UI after installation | Verify security groups allow inbound traffic on port 80 |
+| Cannot reach UI after installation | Verify security groups allow inbound traffic on ports 443 and 80 |
 | Network interface not visible | Check VM network attachment in OpenStack dashboard |
 
 **Verifying Network Readiness:**
@@ -248,13 +254,15 @@ ip route | grep default
 # Both should return valid entries for installation to proceed
 ```
 
-### Configure VM with cloud-init
+## Configure VM with cloud-init
 
 Cloud-init can be used during VM creation to automate initial configuration. Provide a cloud-init script when creating the VM through the PCD dashboard (**Configuration > User data**) or the CLI.
 
-**Note:** If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
+:::note
+If you do not set a password for the `ubuntu` user using cloud-init, the default password for the `ubuntu` user will be set to "password". After the first login, you will be prompted to change the password. If the password is set using cloud-init, you will not be prompted to change the password at first login.
+:::
 
-#### Networks with DHCP
+### Networks with DHCP
 
 For networks where DHCP is enabled, you only need to configure a password and `/etc/hosts` entries:
 
@@ -274,7 +282,7 @@ write_files:
       192.168.2.100 pcd.example.com
 ```
 
-#### Networks without DHCP (Static IP)
+### Networks without DHCP (Static IP)
 
 For networks where DHCP is disabled — whether L2-only or L3 networks with DHCP turned off — use the following cloud-init configuration to assign a static IP, configure DNS, and set `/etc/hosts` entries at boot time. This eliminates the need to manually configure networking via the console.
 
@@ -336,7 +344,7 @@ runcmd:
 
 
 
-### Copy VDDK Libraries (Standard Copy Only)
+## Copy VDDK Libraries (Standard Copy Only)
 
 VDDK is required only if you plan to use the **Standard** storage copy method. If you are using
 **vJailbreak Accelerated Copy** or **Storage Accelerated Copy**, skip this step; neither method
@@ -358,10 +366,12 @@ tar -xvf VMware-vix-disklib-8.0.3-*.x86_64.tar.gz
 # This will create the vmware-vix-disklib-distrib directory
 ```
 
-### Configure DNS Resolution
+## Configure DNS Resolution
 Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbreak to function correctly. You can either configure this during VM creation with cloud-init (as shown above) or modify the configuration after VM deployment.
 
-**Important:** DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
+:::caution
+DNS resolution for all ESXi hosts must be properly configured in your environment. This is specifically required during the VM copy phase of migration. Without proper DNS resolution for ESXi hosts, the migration process may fail.
+:::
 
 
 - **Static Entries**: If you didn't configure `/etc/hosts` entries during VM creation with cloud-init, you can add them manually later.
@@ -381,7 +391,7 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
 
 - **DNS Configuration**: If modifying `/etc/resolv.conf` to use DNS servers instead of static entries, restart the same `migration-controller-manager` deployment as shown above to apply the changes.
 
-### Initial Access Steps
+## Initial Access Steps
  
  - **SSH Access**
    - Username: ubuntu
@@ -393,15 +403,15 @@ Proper DNS resolution for your VMware and OpenStack URLs is required for vJailbr
      ```
  
  - **UI Access**
-   - URL: `http://<vjailbreak-vm-ip>/`
+   - URL: `https://<vjailbreak-vm-ip>/`
    - Username: admin
    - Password: password
  
-### Launch vJailbreak
+## Launch vJailbreak
 - Connect to the vJailbreak UI using the IP address assigned during VM creation.
-- Add VMware and OpenStack credentials. See more in [Credential Management](../../concepts/credential-management/).
+- Add VMware and PCD credentials (**Credentials** → **VMware** and **Credentials** → **PCD**). See more in [Credential Management](../../concepts/credential-management/).
 - Select the VMs you wish to migrate and complete the rest of the migration form.
 - Migrate your VMs.
 
-### Scaling vJailbreak
+## Scaling vJailbreak
 <ReadMore>Read more about [scaling vJailbreak](../../guides/how-to/scaling/).</ReadMore>
