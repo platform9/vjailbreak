@@ -17,7 +17,7 @@ All of the following Kubernetes commands will need to be run from the vJailbreak
 - [Disk attach fails during migration: No more available PCI slots](#disk-attach-fails-during-migration-no-more-available-pci-slots)
 - [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
 - [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
-- [vJailbreak Accelerated Copy fails: could not identify block device](#vjailbreak-accelerated-copy-fails-could-not-identify-block-device)
+- [vJailbreak Accelerated Copy fails: failed to identify block devices on Proxy VM](#vjailbreak-accelerated-copy-fails-failed-to-identify-block-devices-on-proxy-vm)
 
 vJailbreak is deployed on Kubernetes running on Ubuntu 22.04.5, and distributed as a QCOW2 image. The Kubernetes namespace `migration-system` contains the vJailbreak UI and migration controller pods. Each VM migration will spawn a migration object. The status field contains a high-level view of the progress of the migration of the VM. For more details about the migration, check the logs of the pod specified in the Migration object.
 
@@ -289,7 +289,7 @@ As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time,
 
 ---
 
-## vJailbreak Accelerated Copy fails: could not identify block device
+## vJailbreak Accelerated Copy fails: failed to identify block devices on Proxy VM
 
 - **Symptom**
 

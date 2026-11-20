@@ -50,6 +50,7 @@ The vjailbreak-settings ConfigMap supports the following settings:
 | `VALIDATE_RDM_OWNER_VMS` | Validates that all VMs linked to an RDM disk are migrated in a single migration plan | `true` | `true`, `false` |
 | `VCENTER_LOGIN_RETRY_LIMIT` | Number of retries for vCenter login attempts | `5` | Any positive integer |
 | `VCENTER_SCAN_CONCURRENCY_LIMIT` | Maximum number of vCenter VMs to scan concurrently | `10` | Any positive integer |
+| `ALLOW_MANUAL_PROXY_ONBOARDING` | Shows the **Register an existing VM** option when you add a vJailbreak Proxy VM. When `false`, only **Deploy a new vJailbreak Proxy VM** is available. Not in the shipped ConfigMap; set it in **Global Settings** (**Allow Manual Proxy Onboarding**) | `false` | `true`, `false` |
 | `VDDK_REQUIRED` | If `true`, users are sent to the VDDK upload page until VDDK is present; if `false`, VDDK is optional | `false` | `true`, `false` |
 | `VM_ACTIVE_WAIT_INTERVAL_SECONDS` | Interval to wait for VM to become active (in seconds) | `20` | Any positive integer |
 | `VM_ACTIVE_WAIT_RETRY_LIMIT` | Number of retries to wait for VM to become active | `15` | Any positive integer |

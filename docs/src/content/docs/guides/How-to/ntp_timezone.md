@@ -101,7 +101,7 @@ kubectl -n migration-system patch configmap vjailbreak-settings --type merge \
 Editing the ConfigMap only records the values. Nothing reaches the host until the apply step runs, which the UI triggers on **Save**. After editing the ConfigMap directly, open Global Settings and save, or call the apply endpoint yourself:
 
 ```bash
-curl -X POST http://<vjailbreak-vm-ip>/dev-api/sdk/vpw/v1/settings/apply-time-settings \
+curl -k -u <username>:<password> -X POST https://<vjailbreak-vm-ip>/dev-api/sdk/vpw/v1/settings/apply-time-settings \
   -H 'Content-Type: application/json' -d '{}'
 ```
 :::

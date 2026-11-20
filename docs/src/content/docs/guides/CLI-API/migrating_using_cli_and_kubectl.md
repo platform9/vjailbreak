@@ -492,7 +492,7 @@ Migration Job is a Kubernetes Job responsible for migrating one VM from VMware t
 ##### Check the Migration Job
 
 
-* Following the standard naming conventions used by vJailbreak, the job has a name like `v2v-helper-<vm-name>-<hash>`. Read the exact pod name from `spec.podRef` of the Migration.
+* Following the standard naming conventions used by vJailbreak, the job name starts with `v2v-helper-<vm-name>` and ends with hash suffixes. Read the exact pod name from `spec.podRef` of the Migration.
 * We can check the status of the job under the `status` section.
 
 

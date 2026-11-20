@@ -299,7 +299,7 @@ vJailbreak matches each attached snapshot disk to a block device inside the Prox
 
 **Workaround**: If onboarding fails for this reason, power off the Proxy VM and change a legacy SCSI controller to **VMware Paravirtual** in **Edit Settings** before retrying registration in vJailbreak.
 
-See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [could not identify block device](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-could-not-identify-block-device).
+See [Configure the SCSI Controller Type on the Proxy VM](../../concepts/vjailbreak-accelerated-copy/#configure-the-scsi-controller-type-on-the-proxy-vm) and [failed to identify block devices on Proxy VM](../../guides/troubleshooting/troubleshooting/#vjailbreak-accelerated-copy-fails-failed-to-identify-block-devices-on-proxy-vm).
 
 ## Application Reboot During Migration
 

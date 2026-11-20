@@ -10,7 +10,7 @@ It can be triggered in two ways:
 
 
 ## Admin Cutover from the UI
-1. When you create the migration, go to **Migration Options (Optional)** → **Cutover** in the migration form. Select the **Cutover option** checkbox, then choose **Admin initiated cutover** from the drop-down list, as shown in the image below. Admin initiated cutover is available only with the **Copy live VMs, then power off** data copy method. With **Power off live VMs, then copy**, the cutover options are disabled and cutover happens automatically after the data copy.
+1. When you create the migration, go to **Migration Options (Optional)** → **Cutover** in the migration form. Select the **Cutover option** checkbox, then choose **Admin initiated cutover** from the drop-down list, as shown in the image below. Cutover options are disabled when the data copy method is **Power off live VMs, then copy**; in that case, cutover happens automatically after the data copy.
 
    ![Admin Cutover](../../../../../public/images/admin_cutover_form.png)
 
