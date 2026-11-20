@@ -31,7 +31,7 @@ Ensure that your vJailbreak VM can communicate with your OpenStack and VMware en
 
 :::note[vJailbreak Accelerated Copy]
 When using the **vJailbreak Accelerated Copy** data copy method, the onboarded Proxy VM must accept the following inbound TCP traffic from the vJailbreak VM:
-- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.0, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
+- **10809–11808** by default — used by `qemu-nbd` to expose attached disks (one port per disk copied in parallel). As of v0.6.1, you can change the range in **Settings** → **Global Settings** → **Advanced** → **Proxy VM Port Range**
 - **22** — SSH, used by vJailbreak to control the Proxy VM
 :::
 
@@ -45,7 +45,7 @@ You can download the vJailbreak image using one of the following methods:
 
 Download and install [ORAS](https://oras.land/docs/installation), a toolkit to download the qcow2 image of vJailbreak. Then, download the latest version of the vJailbreak image with the following command:
 ```shell
-oras pull quay.io/platform9/vjailbreak:v0.6.0
+oras pull quay.io/platform9/vjailbreak:v0.6.1
 ```
 
 For older versions, download the vJailbreak image with the following command:
