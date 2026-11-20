@@ -38,5 +38,6 @@ data:
   PROXY_VM_OVA_URL: "https://vjailbreak-dev.s3.us-west-2.amazonaws.com/hot-add/ha-proxy-vm.ova" # OVA template URL for deploying the Hot-Add Proxy VM
   HOT_ADD_PORT_RANGE_START: "10809" # first TCP port (inclusive) qemu-nbd may use on the Hot-Add Proxy VM
   HOT_ADD_PORT_RANGE_END: "11808" # last TCP port (inclusive) qemu-nbd may use on the Hot-Add Proxy VM; range must span at least 100 ports
+  PRESERVE_IPV6: "false" # if true, migrate guest IPv6 addresses (needs an IPv6 subnet on the target network); if false, IPv6 is ignored as before
   VDDK_REQUIRED: "false" # if true, force users to the VDDK upload page until present; if false, VDDK is optional and no redirect/tour happens
 
