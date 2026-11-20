@@ -34,7 +34,7 @@ By describing the OpenStack credentials in vJailbreak:
 kubectl describe openstackcreds <openstackcredsname> -n migration-system
 ```
 
-After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackend`. Gather the `volumeTypes` and `volumeBackend` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
+After describing the OpenStack credentials, look for `volumeTypes` and `volumeBackends`. Gather the `volumeTypes` and `volumeBackends` values that need to be patched as mentioned in [step 4 of Migration steps](#4-patch-rdm-disk-with-the-required-fields).
 
 **Alternatively**, you can also gather details using the OpenStack CLI:
 
@@ -80,7 +80,9 @@ Perform the following steps on each VM from the cluster you are planning to migr
     openstack block storage volume manageable list <Cinder backend pool name> --os-volume-api-version 3.8
     ```
 
-**Note: Not all SAN arrays are supported by the OpenStack block storage client; in such cases, the above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.**
+:::note
+Not all SAN arrays are supported by the OpenStack block storage client; in such cases, the above command gives an empty output. If you cannot find your SAN array reference from the block storage client, contact your storage administrator to get the LUN reference by accessing the storage provider's interface.
+:::
 
 RDM disk migration has been tested with two storage arrays:
 
@@ -122,14 +124,15 @@ Since VMware does not allow snapshots of a VM with attached RDM disks, you must:
 - **Power off** the VM to be migrated.
 - **Detach the RDM disk** from the VM (steps are mentioned below).
 
-Optional: Once the RDM disk is detached, you can list the vmwaremachine custom resource and ensure the VML IDs of all RDM disks to be migrated appear in the rdmDisk section of the vmwaremachine custom resource in vJailbreak.
+Optional: Once the RDM disk is detached, you can list the vmwaremachine custom resource and ensure the VML IDs of all RDM disks to be migrated appear in the `rdmDisks` list under `spec.vms` of the vmwaremachine custom resource in vJailbreak.
 
 ```bash
 kubectl describe vmwaremachine <vm-name> -n migration-system
 ```
 
-**Note:** Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually.
-<br>
+:::caution
+Once the RDM disk is detached, the `source-name` or `source-id` should not change, and the VMs that own the RDM disk should not change. If you need to detach the RDM disk from the VM and remove all RDM references from the VMs, you must handle it manually.
+:::
 
 Delete the `vmwaremachine` and `rdmdisk` custom resources on vJailbreak. After deletion, wait for the configured reconciliation time, and re-ensure that the deleted resources are recreated by vJailbreak.
 
@@ -160,7 +163,9 @@ For each VM, go to **Edit Settings** and perform the following steps. _Note down
 1. Click on the cross icon near the RDM disks, and keep "Delete files from storage" **unchecked**.
 2. Remove the SCSI controller used by these disks (this will be in Physical sharing mode).
 
-Note: Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
+:::caution
+Only remove the SCSI controller in Physical Sharing mode. Other volumes or non-RDM disks use different controllers (not in Physical Sharing mode), and those must not be deleted.
+:::
 
 ![Detach RDM Disk in VMware](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-removing-rdm-disk.png)
 
@@ -181,12 +186,13 @@ The volume type specified here must match the configuration the RDM disk volume 
 Create a migration plan using the CLI.  
 Follow the detailed CLI steps here:
 
-[Migrating Using CLI and Kubectl](https://platform9.github.io/vjailbreak/guides/cli-api/migrating_using_cli_and_kubectl/)
+[Migrating Using CLI and Kubectl](../migrating_using_cli_and_kubectl/)
 
-Note:
-
-- While creating the migration plan, make sure the actual VM name is passed in `spec.virtualMachines` of the migrationplan and not the VM custom resource name.
-- Migration plan `spec.migrationStrategy.type` should be cold - RDM disk can only be migrated with cold migrationStrategy.
+:::note
+- While creating the migration plan, make sure the actual VM name is passed in `spec.virtualMachines` of the `MigrationPlan`, not the VM custom resource name.
+- Every VM in the migration plan that has an RDM disk must be powered off in vCenter before the plan runs. Otherwise, the plan fails.
+- All VMs that share an RDM disk must be in the same migration plan. This is enforced by the `VALIDATE_RDM_OWNER_VMS` setting, which is on by default (see [vJailbreak Settings](../../how-to/vjailbreak_settings/)).
+:::
 
 ### 6. Wait for Disk to Become Available
 
@@ -215,14 +221,14 @@ If VM migrations fail, but RDM disks have been successfully managed by Cinder [S
 
 ### Rollback Plan - If Migration Fails
 
-### ⚠️ Caution:
-
+:::caution
 Once an RDM disk is managed in OpenStack or PCD, do not delete the corresponding volume from PCD/OpenStack during a rollback.
 Deleting the volume will also remove the associated LUN reference from the storage array, resulting in irreversible data loss.
 
 To unmanage an RDM disk safely, use the following command instead of deleting it directly:
 
 `openstack volume delete <volume-id> --remote`
+:::
 
 1. Delete VMs created in PCD or OpenStack.
 2. Remove the managed volume from OpenStack without deleting it from the SAN array:
@@ -231,17 +237,17 @@ To unmanage an RDM disk safely, use the following command instead of deleting it
    openstack volume delete <volume-id> --remote
    ```
 
-- [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete)
+   See [Volume Delete](https://docs.redhat.com/en/documentation/red_hat_openstack_platform/10/html/command-line_interface_reference_guide/openstackclient_subcommand_volume_delete).
 
 3. Re-attach RDM disk in VMware to powered-off VMs:
 
+   - For each VM, go to **Edit Settings**, add a SCSI controller and set its sharing mode to physical.
    - Add the reference VMDK disks.
    - Add **New Device > Existing Hard Disk**. This will add the disk as a new hard disk.
    - Change the controller of this hard disk to **"New SCSI Controller"** which was created in the first step.
-   - For each VM, go to **Edit Settings** and add the SCSI controller for disk and select physical sharing mode.
 
    Repeat this process for all RDM disks.
 
-![Re-attach RDM disk on failure](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-adding-back-disk.png)
+   ![Re-attach RDM disk on failure](https://raw.githubusercontent.com/platform9/vjailbreak/refs/heads/gh-pages/docs/src/assets/vmware-adding-back-disk.png)
 
 4. Power on all the VMs on VMware.

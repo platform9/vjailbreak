@@ -32,7 +32,7 @@ Unlike network mapping, storage mapping is different. For networking, interconne
 
 For VMware environments, the storage is typically of type `vSphere Datastore` with either `VMFS` or `NFS` as the storage type. vJailbreak supports both of these storage types.
 
-vJailbreak also supports RDM disks for cold migrations to Platform9 Private Cloud Director (PCD) when the SAN-backed LUN can be represented as a target volume and the required storage prerequisites are met. See the [RDM migration guide](../../guides/cli-api/migrating_rdm_disk_windows_cluster_machine_using_cli/) for the step-by-step workflow. This support is not currently available for OpenStack-targeted migrations.
+vJailbreak also supports RDM disks for migrations to Platform9 Private Cloud Director (PCD), provided every VM with an RDM disk is powered off before the plan runs, the SAN-backed LUN can be represented as a target volume, and the required storage prerequisites are met. See the [RDM migration guide](../../guides/cli-api/migrating_rdm_disk_windows_cluster_machine_using_cli/) for the step-by-step workflow. This support is not currently available for OpenStack-targeted migrations.
 
 There are a few exceptions and unsupported configurations.
 
@@ -53,7 +53,7 @@ With the Standard and vJailbreak Accelerated Copy storage copy methods, vJailbre
 
 For environments where both VMware and OpenStack share the same storage array (Pure Storage, NetApp, or Hitachi Vantara), vJailbreak supports **Storage Accelerated Copy**. This method leverages storage array-level XCOPY operations to dramatically improve migration performance by offloading the data copy to the storage array itself.
 
-Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage Accelerated Copy performs the copy directly on the storage array at array speeds, which can be considerably faster than normal copy.
+Instead of copying data over the network (limited to ~1 Gbps per VMDK), Storage Accelerated Copy performs the copy directly on the storage array at array speeds, which can be considerably faster than Standard Copy.
 
 
 See [Storage Accelerated Copy](../storage-accelerated-copy/) for detailed configuration and usage instructions.

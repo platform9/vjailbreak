@@ -4,16 +4,17 @@ description: Tips on effectively troubleshooting vJailbreak deployment and migra
 ---
 
 :::note
-All of the following Kubernetes commands will need to be run from the vJailbreak VM, or remotely using the vJailbreak VM's kubeconfig, located at `/etc/ranger/k3s/k3s.yaml` on the vJailbreak VM.
+All of the following Kubernetes commands will need to be run from the vJailbreak VM, or remotely using the vJailbreak VM's kubeconfig, located at `/etc/rancher/k3s/k3s.yaml` on the vJailbreak VM.
 :::
 
 ## Common issues
 
 - [VDDK unavailable: VMware's public download pages are down](#vddk-unavailable-vmwares-public-download-pages-are-down)
 - [Windows Dynamic Disk (LDM) migration](../../how-to/windows-ldm-migration/)
-- [nbdcopy fails during disk copy (often DNS resolution)](nbdcopy-fails-after-vm-moved-esxi-host/)
+- [nbdcopy fails during disk copy (often DNS resolution)](../nbdcopy-fails-after-vm-moved-esxi-host/)
 - [Migration fails due to NFC memory exhaustion on the source ESXi host](../nfc-memory-exhaustion/)
 - [virt-v2v fails: rename /sysroot/etc/resolv.conf Operation not permitted](#virt-v2v-fails-rename-sysrootetcresolvconf-operation-not-permitted)
+- [Disk attach fails during migration: No more available PCI slots](#disk-attach-fails-during-migration-no-more-available-pci-slots)
 - [virt-v2v-in-place fails on RHEL 7: missing GRUB compatibility symlink](#virt-v2v-in-place-fails-on-rhel-7-missing-grub-compatibility-symlink)
 - [Proxy VM disk attach fails when several migrations start together](#proxy-vm-disk-attach-fails-when-several-migrations-start-together)
 - [vJailbreak Accelerated Copy fails: could not identify block device](#vjailbreak-accelerated-copy-fails-could-not-identify-block-device)
@@ -47,14 +48,15 @@ kubectl logs -n migration-system deploy/migration-controller-manager
 ```
 
 Debug logs are always collected. You do not need to enable a debug mode: setting `DEBUG` in the migration's ConfigMap has no effect. Detailed logs for every migration are written to `/var/log/pf9` on the vJailbreak VM. See [Debug Logs](../debuglogs/) for where to find them and how to download a debug bundle from the UI.
+
 ### A migration is stuck in pending
-If the migration was set to Retry on Failure, then delete the v2v-helper pod for that VM and collect the logs of the pod that comes up.
+Delete the v2v-helper pod for that VM so that its Job creates a new one, then collect the logs of the new pod. The pod name is in the `spec.podRef` field of the Migration:
 
 ```bash
-kubectl delete pod -n migration-system v2v-helper-<vm-name>
+kubectl delete pod -n migration-system $(kubectl -n migration-system get migration <migration-name> -o jsonpath='{.spec.podRef}')
 ```
 If the v2v-helper pod doesn't come back up, and you can't delete the migration in the UI, then delete the associated `migrationplan`.
-- First, get the `migrationplan` object name UUID for the associated VMs:
+- First, get the name of the `migrationplan` object for the associated VMs:
 ```bash
 kubectl get migrationplans -n migration-system -o yaml
 ```
@@ -193,7 +195,7 @@ kubectl get $(kubectl api-resources --api-group=vjailbreak.k8s.pf9.io -o name | 
 
 - **Cause**
 
-  RHEL 7's `grubby`, used internally by `virt-v2v-in-place`, expects `/boot/grub/grub.cfg` to be a symlink to `/boot/grub2/grub.cfg`. On affected guests GRUB2 itself is configured correctly, but this compatibility symlink is missing, so `grubby`'s file open fails. This is unrelated to [SUSE Legacy GRUB 0.97](../../../reference/known-limitations/#suse-linux-sles-sled-with-legacy-grub-097), which requires a GRUB2 upgrade instead.
+  RHEL 7's `grubby`, used internally by `virt-v2v-in-place`, expects `/boot/grub/grub.cfg` to be a symlink to `/boot/grub2/grub.cfg`. On affected guests GRUB2 itself is configured correctly, but this compatibility symlink is missing, so `grubby`'s file open fails. This is unrelated to [SUSE Legacy GRUB 0.97](../../../reference/known-limitations/#suse-linux-sles--sled-with-legacy-grub-097), which requires a GRUB2 upgrade instead.
 
 - **Resolution**
 
@@ -294,8 +296,10 @@ As of v0.5.0, migrations that share a Proxy VM attach their disks one at a time,
   A [vJailbreak Accelerated Copy](../../../concepts/vjailbreak-accelerated-copy/) migration fails after the snapshot disk has been attached to the Proxy VM:
 
   ```text
-  could not identify block device for disk <uuid>
+  failed to identify block devices on Proxy VM
   ```
+
+  In a hot migration, the message reads `failed to identify block device on Proxy VM`.
 
 - **Cause**
 

@@ -64,7 +64,9 @@ Each block runs independently. If one script block fails, **later blocks will st
 | `LINUX-SCRIPT:`  | Runs only on Linux VMs              |
 | No tag           | Runs on all VMs                     |
 
-> **For migration plans containing both Windows and Linux VMs, OS tags are strongly recommended.**
+:::tip
+For migration plans containing both Windows and Linux VMs, OS tags are strongly recommended.
+:::
 
 ---
 
@@ -73,8 +75,8 @@ Each block runs independently. If one script block fails, **later blocks will st
 To configure a post-migration firstboot script:
 
 1. Open the **Migration Form**
-2. Navigate to the **Migration Options** section
-3. Enable **Enable Script** under **Post Migration Script**
+2. Navigate to the **Migration Options (Optional)** section
+3. Select **Enable script** under **Post-migration script**
 4. Paste the script content into the script field
 5. Separate multiple scripts using `### NEXT SCRIPT ###`
 6. Use OS tags if the migration plan includes different operating systems
@@ -84,8 +86,9 @@ To configure a post-migration firstboot script:
 ![img1](../../../../../public/images/firstboot-form-1.png)
 
 
-> **Note:**  
-> Untagged script blocks run on all selected VMs.
+:::note
+Untagged script blocks run on all selected VMs.
+:::
 
 ---
 
@@ -93,7 +96,7 @@ To configure a post-migration firstboot script:
 
 ### End-to-End Execution Flow
 
-1. The user enables **Post Migration Script** in the migration form.
+1. The user enables **Post-migration script** in the migration form.
 2. The script content is stored in the migration plan as `firstBootScript`.
 3. The migration controller generates a **per-VM ConfigMap** containing the script.
 4. The ConfigMap is mounted into the **v2v-helper pod** at `/home/fedora/scripts`.
@@ -110,8 +113,8 @@ To configure a post-migration firstboot script:
 
 :::caution[Not available for LDM system volumes]
 As step 5 shows, firstboot scripts are prepared **during conversion**. Windows VMs
-whose system volume is on a dynamic disk (LDM) skip conversion, so the Post
-Migration Script is not installed and will not run. Anything it would have done
+whose system volume is on a dynamic disk (LDM) skip conversion, so the
+**Post-migration script** is not installed and will not run. Anything it would have done
 must be performed manually inside the guest. See
 [Windows Dynamic Disk (LDM) Migration](../windows-ldm-migration/).
 :::
@@ -201,4 +204,4 @@ This log contains:
 
 ## Link to Readily Available Firstboot Scripts
 1. **VMware Tools removal** - You do not need your own script to remove VMware Tools. Leave the **Remove VMware Tools** option enabled in the migration form (it is on by default), and vJailbreak runs its own removal script on the migrated VM's first boot
-2. [VMware Residual Artifacts Documentation](https://platform9.github.io/vjailbreak/guides/troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.1
+2. [VMware Residual Artifacts Documentation](../../troubleshooting/vmware_residual_artifacts/) - Scan-based record of leftover VMware artifacts after uninstallation in v0.4.4

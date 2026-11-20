@@ -3,8 +3,6 @@ title: Windows Offline Disks After Migration
 description: Troubleshooting guide for Windows VMs with offline disks after migration from VMware to PCD
 ---
 
-# Windows Offline Disks After Migration
-
 ## Problem Description
 
 After migrating a Windows VM from VMware vCenter to PCD using vJailbreak, additional disks (beyond the primary C: drive) may not be visible inside the Windows operating system, even though they are successfully attached to the VM in PCD.
@@ -23,14 +21,14 @@ This issue occurs due to Windows SAN Policy settings. When Windows detects disks
 
 After migration from VMware to PCD, the storage subsystem changes, and Windows may apply the **"Offline Shared"** SAN policy to the migrated disks. This policy keeps disks offline by default to prevent data corruption in shared storage scenarios.
 
-The default SAN policies in Windows are:
+The Windows SAN policies are:
 - **Offline Shared**: Keeps all shared disks offline (common after migration)
 - **Offline All**: Keeps all new disks offline
 - **Online All**: Automatically brings all new disks online
 
 ## Manual Workaround
 
-Before migrating the VM, you can manually fix this issue by changing the SAN policy and bringing disks online.
+You can fix this issue manually by changing the SAN policy and bringing disks online. Run Steps 1–3 on the source VM before you migrate it. Run Steps 4–5 on the migrated VM if any disk is still offline.
 
 ### Step 1: Check Current SAN Policy
 
@@ -71,7 +69,7 @@ While still in diskpart:
 DISKPART> list disk
 ```
 
-Identify offline disks (marked with an asterisk *), then for each offline disk:
+Identify the disks whose **Status** is `Offline`, then for each of them:
 
 ```cmd
 DISKPART> select disk <number>
@@ -106,7 +104,7 @@ Older versions of this guide described two BAT scripts (`check-disks.bat` and `d
 :::
 
 
-## ⚠️ Important Warnings
+## Important Warnings
 
 ### Blanket Online Policy
 
