@@ -2266,6 +2266,40 @@ spec:
                     additionalProperties:
                       type: string
                     type: object
+                  cinderVolumeServices:
+                    description: |-
+                      CinderVolumeServices lists every cinder-volume service, healthy or not.
+                      Empty when the services API could not be read (it is admin-only by default).
+                    items:
+                      description: |-
+                        CinderVolumeServiceInfo is one cinder-volume service as reported by Cinder's
+                        os-services API. UIs use it to offer the hosts an ArrayCreds can pin
+                        (openstackMapping.cinderHost) for a backend, along with their health.
+                      properties:
+                        backend:
+                          description: Backend is the cinder.conf backend section
+                            parsed from Host
+                          type: string
+                        host:
+                          description: Host is the service host in "host@backend"
+                            form, as the manage API expects it
+                          type: string
+                        state:
+                          description: 'State is the liveness reported by Cinder:
+                            "up" or "down"'
+                          type: string
+                        status:
+                          description: 'Status is the admin status reported by Cinder:
+                            "enabled" or "disabled"'
+                          type: string
+                        zone:
+                          description: Zone is the availability zone of the service
+                          type: string
+                      required:
+                      - backend
+                      - host
+                      type: object
+                    type: array
                   networks:
                     items:
                       description: PCDNetworkInfo is struct to hold network information
@@ -2282,6 +2316,16 @@ spec:
                       - tags
                       type: object
                     type: array
+                  poolVolumeTypes:
+                    additionalProperties:
+                      items:
+                        type: string
+                      type: array
+                    description: |-
+                      PoolVolumeTypes maps each pool in VolumeBackends to every volume type whose
+                      volume_backend_name targets it. BackendVolumeTypeMap holds only the first of
+                      these, so a backend with several volume types needs this to accept any of them.
+                    type: object
                   securityGroups:
                     items:
                       description: SecurityGroupInfo holds the security group name
@@ -5358,7 +5402,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-controller:v0.6.0
+        image: quay.io/platform9/vjailbreak-controller:v0.6.1
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -5477,7 +5521,7 @@ spec:
         - secretRef:
             name: pf9-proxy-creds
             optional: true
-        image: quay.io/platform9/vjailbreak-vpwned:v0.6.0
+        image: quay.io/platform9/vjailbreak-vpwned:v0.6.1
         imagePullPolicy: IfNotPresent
         name: vpwned
         ports:
@@ -5704,7 +5748,7 @@ spec:
       serviceAccountName: ui-manager-sa
       containers:
         - name: vjailbreak-ui-container
-          image: quay.io/platform9/vjailbreak-ui:v0.6.0
+          image: quay.io/platform9/vjailbreak-ui:v0.6.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
@@ -5993,7 +6037,7 @@ spec:
       serviceAccountName: vjailbreak-ai-sa
       containers:
         - name: vjailbreak-ai
-          image: quay.io/platform9/vjailbreak-ai:v0.6.0
+          image: quay.io/platform9/vjailbreak-ai:v0.6.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
