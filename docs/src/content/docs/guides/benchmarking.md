@@ -34,6 +34,6 @@ End to end includes about 2 minutes of setup before the copy and about 45 second
 
 ## Measurement method
 
-- Each VM was migrated once, one at a time, with the cold migration type and Standard Copy (`storageCopyMethod: normal`).
+- Each VM was migrated once, one at a time, with the cold migration type and Standard Copy and later with vJailbreak accelerated Copy (`storageCopyMethod: normal`,`storageCopyMethod: HotAdd` ).
 - The appliance node had 4 vCPU and 7 GiB of memory, with KVM available. The migration pod was limited to 2 CPU cores and 5 GiB.
 - Times come from the timestamps in the migration pod log: copy is the time to copy the disks, conversion is the time from the start of disk conversion until it finishes, and end to end runs from pod start to VM creation.
