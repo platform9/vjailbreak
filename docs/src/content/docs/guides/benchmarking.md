@@ -18,6 +18,7 @@ Times for cold migrations using Standard Copy, with 100 GB of disk per VM.
 
 ## vJailbreak Accelerated Copy
 
+Times for cold migrations using vJailbreak accelerated Copy, with 100 GB of disk per VM.
 
 | VM | Copy | Conversion | End to end |
 |---|---|---|---|
